@@ -1,13 +1,64 @@
-.input{
-width:100%;
-padding:10px;
-background:#0f172a;
-border-radius:10px;
-margin-top:5px;
+body {
+font-family: sans-serif;
 }
 
-.btn{
-background:#6366f1;
-padding:10px 20px;
-border-radius:10px;
+.glass {
+background: rgba(255,255,255,0.05);
+backdrop-filter: blur(15px);
+border: 1px solid rgba(255,255,255,0.1);
+box-shadow: 0 0 40px rgba(0,0,0,0.5);
+}
+
+.card {
+padding: 25px;
+border-radius: 20px;
+position: relative;
+overflow: hidden;
+transition: 0.3s;
+}
+
+.card:hover {
+transform: scale(1.05);
+}
+
+.card::before {
+content: "";
+position: absolute;
+inset: 0;
+background: linear-gradient(120deg, transparent, rgba(255,255,255,0.2), transparent);
+opacity: 0;
+transition: 0.5s;
+}
+
+.card:hover::before {
+opacity: 1;
+}
+
+.green { background: linear-gradient(135deg,#16a34a,#22c55e); }
+.yellow { background: linear-gradient(135deg,#eab308,#facc15); }
+.red { background: linear-gradient(135deg,#ef4444,#f87171); }
+
+.input {
+width:100%;
+padding:12px;
+border-radius:12px;
+background:#0f172a;
+border:1px solid rgba(255,255,255,0.1);
+}
+
+.btn {
+background: linear-gradient(135deg,#6366f1,#8b5cf6);
+padding:12px 25px;
+border-radius:12px;
+font-weight:bold;
+box-shadow: 0 0 20px rgba(99,102,241,0.6);
+transition:0.3s;
+}
+
+.btn:hover {
+transform: scale(1.05);
+}
+
+.glow-text {
+text-shadow: 0 0 20px rgba(99,102,241,0.8);
 }
