@@ -6,24 +6,60 @@
 
 <body class="bg-gray-900 text-white p-10">
 
-<h1 class="text-3xl mb-10">🎛 RCU PANEL</h1>
+<h1 class="text-4xl mb-10 font-bold">🎛 RCU EVENT PANEL</h1>
 
-<div id="app"></div>
+<div id="time" class="mb-8 text-gray-400"></div>
+
+<div id="events" class="grid md:grid-cols-3 gap-6"></div>
 
 <script>
+
+function format(h){
+return h.toString().padStart(2,'0') + ":00";
+}
+
+// ⏰ LIVE TIME
+setInterval(()=>{
+const now = new Date();
+document.getElementById("time").innerText =
+"🕒 " + now.toLocaleTimeString();
+},1000);
+
+// 📊 LOAD EVENTS
 function load(){
-fetch('/api/data')
+
+fetch('/api/events')
 .then(r=>r.json())
 .then(d=>{
-document.getElementById("app").innerHTML = `
-<div>
-<p>🥚 RNG: ${d.roles.jajko || "brak"}</p>
-<p>🐝 MERCHANT: ${d.roles.merchant || "brak"}</p>
-<p>🎰 SPIN: ${d.roles.spin || "brak"}</p>
-</div>`;
+
+document.getElementById("events").innerHTML = `
+
+<div class="bg-green-600 p-6 rounded-xl">
+<h2 class="text-xl mb-2">${d.now.event}</h2>
+<p>${d.now.status}</p>
+<p>⏰ ${format(d.now.hour)}</p>
+</div>
+
+<div class="bg-yellow-500 p-6 rounded-xl">
+<h2 class="text-xl mb-2">${d.next.event}</h2>
+<p>${d.next.status}</p>
+<p>⏰ ${format(d.next.hour)}</p>
+</div>
+
+<div class="bg-red-500 p-6 rounded-xl">
+<h2 class="text-xl mb-2">${d.later.event}</h2>
+<p>${d.later.status}</p>
+<p>⏰ ${format(d.later.hour)}</p>
+</div>
+
+`;
+
 });
 }
+
 load();
+setInterval(load, 10000);
+
 </script>
 
 </body>
