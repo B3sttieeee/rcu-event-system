@@ -22,40 +22,63 @@ const client = new Client({
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
-const CHANNEL_ID = '1475561359851786335';
+const CHANNEL_ID = '1484937784283369502';
 
-const ROLE_FILE = './roles.json';
-const DM_FILE = './dm.json';
+const FILE = './data.json';
 
 // 📁 DATA
-let rolesData = { jajko: null, merchant: null, spin: null };
-if (fs.existsSync(ROLE_FILE)) rolesData = JSON.parse(fs.readFileSync(ROLE_FILE));
+let data = {
+    roles: { jajko: null, merchant: null, spin: null },
+    dm: [],
+    notify: { reminder: true, event: true }
+};
 
-let dmUsers = [];
-if (fs.existsSync(DM_FILE)) dmUsers = JSON.parse(fs.readFileSync(DM_FILE));
+if (fs.existsSync(FILE)) data = JSON.parse(fs.readFileSync(FILE));
 
-const saveRoles = () => fs.writeFileSync(ROLE_FILE, JSON.stringify(rolesData, null, 2));
-const saveDM = () => fs.writeFileSync(DM_FILE, JSON.stringify(dmUsers, null, 2));
+const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 
 // 🎯 EVENT
-function getEvent(hour) {
-    if ([0,3,6,9,12,15,18,21].includes(hour))
-        return { name: "🥚 RNG EGG", desc: "Ultra rare egg spawn!", color: 0x00ffc8, role: rolesData.jajko };
+function getEvent(h) {
+    if ([0,3,6,9,12,15,18,21].includes(h))
+        return { name: "🥚 RNG EGG", emoji: "🥚", color: 0x00ffc8, role: data.roles.jajko };
 
-    if ([1,4,7,10,13,16,19,22].includes(hour))
-        return { name: "🐝 BOSS / HONEY MERCHANT", desc: "Merchant active!", color: 0xffcc00, role: rolesData.merchant };
+    if ([1,4,7,10,13,16,19,22].includes(h))
+        return { name: "🐝 BOSS / HONEY MERCHANT", emoji: "🐝", color: 0xffcc00, role: data.roles.merchant };
 
-    return { name: "🎰 DEVS SPIN (EVENT WORLD)", desc: "Spin event live!", color: 0xff0055, role: rolesData.spin };
+    return { name: "🎰 DEVS SPIN (EVENT WORLD)", emoji: "🎰", color: 0xff0055, role: data.roles.spin };
 }
 
-// ⏰ FORMAT GODZINY
-function formatHour(h) {
-    return `${h.toString().padStart(2, '0')}:00`;
+const format = h => `${h.toString().padStart(2, '0')}:00`;
+
+// 🎨 EMBED PRO
+function embed(event, type, h) {
+    const nextH = (h + 1) % 24;
+    const next = getEvent(nextH);
+
+    return new EmbedBuilder()
+        .setTitle(`${event.emoji} ${event.name}`)
+        .setDescription(
+`✨ **${type}**
+
+🕒 **Godzina:** ${format(h)}
+📌 **Event:** ${event.name}
+
+━━━━━━━━━━━━━━
+
+⏭️ **Następny:**
+${next.name} (${format(nextH)})
+
+━━━━━━━━━━━━━━
+🔥 **Dołącz i nie przegap!**`
+        )
+        .setColor(event.color)
+        .setFooter({ text: "RCU • EVENT SYSTEM" })
+        .setTimestamp();
 }
 
 // 📩 DM
 async function sendDM(embed) {
-    for (const id of dmUsers) {
+    for (const id of data.dm) {
         try {
             const user = await client.users.fetch(id);
             await user.send({ embeds: [embed] });
@@ -63,203 +86,138 @@ async function sendDM(embed) {
     }
 }
 
-// 🎨 EMBED
-function createEmbed(event, type, hour) {
-
-    const nextHour = (hour + 1) % 24;
-    const nextEvent = getEvent(nextHour);
-
-    return new EmbedBuilder()
-        .setTitle(`${event.name}`)
-        .setDescription(
-            `📢 **${type}**\n\n` +
-            `🕒 Godzina: **${formatHour(hour)}**\n` +
-            `📌 Event: **${event.name}**\n\n` +
-            `➡️ Następny:\n**${nextEvent.name}** o ${formatHour(nextHour)}`
-        )
-        .setColor(event.color)
-        .setThumbnail('https://cdn-icons-png.flaticon.com/512/1827/1827370.png')
-        .setFooter({ text: "RCU PRO SYSTEM" })
-        .setTimestamp();
-}
-
 // 🚀 READY
 client.once('ready', async () => {
 
-    console.log(`✅ ${client.user.tag} online`);
+    console.log(`✅ ${client.user.tag}`);
 
     const commands = [
         new SlashCommandBuilder().setName('panel').setDescription('Ustaw role'),
         new SlashCommandBuilder().setName('roles').setDescription('Wybierz role'),
-        new SlashCommandBuilder().setName('test').setDescription('Test event'),
-        new SlashCommandBuilder().setName('next').setDescription('Next event'),
-        new SlashCommandBuilder().setName('dm-info').setDescription('Toggle DM'),
-        new SlashCommandBuilder().setName('dm-test').setDescription('Test DM')
+        new SlashCommandBuilder().setName('dm').setDescription('Toggle DM'),
+        new SlashCommandBuilder().setName('notify').setDescription('Toggle powiadomienia'),
+        new SlashCommandBuilder().setName('test').setDescription('Test'),
     ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
-
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 
-    console.log("✅ Commands loaded");
-
+    // ⏰ SYSTEM
     cron.schedule('* * * * *', async () => {
-
-        const channel = await client.channels.fetch(CHANNEL_ID);
+        const ch = await client.channels.fetch(CHANNEL_ID);
         const now = new Date();
-
         const h = now.getHours();
         const m = now.getMinutes();
 
-        // 🔔 5 MIN PRZED
-        if (m === 55) {
+        if (m === 55 && data.notify.reminder) {
             const e = getEvent((h + 1) % 24);
             if (!e.role) return;
 
-            const embed = createEmbed(e, "🔔 EVENT ZA 5 MINUT", (h + 1) % 24);
-
-            channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
-            sendDM(embed);
+            const em = embed(e, "🔔 ZA 5 MINUT", (h + 1) % 24);
+            ch.send({ content: `<@&${e.role}>`, embeds: [em] });
+            sendDM(em);
         }
 
-        // ⏰ START
-        if (m === 0) {
+        if (m === 0 && data.notify.event) {
             const e = getEvent(h);
             if (!e.role) return;
 
-            const embed = createEmbed(e, "⏰ EVENT START", h);
-
-            channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
-            sendDM(embed);
+            const em = embed(e, "⏰ START EVENTU", h);
+            ch.send({ content: `<@&${e.role}>`, embeds: [em] });
+            sendDM(em);
         }
-
     });
-
 });
 
 // ⚡ INTERAKCJE
-client.on('interactionCreate', async interaction => {
+client.on('interactionCreate', async i => {
 
-    if (interaction.isChatInputCommand()) {
+    if (i.isChatInputCommand()) {
 
         const h = new Date().getHours();
 
-        if (interaction.commandName === 'test') {
-            const e = getEvent(h);
-            return interaction.reply({ embeds: [createEmbed(e, "🧪 TEST", h)] });
+        if (i.commandName === 'test') {
+            return i.reply({ embeds: [embed(getEvent(h), "🧪 TEST", h)] });
         }
 
-        if (interaction.commandName === 'next') {
-            const nh = (h + 1) % 24;
-            const e = getEvent(nh);
-            return interaction.reply({ embeds: [createEmbed(e, "⏳ NEXT EVENT", nh)] });
-        }
+        if (i.commandName === 'dm') {
+            const id = i.user.id;
 
-        if (interaction.commandName === 'dm-info') {
-            const id = interaction.user.id;
-
-            if (dmUsers.includes(id)) {
-                dmUsers = dmUsers.filter(x => x !== id);
-                saveDM();
-                return interaction.reply({ content: "❌ DM OFF", ephemeral: true });
+            if (data.dm.includes(id)) {
+                data.dm = data.dm.filter(x => x !== id);
+                save();
+                return i.reply({ content: "❌ DM OFF", ephemeral: true });
             } else {
-                dmUsers.push(id);
-                saveDM();
-                return interaction.reply({ content: "✅ DM ON", ephemeral: true });
+                data.dm.push(id);
+                save();
+                return i.reply({ content: "✅ DM ON", ephemeral: true });
             }
         }
 
-        if (interaction.commandName === 'dm-test') {
-            const e = getEvent(h);
-            const embed = createEmbed(e, "📩 TEST DM", h);
+        if (i.commandName === 'notify') {
+            data.notify.event = !data.notify.event;
+            data.notify.reminder = !data.notify.reminder;
+            save();
 
-            try {
-                await interaction.user.send({ embeds: [embed] });
-                return interaction.reply({ content: "✅ DM wysłany!", ephemeral: true });
-            } catch {
-                return interaction.reply({ content: "❌ Nie mogę wysłać DM (masz wyłączone prywatne wiadomości)", ephemeral: true });
-            }
+            return i.reply({ content: "🔔 Przełączono powiadomienia", ephemeral: true });
         }
 
-        if (interaction.commandName === 'panel') {
+        if (i.commandName === 'panel') {
             const menu = new StringSelectMenuBuilder()
-                .setCustomId('select_event')
-                .setPlaceholder('Wybierz event')
+                .setCustomId('event')
                 .addOptions([
-                    { label: '🥚 RNG EGG', value: 'jajko' },
-                    { label: '🐝 Merchant', value: 'merchant' },
-                    { label: '🎰 Spin', value: 'spin' }
+                    { label: 'RNG EGG', value: 'jajko' },
+                    { label: 'Merchant', value: 'merchant' },
+                    { label: 'Spin', value: 'spin' }
                 ]);
 
-            return interaction.reply({
-                content: "⚙️ PANEL",
-                components: [new ActionRowBuilder().addComponents(menu)]
-            });
+            return i.reply({ components: [new ActionRowBuilder().addComponents(menu)] });
         }
 
-        if (interaction.commandName === 'roles') {
+        if (i.commandName === 'roles') {
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('role_jajko').setLabel('🥚 RNG EGG').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('role_merchant').setLabel('🐝 Merchant').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('role_spin').setLabel('🎰 Spin').setStyle(ButtonStyle.Danger)
+                new ButtonBuilder().setCustomId('r1').setLabel('🥚').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('r2').setLabel('🐝').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('r3').setLabel('🎰').setStyle(ButtonStyle.Danger)
             );
 
-            return interaction.reply({
-                content: "🎮 Kliknij aby wybrać powiadomienia:",
-                components: [row]
-            });
+            return i.reply({ content: "🎮 Role:", components: [row] });
         }
     }
 
-    if (interaction.isStringSelectMenu()) {
+    if (i.isStringSelectMenu()) {
+        const type = i.values[0];
 
-        if (interaction.customId === 'select_event') {
-            const type = interaction.values[0];
+        const roles = i.guild.roles.cache
+            .filter(r => r.editable)
+            .map(r => ({ label: r.name, value: r.id }))
+            .slice(0, 25);
 
-            const roles = interaction.guild.roles.cache
-                .filter(r => r.editable)
-                .map(r => ({ label: r.name, value: r.id }))
-                .slice(0, 25);
+        const menu = new StringSelectMenuBuilder()
+            .setCustomId(`set_${type}`)
+            .addOptions(roles);
 
-            const menu = new StringSelectMenuBuilder()
-                .setCustomId(`setrole_${type}`)
-                .setPlaceholder('Wybierz rolę')
-                .addOptions(roles);
-
-            return interaction.update({
-                content: `Wybierz rolę`,
-                components: [new ActionRowBuilder().addComponents(menu)]
-            });
-        }
-
-        if (interaction.customId.startsWith('setrole_')) {
-            const type = interaction.customId.split('_')[1];
-            rolesData[type] = interaction.values[0];
-            saveRoles();
-
-            return interaction.update({ content: "✅ Zapisano!", components: [] });
-        }
+        return i.update({ components: [new ActionRowBuilder().addComponents(menu)] });
     }
 
-    if (interaction.isButton()) {
+    if (i.isButton()) {
+        const map = {
+            r1: data.roles.jajko,
+            r2: data.roles.merchant,
+            r3: data.roles.spin
+        };
 
-        const member = interaction.member;
+        const roleId = map[i.customId];
+        if (!roleId) return i.reply({ content: "❌ ustaw role", ephemeral: true });
 
-        let roleId;
-        if (interaction.customId === 'role_jajko') roleId = rolesData.jajko;
-        if (interaction.customId === 'role_merchant') roleId = rolesData.merchant;
-        if (interaction.customId === 'role_spin') roleId = rolesData.spin;
+        const has = i.member.roles.cache.has(roleId);
 
-        if (!roleId) {
-            return interaction.reply({ content: "❌ Najpierw ustaw role (/panel)", ephemeral: true });
-        }
-
-        if (member.roles.cache.has(roleId)) {
-            await member.roles.remove(roleId);
-            return interaction.reply({ content: "❌ Usunięto rolę", ephemeral: true });
+        if (has) {
+            await i.member.roles.remove(roleId);
+            return i.reply({ content: "❌ usunięto", ephemeral: true });
         } else {
-            await member.roles.add(roleId);
-            return interaction.reply({ content: "✅ Dodano rolę", ephemeral: true });
+            await i.member.roles.add(roleId);
+            return i.reply({ content: "✅ dodano", ephemeral: true });
         }
     }
 });
