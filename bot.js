@@ -12,8 +12,8 @@ const {
     StringSelectMenuBuilder
 } = require('discord.js');
 
-const cron = require('node-cron');
 const fs = require('fs');
+const cron = require('node-cron');
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
@@ -21,7 +21,6 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔥 TWOJE ID
 const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
@@ -31,56 +30,39 @@ const FILE = './data.json';
 // 📦 DATA
 let data = {
     roles: { jajko: null, merchant: null, spin: null },
-    dm: {}, // { userId: ["jajko","spin"] }
-    giveaways: []
+    dm: {},
+    giveaways: {}
 };
 
 if (fs.existsSync(FILE)) data = JSON.parse(fs.readFileSync(FILE));
 const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 
-// 🔥 CUSTOM GODZINY
+// 🔥 GODZINY
 const schedule = {
     jajko: [0,3,6,9,12,15,18,21],
     merchant: [1,4,7,10,13,16,19,22],
     spin: [2,5,8,11,14,17,20,23]
 };
 
-// 🎯 EVENT
 function getEventByHour(h){
     for (const key in schedule){
-        if (schedule[key].includes(h)){
-            return key;
-        }
+        if(schedule[key].includes(h)) return key;
     }
-    return null;
 }
 
-function getEventName(key){
-    return key === "jajko" ? "🥚 RNG EGG"
-        : key === "merchant" ? "🐝 MERCHANT"
-        : "🎰 DEV SPIN";
-}
-
-// 💎 EMBED
-function eventEmbed(status, hour, key){
-    return new EmbedBuilder()
-        .setColor(
-            key === "jajko" ? 0x00ffc8 :
-            key === "merchant" ? 0xffaa00 :
-            0xff0055
-        )
-        .setTitle(getEventName(key))
-        .setDescription(`📊 **${status}**\n⏰ ${hour}:00`)
-        .setTimestamp();
+function eventName(key){
+    return key==="jajko"?"🥚 RNG EGG":
+           key==="merchant"?"🐝 MERCHANT":
+           "🎰 DEV SPIN";
 }
 
 // 📩 DM
-async function sendDM(key, embeds){
-    for (const userId in data.dm){
-        if (data.dm[userId]?.includes(key)){
+async function sendDM(key, embed){
+    for(const userId in data.dm){
+        if(data.dm[userId]?.includes(key)){
             try{
                 const user = await client.users.fetch(userId);
-                await user.send({embeds});
+                await user.send({embeds:[embed]});
             }catch{}
         }
     }
@@ -91,55 +73,56 @@ client.once('ready', async () => {
     console.log(`✅ ${client.user.tag}`);
 
     const commands = [
+
         new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
+
         new SlashCommandBuilder().setName('next-event').setDescription('Następne eventy'),
 
         new SlashCommandBuilder()
             .setName('set-dm')
-            .setDescription('Wybierz DM eventy'),
+            .setDescription('Ustaw DM'),
 
         new SlashCommandBuilder()
             .setName('roles-add')
             .setDescription('Ustaw role')
-            .addStringOption(o =>
-                o.setName('typ')
-                    .setDescription('Event')
-                    .setRequired(true)
-                    .addChoices(
-                        { name: 'RNG', value: 'jajko' },
-                        { name: 'MERCHANT', value: 'merchant' },
-                        { name: 'SPIN', value: 'spin' }
-                    )
-            )
-            .addRoleOption(o =>
-                o.setName('rola')
-                    .setDescription('Rola')
-                    .setRequired(true)
-            ),
+            .addStringOption(o=>o.setName('typ').setDescription('event').setRequired(true)
+                .addChoices(
+                    {name:'RNG',value:'jajko'},
+                    {name:'MERCHANT',value:'merchant'},
+                    {name:'SPIN',value:'spin'}
+                ))
+            .addRoleOption(o=>o.setName('rola').setDescription('rola').setRequired(true)),
 
-        new SlashCommandBuilder()
-            .setName('panel')
-            .setDescription('Panel ról'),
+        new SlashCommandBuilder().setName('panel').setDescription('Panel ról'),
 
+        // 🎁 GIVEAWAY PRO
         new SlashCommandBuilder()
             .setName('giveaway')
             .setDescription('Stwórz giveaway')
-            .addStringOption(o => o.setName('nagroda').setRequired(true))
-            .addIntegerOption(o => o.setName('czas').setDescription('minuty').setRequired(true))
-            .addIntegerOption(o => o.setName('winners').setDescription('ile osób').setRequired(true))
-            .addStringOption(o => o.setName('img').setDescription('link zdjęcia'))
-    ].map(c => c.toJSON());
+            .addStringOption(o=>o.setName('nagroda').setDescription('nagroda').setRequired(true))
+            .addIntegerOption(o=>o.setName('czas').setDescription('minuty').setRequired(true))
+            .addIntegerOption(o=>o.setName('winners').setDescription('ile osób').setRequired(true))
+            .addRoleOption(o=>o.setName('bonus_role').setDescription('więcej szans'))
+            .addIntegerOption(o=>o.setName('bonus_entries').setDescription('ile extra szans'))
+            .addStringOption(o=>o.setName('img').setDescription('link obrazka')),
 
-    const rest = new REST({ version: '10' }).setToken(TOKEN);
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+        new SlashCommandBuilder()
+            .setName('reroll')
+            .setDescription('Reroll giveaway')
+            .addStringOption(o=>o.setName('message_id').setDescription('ID wiadomości').setRequired(true))
 
-    // ⏰ CRON
+    ].map(c=>c.toJSON());
+
+    const rest = new REST({version:'10'}).setToken(TOKEN);
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID,GUILD_ID),{body:commands});
+
+    // ⏰ EVENT CRON
     cron.schedule('* * * * *', async () => {
         const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
         const h = now.getHours();
         const m = now.getMinutes();
 
-        if(m !== 0) return;
+        if(m!==0) return;
 
         const key = getEventByHour(h);
         if(!key) return;
@@ -147,145 +130,136 @@ client.once('ready', async () => {
         const role = data.roles[key];
         if(!role) return;
 
-        const embed = eventEmbed("START", h, key);
+        const embed = new EmbedBuilder()
+            .setColor(0x5865F2)
+            .setTitle(eventName(key))
+            .setDescription(`📊 START\n⏰ ${h}:00`)
+            .setTimestamp();
+
         const channel = await client.channels.fetch(CHANNEL_ID);
 
         await channel.send({
-            content: `<@&${role}>`,
-            embeds: [embed]
+            content:`<@&${role}>`,
+            embeds:[embed]
         });
 
-        sendDM(key, [embed]);
+        sendDM(key,embed);
     });
+
 });
 
-// ⚡ INTERACTIONS
+// ⚡ INTERAKCJE
 client.on('interactionCreate', async i => {
 
-    // 📊 COMMANDS
     if(i.isChatInputCommand()){
 
-        const now = new Date();
-        let h = now.getHours();
-
-        if(i.commandName === 'event'){
-            const key = getEventByHour(h);
-            return i.reply({embeds:[eventEmbed("AKTYWNY",h,key)]});
-        }
-
-        if(i.commandName === 'next-event'){
-            const h1=(h+1)%24;
-            const h2=(h+2)%24;
-
-            return i.reply({
-                embeds:[
-                    eventEmbed("NEXT",h1,getEventByHour(h1)),
-                    eventEmbed("NEXT",h2,getEventByHour(h2))
-                ]
-            });
-        }
-
-        // 📩 DM SELECT
-        if(i.commandName === 'set-dm'){
-            const menu = new StringSelectMenuBuilder()
-                .setCustomId('dm_select')
-                .setMinValues(1)
-                .setMaxValues(3)
-                .addOptions([
-                    {label:'RNG',value:'jajko'},
-                    {label:'MERCHANT',value:'merchant'},
-                    {label:'SPIN',value:'spin'}
-                ]);
-
-            return i.reply({
-                content:"Wybierz eventy DM",
-                components:[new ActionRowBuilder().addComponents(menu)],
-                ephemeral:true
-            });
-        }
-
-        // 🛠 ROLE SET
-        if(i.commandName === 'roles-add'){
-            if(!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
-                return i.reply({content:"❌ brak permisji",ephemeral:true});
-
-            const type = i.options.getString('typ');
-            const role = i.options.getRole('rola');
-
-            data.roles[type] = role.id;
-            save();
-
-            return i.reply({content:"✅ zapisano",ephemeral:true});
-        }
-
-        // 🎮 PANEL
-        if(i.commandName === 'panel'){
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('jajko').setLabel('🥚 RNG').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('merchant').setLabel('🐝 MERCHANT').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('spin').setLabel('🎰 SPIN').setStyle(ButtonStyle.Danger)
-            );
-
-            return i.reply({content:"🎮 PANEL RÓL",components:[row]});
-        }
-
         // 🎁 GIVEAWAY
-        if(i.commandName === 'giveaway'){
+        if(i.commandName==='giveaway'){
+
             const prize = i.options.getString('nagroda');
             const time = i.options.getInteger('czas');
             const winners = i.options.getInteger('winners');
             const img = i.options.getString('img');
 
-            const end = Date.now() + time * 60000;
+            const bonusRole = i.options.getRole('bonus_role');
+            const bonusEntries = i.options.getInteger('bonus_entries') || 0;
+
+            const end = Date.now() + time*60000;
 
             const embed = new EmbedBuilder()
                 .setTitle(`🎁 ${prize}`)
-                .setDescription(`Kliknij 🎉\nKoniec: <t:${Math.floor(end/1000)}:R>\nWinners: ${winners}`)
+                .setDescription(`Kliknij przycisk aby wziąć udział!\nKoniec: <t:${Math.floor(end/1000)}:R>\nWinners: ${winners}`)
                 .setColor(0x5865F2);
 
             if(img) embed.setImage(img);
 
-            const msg = await i.channel.send({embeds:[embed]});
-            await msg.react("🎉");
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId('join_giveaway')
+                    .setLabel('🎉 WEŹ UDZIAŁ')
+                    .setStyle(ButtonStyle.Success)
+            );
+
+            const msg = await i.channel.send({embeds:[embed],components:[row]});
+
+            data.giveaways[msg.id] = {
+                users: [],
+                winners,
+                bonusRole: bonusRole?.id || null,
+                bonusEntries
+            };
+
+            save();
 
             setTimeout(async ()=>{
-                const m = await i.channel.messages.fetch(msg.id);
-                const users = (await m.reactions.cache.get("🎉").users.fetch()).filter(u=>!u.bot);
 
-                const win = users.random(winners);
+                const g = data.giveaways[msg.id];
+                if(!g) return;
 
-                i.channel.send(`🎉 Wygrali: ${win}`);
+                let pool = [];
+
+                for(const userId of g.users){
+                    pool.push(userId);
+
+                    if(g.bonusRole){
+                        const member = await i.guild.members.fetch(userId).catch(()=>null);
+                        if(member && member.roles.cache.has(g.bonusRole)){
+                            for(let x=0;x<g.bonusEntries;x++){
+                                pool.push(userId);
+                            }
+                        }
+                    }
+                }
+
+                const winners = [];
+                for(let x=0;x<g.winners;x++){
+                    const win = pool[Math.floor(Math.random()*pool.length)];
+                    if(win && !winners.includes(win)){
+                        winners.push(win);
+                    }
+                }
+
+                i.channel.send(`🎉 Wygrali: ${winners.map(id=>`<@${id}>`).join(", ")}`);
+
+                delete data.giveaways[msg.id];
+                save();
+
             }, time*60000);
 
             return i.reply({content:"✅ giveaway start",ephemeral:true});
         }
+
+        // 🔄 REROLL
+        if(i.commandName==='reroll'){
+            const id = i.options.getString('message_id');
+            const g = data.giveaways[id];
+
+            if(!g) return i.reply({content:"❌ brak giveaway",ephemeral:true});
+
+            const winner = g.users[Math.floor(Math.random()*g.users.length)];
+
+            return i.reply(`🎉 Nowy winner: <@${winner}>`);
+        }
     }
 
-    // 📩 DM SELECT SAVE
-    if(i.isStringSelectMenu()){
-        if(i.customId === 'dm_select'){
-            data.dm[i.user.id] = i.values;
+    // 🎉 BUTTON JOIN
+    if(i.isButton()){
+        if(i.customId==='join_giveaway'){
+
+            const g = data.giveaways[i.message.id];
+            if(!g) return;
+
+            if(g.users.includes(i.user.id)){
+                return i.reply({content:"❌ już jesteś",ephemeral:true});
+            }
+
+            g.users.push(i.user.id);
             save();
 
-            return i.update({content:"✅ zapisano DM",components:[]});
+            return i.reply({content:"✅ dołączono",ephemeral:true});
         }
     }
 
-    // 🔘 ROLE BUTTONS
-    if(i.isButton()){
-        const roleId = data.roles[i.customId];
-        if(!roleId) return i.reply({content:"❌ brak roli",ephemeral:true});
-
-        const has = i.member.roles.cache.has(roleId);
-
-        if(has){
-            await i.member.roles.remove(roleId);
-            return i.reply({content:"❌ usunięto",ephemeral:true});
-        } else {
-            await i.member.roles.add(roleId);
-            return i.reply({content:"✅ dodano",ephemeral:true});
-        }
-    }
 });
 
 client.login(TOKEN);
