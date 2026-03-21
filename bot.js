@@ -1,3 +1,6 @@
+process.on('uncaughtException', console.error);
+process.on('unhandledRejection', console.error);
+
 const {
     Client,
     GatewayIntentBits,
@@ -5,10 +8,6 @@ const {
     REST,
     Routes,
     SlashCommandBuilder,
-    ActionRowBuilder,
-    StringSelectMenuBuilder,
-    ButtonBuilder,
-    ButtonStyle,
     PermissionsBitField
 } = require('discord.js');
 
@@ -32,9 +31,19 @@ const CHANNEL_ID = '1484937784283369502';
 
 const FILE = "./dashboard/data.json";
 
-// 📥 API
+// ================= API =================
+
+app.get("/", (req, res) => {
+    res.sendFile(__dirname + "/dashboard/public/index.html");
+});
+
 app.get("/api/data", (req, res) => {
-    res.json(JSON.parse(fs.readFileSync(FILE)));
+    try {
+        const data = JSON.parse(fs.readFileSync(FILE));
+        res.json(data);
+    } catch {
+        res.json({ events: {} });
+    }
 });
 
 app.post("/api/save", (req, res) => {
@@ -42,23 +51,28 @@ app.post("/api/save", (req, res) => {
     res.json({ ok: true });
 });
 
-app.listen(3000, () => console.log("🌐 Dashboard działa"));
+// 🔥 WAŻNE (Railway)
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log("🌐 Dashboard działa na porcie", PORT));
 
-// 🎯 EVENT
+// ================= EVENT =================
+
 function getEvent(h, data) {
     for (const key in data.events) {
         if (data.events[key].hours.includes(h)) {
             return { key, ...data.events[key] };
         }
     }
+    return null;
 }
 
 const format = h => `${h.toString().padStart(2, '0')}:00`;
 
-// 🎨 EMBED
+// ================= EMBED =================
+
 function makeEmbed(e, status, h) {
     return new EmbedBuilder()
-        .setColor(e.color.replace("#", "0x"))
+        .setColor(parseInt(e.color.replace("#", ""), 16))
         .setTitle(`${e.name}`)
         .setDescription(`📊 **${status}**
 
@@ -70,22 +84,25 @@ ${e.description}
         .setTimestamp();
 }
 
-// 🚀 READY
+// ================= READY =================
+
 client.once('ready', async () => {
 
     console.log(`✅ ${client.user.tag}`);
 
     const commands = [
         new SlashCommandBuilder().setName('test').setDescription('Aktualny event'),
-        new SlashCommandBuilder().setName('next').setDescription('2 następne'),
-        new SlashCommandBuilder().setName('dm').setDescription('DM ON/OFF'),
+        new SlashCommandBuilder().setName('next').setDescription('2 następne eventy'),
         new SlashCommandBuilder().setName('check-pings').setDescription('Status pingów')
     ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 
-    // ⏰ SYSTEM
+    console.log("✅ Komendy gotowe");
+
+    // ================= CRON =================
+
     cron.schedule('* * * * *', async () => {
 
         const data = JSON.parse(fs.readFileSync(FILE));
@@ -100,28 +117,37 @@ client.once('ready', async () => {
         if (m === 55) {
             const nh = (h + 1) % 24;
             const e = getEvent(nh, data);
+
             if (!e || !e.role) return;
 
-            const embed = makeEmbed(e, "ZA 5 MINUT", nh);
+            const embed = makeEmbed(e, "🔔 ZA 5 MINUT", nh);
 
-            channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
+            await channel.send({
+                content: `<@&${e.role}>`,
+                embeds: [embed]
+            });
         }
 
         // ⏰ START
         if (m === 0) {
             const e = getEvent(h, data);
+
             if (!e || !e.role) return;
 
-            const embed = makeEmbed(e, "START", h);
+            const embed = makeEmbed(e, "⏰ START EVENTU", h);
 
-            channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
+            await channel.send({
+                content: `<@&${e.role}>`,
+                embeds: [embed]
+            });
         }
 
     });
 
 });
 
-// ⚡ KOMENDY
+// ================= COMMANDS =================
+
 client.on('interactionCreate', async i => {
 
     if (!i.isChatInputCommand()) return;
@@ -135,7 +161,11 @@ client.on('interactionCreate', async i => {
     // TEST
     if (i.commandName === 'test') {
         const e = getEvent(h, data);
-        return i.reply({ embeds: [makeEmbed(e, "AKTYWNY", h)] });
+        if (!e) return i.reply("Brak eventu");
+
+        return i.reply({
+            embeds: [makeEmbed(e, "🧪 AKTUALNY EVENT", h)]
+        });
     }
 
     // NEXT
@@ -148,8 +178,8 @@ client.on('interactionCreate', async i => {
 
         return i.reply({
             embeds: [
-                makeEmbed(e1, "NADCHODZI", h),
-                makeEmbed(e2, "KOLEJNY", (h + 1) % 24)
+                makeEmbed(e1, "⏭️ NADCHODZI", h),
+                makeEmbed(e2, "🔮 KOLEJNY", (h + 1) % 24)
             ]
         });
     }
@@ -164,15 +194,22 @@ client.on('interactionCreate', async i => {
 
         for (const key in data.events) {
             const e = data.events[key];
-            txt += `**${e.name}** → ${e.role ? `<@&${e.role}>` : "❌"}\n`;
+            txt += `**${e.name}** → ${e.role ? `<@&${e.role}>` : "❌ brak roli"}\n`;
         }
 
         return i.reply({
-            embeds: [new EmbedBuilder().setColor(0x5865F2).setTitle("📊 STATUS").setDescription(txt)],
+            embeds: [
+                new EmbedBuilder()
+                    .setColor(0x5865F2)
+                    .setTitle("📊 STATUS PINGÓW")
+                    .setDescription(txt)
+            ],
             ephemeral: true
         });
     }
 
 });
+
+// ================= START =================
 
 client.login(TOKEN);
