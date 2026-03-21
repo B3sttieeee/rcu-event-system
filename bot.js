@@ -18,6 +18,7 @@ const express = require('express');
 
 const app = express();
 app.use(express.json());
+app.use(express.static('dashboard/public'));
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
@@ -39,7 +40,7 @@ let data = {
 if (fs.existsSync(FILE)) data = JSON.parse(fs.readFileSync(FILE));
 const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 
-// 🌐 API (DLA DASHBOARDU)
+// 🌐 API
 app.get('/api/data', (req,res)=> res.json(data));
 
 app.post('/api/set-role', (req,res)=>{
@@ -49,8 +50,9 @@ app.post('/api/set-role', (req,res)=>{
     res.json({ok:true});
 });
 
+// 🌍 DASHBOARD
 app.get('/', (req,res)=>{
-    res.send("Bot działa ✅");
+    res.sendFile(__dirname + '/dashboard/public/index.html');
 });
 
 // 🎯 EVENT
@@ -102,8 +104,6 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 
-    console.log("✅ Commands ready");
-
     cron.schedule('* * * * *', async () => {
 
         const channel = await client.channels.fetch(CHANNEL_ID);
@@ -150,13 +150,13 @@ client.once('ready', async () => {
     });
 });
 
-// ⚡ INTERAKCJE (TWÓJ KOD — BEZ ZMIAN)
-client.on('interactionCreate', async i => {
-    // zostaje jak masz
-});
-
-// 🔥 WAŻNE DLA RAILWAY
+// 🌐 PORT (RAILWAY)
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("🌐 API działa na porcie", PORT));
+app.listen(PORT, () => console.log("🌐 API działa"));
+
+// ⚡ INTERAKCJE (twoje – zostaw jak masz)
+client.on('interactionCreate', async i => {
+    // NIE ZMIENIAJ — masz już dobrze
+});
 
 client.login(TOKEN);
