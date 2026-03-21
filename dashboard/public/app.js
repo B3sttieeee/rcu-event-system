@@ -1,54 +1,40 @@
-function format(h){
-return h.toString().padStart(2,'0')+":00";
-}
-
-// 🔄 LOAD EVENTS
 function load(){
 
-fetch('/api/events')
+fetch('/api/config')
 .then(r=>r.json())
 .then(d=>{
 
-document.getElementById("events").innerHTML = `
+document.getElementById("r1").value=d.roles.jajko||"";
+document.getElementById("r2").value=d.roles.merchant||"";
+document.getElementById("r3").value=d.roles.spin||"";
 
-<div class="card green">
-<h2>${d.now.event}</h2>
-<p>${d.now.status}</p>
-<p>${format(d.now.hour)}</p>
-</div>
+document.getElementById("e1").value=d.embeds.egg;
+document.getElementById("e2").value=d.embeds.boss;
+document.getElementById("e3").value=d.embeds.honey;
+document.getElementById("e4").value=d.embeds.spin;
 
-<div class="card yellow">
-<h2>${d.next.event}</h2>
-<p>${d.next.status}</p>
-<p>${format(d.next.hour)}</p>
-</div>
-
-<div class="card red">
-<h2>${d.later.event}</h2>
-<p>${d.later.status}</p>
-<p>${format(d.later.hour)}</p>
-</div>
-
-`;
 });
 }
 
-// 💾 SAVE
 function save(){
-
-const data = {
-egg: document.getElementById("egg").value,
-merchant: document.getElementById("merchant").value,
-spin: document.getElementById("spin").value
-};
 
 fetch('/api/config',{
 method:'POST',
 headers:{'Content-Type':'application/json'},
-body:JSON.stringify(data)
+body:JSON.stringify({
+roles:{
+jajko:r1.value,
+merchant:r2.value,
+spin:r3.value
+},
+embeds:{
+egg:e1.value,
+boss:e2.value,
+honey:e3.value,
+spin:e4.value
+}
 })
-.then(()=>alert("Zapisano!"));
+}).then(()=>alert("Zapisano"));
 }
 
 load();
-setInterval(load,5000);
