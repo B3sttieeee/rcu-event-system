@@ -27,6 +27,14 @@ const CHANNEL_ID = '1484937784283369502';
 
 const FILE = './data.json';
 
+// 🖼️ OBRAZKI (TU WSTAW SWOJE)
+const IMAGES = {
+    egg: "https://imgur.com/pY2xNUL.png",
+    merchant_boss: "https://imgur.com/VU9KdMS.png",
+    merchant_honey: "https://imgur.com/SsvlJ5a.png",
+    spin: "https://imgur.com/LeXDgiJ.png"
+};
+
 // 📦 DATA
 let data = {
     roles: { egg: null, merchant: null, spin: null },
@@ -50,7 +58,7 @@ function save() {
 loadData();
 
 //////////////////////////////////////////////////
-// 🎯 EVENT SYSTEM (POPRAWIONE GODZINY)
+// 🎯 EVENTY
 //////////////////////////////////////////////////
 
 function getEvent(h) {
@@ -67,8 +75,17 @@ function buildEmbed(type, variant=null) {
 
     if (type === "egg") {
         return new EmbedBuilder()
-            .setTitle("🥚 RNG EGG")
-            .setDescription("🎲 Otwórz jajko i sprawdź swoje szczęście!")
+            .setTitle("🥚 RNG EGG EVENT")
+            .setDescription(
+`🎲 **Event wystartował!**
+
+➜ Otwieraj jajka
+➜ Losowe nagrody
+➜ Szansa na rare drop
+
+⏰ Kolejny za 3h`
+            )
+            .setImage(IMAGES.egg)
             .setColor(0x00ffcc)
             .setTimestamp();
     }
@@ -78,22 +95,48 @@ function buildEmbed(type, variant=null) {
         if (variant === "boss") {
             return new EmbedBuilder()
                 .setTitle("🐝 MERCHANT BOSS")
-                .setDescription("🔥 RZADKI MERCHANT! Lepsze itemy!")
+                .setDescription(
+`🔥 **RZADKI MERCHANT**
+
+➜ Najlepsze itemy
+➜ Rzadkie oferty
+➜ Limitowany czas
+
+⚠️ Spiesz się!`
+                )
+                .setImage(IMAGES.merchant_boss)
                 .setColor(0xff0000)
                 .setTimestamp();
         }
 
         return new EmbedBuilder()
             .setTitle("🍯 HONEY MERCHANT")
-            .setDescription("🍯 Standardowy merchant dostępny!")
+            .setDescription(
+`🍯 **Standardowy merchant**
+
+➜ Normalne itemy
+➜ Krótki czas dostępności
+
+💰 Sprawdź ofertę`
+            )
+            .setImage(IMAGES.merchant_honey)
             .setColor(0xffcc00)
             .setTimestamp();
     }
 
     if (type === "spin") {
         return new EmbedBuilder()
-            .setTitle("🎰 DEV SPIN")
-            .setDescription("🎰 Zakręć i wygraj nagrody!")
+            .setTitle("🎰 DEV SPIN EVENT")
+            .setDescription(
+`🎰 **Zakręć i wygraj!**
+
+➜ Losowe nagrody
+➜ Szansa na jackpot
+➜ Szybki event
+
+🎯 Powodzenia!`
+            )
+            .setImage(IMAGES.spin)
             .setColor(0x9b59b6)
             .setTimestamp();
     }
@@ -116,16 +159,18 @@ function getEntries(member) {
 }
 
 //////////////////////////////////////////////////
-// 🔄 KOMENDY (FIX NA ERROR)
+// 🔄 KOMENDY
 //////////////////////////////////////////////////
 
 async function registerCommands() {
 
     const commands = [
         new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
+        new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
         new SlashCommandBuilder().setName('set-dm').setDescription('Ustaw DM'),
         new SlashCommandBuilder().setName('roles-picker').setDescription('Ustaw role eventów'),
-        new SlashCommandBuilder().setName('giveaway').setDescription('Start giveaway')
+        new SlashCommandBuilder().setName('giveaway-start').setDescription('Start giveaway'),
+        new SlashCommandBuilder().setName('refresh').setDescription('Odśwież komendy')
     ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -187,24 +232,19 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async i => {
 
-    // 🎮 GIVEAWAY JOIN
-    if (i.isButton() && i.customId === "giveaway_join") {
+    if (i.isButton()) {
+        if (i.customId === "giveaway_join") {
+            const entries = getEntries(i.member);
 
-        if (!data.giveaway.active)
-            return i.reply({ content: "❌ brak giveaway", ephemeral: true });
-
-        const entries = getEntries(i.member);
-
-        return i.reply({
-            content: `🎟️ Masz **${entries} wejść**`,
-            ephemeral: true
-        });
+            return i.reply({
+                content: `🎟️ Masz **${entries} wejść**`,
+                ephemeral: true
+            });
+        }
     }
 
-    // 📋 SELECT MENU
     if (i.isStringSelectMenu()) {
 
-        // DM
         if (i.customId === "dm_select") {
             data.dm[i.user.id] = i.values;
             save();
@@ -215,7 +255,6 @@ client.on('interactionCreate', async i => {
             });
         }
 
-        // ROLE SET
         if (i.customId.startsWith("role_")) {
             const type = i.customId.split("_")[1];
 
@@ -231,7 +270,6 @@ client.on('interactionCreate', async i => {
 
     if (!i.isChatInputCommand()) return;
 
-    // EVENT
     if (i.commandName === 'event') {
         const now = new Date();
         const type = getEvent(now.getHours());
@@ -241,7 +279,24 @@ client.on('interactionCreate', async i => {
         });
     }
 
-    // DM
+    if (i.commandName === 'next-events') {
+        const now = new Date();
+        const h = now.getHours();
+
+        return i.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle("⏭️ Następne eventy")
+                    .setDescription(
+`+1h → ${getEvent((h+1)%24)}
++2h → ${getEvent((h+2)%24)}
++3h → ${getEvent((h+3)%24)}`
+                    )
+                    .setColor(0x5865F2)
+            ]
+        });
+    }
+
     if (i.commandName === 'set-dm') {
 
         const menu = new StringSelectMenuBuilder()
@@ -261,7 +316,6 @@ client.on('interactionCreate', async i => {
         });
     }
 
-    // ROLE PICKER
     if (i.commandName === 'roles-picker') {
 
         if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
@@ -292,8 +346,7 @@ client.on('interactionCreate', async i => {
         });
     }
 
-    // GIVEAWAY
-    if (i.commandName === 'giveaway') {
+    if (i.commandName === 'giveaway-start') {
 
         if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
             return i.reply({ content: "❌ brak permisji", ephemeral: true });
@@ -303,7 +356,7 @@ client.on('interactionCreate', async i => {
 
         const embed = new EmbedBuilder()
             .setTitle("🎉 GIVEAWAY")
-            .setDescription("Kliknij przycisk poniżej!")
+            .setDescription("Kliknij przycisk aby dołączyć!")
             .setColor(0x00ffcc);
 
         const row = new ActionRowBuilder().addComponents(
@@ -314,6 +367,19 @@ client.on('interactionCreate', async i => {
         );
 
         return i.reply({ embeds: [embed], components: [row] });
+    }
+
+    if (i.commandName === 'refresh') {
+
+        if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
+            return i.reply({ content: "❌ brak permisji", ephemeral: true });
+
+        await registerCommands();
+
+        return i.reply({
+            content: "✅ Komendy odświeżone",
+            ephemeral: true
+        });
     }
 });
 
