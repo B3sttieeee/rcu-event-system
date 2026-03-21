@@ -235,5 +235,8 @@ client.on('interactionCreate', async i => {
         }
     }
 });
+require('http')
+  .createServer((req, res) => res.end("Bot działa"))
+  .listen(process.env.PORT || 8080);
 
 client.login(TOKEN);
