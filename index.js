@@ -20,7 +20,7 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔧 TWOJE ID
+// 🔧 ID
 const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
@@ -38,48 +38,50 @@ const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 
 // 🎯 EVENT SYSTEM
 function getEvent(h) {
+
     if ([0,3,6,9,12,15,18,21].includes(h))
-        return { name: "🥚 RNG EGG", emoji: "🥚", color: 0x00ffc8, role: data.roles.jajko, key: "jajko" };
+        return {
+            key: "jajko",
+            name: "🥚 RNG EGG",
+            color: 0x00ffc8,
+            role: data.roles.jajko,
+            desc: "Na Anniversary Event znajduje się specjalna wyspa z jajkiem. Zbierasz punkty i rozwijasz Tier, który daje losowe bonusy."
+        };
 
     if ([1,4,7,10,13,16,19,22].includes(h))
-        return { name: "🐝 BOSS / HONEY MERCHANT", emoji: "🐝", color: 0xffcc00, role: data.roles.merchant, key: "merchant" };
+        return {
+            key: "merchant",
+            name: "🐝 BOSS / HONEY MERCHANT",
+            color: 0xffcc00,
+            role: data.roles.merchant,
+            desc: "Boss Merchant pojawia się na Anniversary Event i oferuje przedmioty za Boss Tokeny. Honey Merchant pojawia się na Bee World i sprzedaje itemy za miód."
+        };
 
     if ([2,5,8,11,14,17,20,23].includes(h))
-        return { name: "🎰 DEVS SPIN (EVENT WORLD)", emoji: "🎰", color: 0xff0055, role: data.roles.spin, key: "spin" };
+        return {
+            key: "spin",
+            name: "🎰 DEVS SPIN",
+            color: 0xff0055,
+            role: data.roles.spin,
+            desc: "Na Anniversary Event pojawia się koło losowania. Możesz zakręcić i zdobyć różne nagrody."
+        };
 }
 
 const format = h => `${h.toString().padStart(2, '0')}:00`;
 
-// 🎨 EMBED (lekko ulepszony, ale Twój styl)
-function createEmbed(event, type, h, showNext = true) {
-
-    let desc =
-`✨ **${type}**
-
-> ⏰ Godzina: \`${format(h)}\`
-> 📌 Event: ${event.name}`;
-
-    if (showNext) {
-        const next = getEvent((h + 1) % 24);
-        const next2 = getEvent((h + 2) % 24);
-
-        desc += `
-
-╭───────────────
-> ⏭️ ${next.name} \`${format((h + 1) % 24)}\`
-> 🔮 ${next2.name} \`${format((h + 2) % 24)}\`
-╰───────────────`;
-    }
-
-    desc += `
-
-🔥 Dołącz i nie przegap!`;
-
+// 💎 EMBED
+function createEmbed(event, status, h) {
     return new EmbedBuilder()
         .setColor(event.color)
-        .setTitle(`${event.name}`)
-        .setDescription(desc)
-        .setFooter({ text: "RCU • EVENT SYSTEM" })
+        .setTitle(event.name)
+        .setDescription(
+`📊 **Status:** ${status}
+
+${event.desc}
+
+⏰ **Godzina:** \`${format(h)}\``
+        )
+        .setFooter({ text: "RCU • Event System" })
         .setTimestamp();
 }
 
@@ -111,7 +113,7 @@ client.once('ready', async () => {
 
     console.log("✅ Commands ready");
 
-    // ⏰ SYSTEM
+    // ⏰ SYSTEM CZASU
     cron.schedule('* * * * *', async () => {
 
         const channel = await client.channels.fetch(CHANNEL_ID);
@@ -121,18 +123,18 @@ client.once('ready', async () => {
 
         // 🔔 5 MIN PRZED
         if (m === 55) {
-            const nextHour = (h + 1) % 24;
-            const e = getEvent(nextHour);
+            const nextH = (h + 1) % 24;
+            const e = getEvent(nextH);
 
             if (!e || !e.role) return;
 
-            const embed = createEmbed(e, "🔔 ZA 5 MINUT", nextHour);
+            const embed = createEmbed(e, "🔔 ZA 5 MINUT", nextH);
 
             channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
             sendDM(embed);
         }
 
-        // ⏰ START EVENTU
+        // ⏰ START
         if (m === 0) {
             const e = getEvent(h);
 
@@ -154,12 +156,14 @@ client.on('interactionCreate', async i => {
 
         const h = new Date().getHours();
 
+        // 🧪 TEST (1 EVENT)
         if (i.commandName === 'test') {
             return i.reply({
-                embeds: [createEmbed(getEvent(h), "🧪 AKTUALNY EVENT", h)]
+                embeds: [createEmbed(getEvent(h), "AKTYWNY", h)]
             });
         }
 
+        // ⏭️ NEXT (2 EMBEDY)
         if (i.commandName === 'next') {
 
             const h1 = (h + 1) % 24;
@@ -167,12 +171,13 @@ client.on('interactionCreate', async i => {
 
             return i.reply({
                 embeds: [
-                    createEmbed(getEvent(h1), "⏭️ NADCHODZI", h1, false),
-                    createEmbed(getEvent(h2), "🔮 KOLEJNY", h2, false)
+                    createEmbed(getEvent(h1), "NADCHODZI", h1),
+                    createEmbed(getEvent(h2), "KOLEJNY", h2)
                 ]
             });
         }
 
+        // 📩 DM
         if (i.commandName === 'dm') {
             const id = i.user.id;
 
@@ -187,6 +192,7 @@ client.on('interactionCreate', async i => {
             }
         }
 
+        // ⚙️ PANEL
         if (i.commandName === 'panel') {
 
             const menu = new StringSelectMenuBuilder()
@@ -204,6 +210,7 @@ client.on('interactionCreate', async i => {
             });
         }
 
+        // 🎮 ROLE
         if (i.commandName === 'roles') {
 
             const row = new ActionRowBuilder().addComponents(
