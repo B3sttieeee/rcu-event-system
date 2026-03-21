@@ -27,7 +27,7 @@ const CHANNEL_ID = '1484937784283369502';
 
 const FILE = './data.json';
 
-// 🖼️ OBRAZKI (TU WSTAW SWOJE)
+// 🖼️ OBRAZKI
 const IMAGES = {
     egg: "https://imgur.com/pY2xNUL.png",
     merchant_boss: "https://imgur.com/VU9KdMS.png",
@@ -58,7 +58,7 @@ function save() {
 loadData();
 
 //////////////////////////////////////////////////
-// 🎯 EVENTY
+// 🎯 EVENT SYSTEM
 //////////////////////////////////////////////////
 
 function getEvent(h) {
@@ -75,18 +75,17 @@ function buildEmbed(type, variant=null) {
 
     if (type === "egg") {
         return new EmbedBuilder()
-            .setTitle("🥚 RNG EGG EVENT")
+            .setTitle("🥚 RNG EGG")
             .setDescription(
-`🎲 **Event wystartował!**
+`🎲 **Otwieraj Jajko**
 
-➜ Otwieraj jajka
-➜ Losowe nagrody
-➜ Szansa na rare drop
-
-⏰ Kolejny za 3h`
+Dropiąc pety zdobywasz punkty do Tieru  
+➜ Im lepsze pety → więcej punktów  
+➜ Im lepszy Tier → lepsze bonusy na koniec`
             )
-            .setImage(IMAGES.egg)
+            .setThumbnail(IMAGES.egg)
             .setColor(0x00ffcc)
+            .setFooter({ text: "RNG System" })
             .setTimestamp();
     }
 
@@ -96,48 +95,47 @@ function buildEmbed(type, variant=null) {
             return new EmbedBuilder()
                 .setTitle("🐝 MERCHANT BOSS")
                 .setDescription(
-`🔥 **RZADKI MERCHANT**
+`🔥 **Boss Merchant**
 
-➜ Najlepsze itemy
-➜ Rzadkie oferty
-➜ Limitowany czas
+Za żetony z bossów można zakupić przedmioty  
 
-⚠️ Spiesz się!`
+🎯 Rzadka szansa na Supreme (125%)`
                 )
-                .setImage(IMAGES.merchant_boss)
+                .setThumbnail(IMAGES.merchant_boss)
                 .setColor(0xff0000)
+                .setFooter({ text: "Boss Merchant" })
                 .setTimestamp();
         }
 
         return new EmbedBuilder()
             .setTitle("🍯 HONEY MERCHANT")
             .setDescription(
-`🍯 **Standardowy merchant**
+`🍯 **Honey Merchant**
 
-➜ Normalne itemy
-➜ Krótki czas dostępności
+Za miód można zakupić przedmioty  
 
-💰 Sprawdź ofertę`
+🎯 Rzadka szansa na Supreme i Deskę  
+➜ Supreme (110%)`
             )
-            .setImage(IMAGES.merchant_honey)
+            .setThumbnail(IMAGES.merchant_honey)
             .setColor(0xffcc00)
+            .setFooter({ text: "Honey Merchant" })
             .setTimestamp();
     }
 
     if (type === "spin") {
         return new EmbedBuilder()
-            .setTitle("🎰 DEV SPIN EVENT")
+            .setTitle("🎰 DEV SPIN")
             .setDescription(
-`🎰 **Zakręć i wygraj!**
+`🎰 **Kręć kołem**
 
-➜ Losowe nagrody
-➜ Szansa na jackpot
-➜ Szybki event
+Zdobywaj dobre nagrody  
 
-🎯 Powodzenia!`
+🎯 Rzadka szansa na Supreme (??%)`
             )
-            .setImage(IMAGES.spin)
+            .setThumbnail(IMAGES.spin)
             .setColor(0x9b59b6)
+            .setFooter({ text: "Dev Spin" })
             .setTimestamp();
     }
 }
@@ -168,9 +166,10 @@ async function registerCommands() {
         new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
         new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
         new SlashCommandBuilder().setName('set-dm').setDescription('Ustaw DM'),
-        new SlashCommandBuilder().setName('roles-picker').setDescription('Ustaw role eventów'),
+        new SlashCommandBuilder().setName('roles-picker').setDescription('Ustaw role'),
         new SlashCommandBuilder().setName('giveaway-start').setDescription('Start giveaway'),
-        new SlashCommandBuilder().setName('refresh').setDescription('Odśwież komendy')
+        new SlashCommandBuilder().setName('refresh').setDescription('Odśwież komendy'),
+        new SlashCommandBuilder().setName('test-event').setDescription('Test eventu')
     ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -274,9 +273,7 @@ client.on('interactionCreate', async i => {
         const now = new Date();
         const type = getEvent(now.getHours());
 
-        return i.reply({
-            embeds: [buildEmbed(type)]
-        });
+        return i.reply({ embeds: [buildEmbed(type)] });
     }
 
     if (i.commandName === 'next-events') {
@@ -369,6 +366,28 @@ client.on('interactionCreate', async i => {
         return i.reply({ embeds: [embed], components: [row] });
     }
 
+    if (i.commandName === 'test-event') {
+
+        const now = new Date();
+        const type = getEvent(now.getHours());
+        const role = data.roles[type];
+
+        if (!role)
+            return i.reply({ content: "❌ brak roli", ephemeral: true });
+
+        const variant = type === "merchant" ? getMerchantVariant() : null;
+        const embed = buildEmbed(type, variant);
+
+        const channel = await client.channels.fetch(CHANNEL_ID);
+
+        await channel.send({
+            content: `<@&${role}>`,
+            embeds: [embed]
+        });
+
+        return i.reply({ content: "✅ wysłano test", ephemeral: true });
+    }
+
     if (i.commandName === 'refresh') {
 
         if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
@@ -376,10 +395,7 @@ client.on('interactionCreate', async i => {
 
         await registerCommands();
 
-        return i.reply({
-            content: "✅ Komendy odświeżone",
-            ephemeral: true
-        });
+        return i.reply({ content: "✅ odświeżono", ephemeral: true });
     }
 });
 
