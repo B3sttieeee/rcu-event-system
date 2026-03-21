@@ -20,14 +20,12 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔧 ID
 const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
 
 const FILE = './data.json';
 
-// 📁 DATA
 let data = {
     roles: { jajko: null, merchant: null, spin: null },
     dm: []
@@ -36,61 +34,87 @@ let data = {
 if (fs.existsSync(FILE)) data = JSON.parse(fs.readFileSync(FILE));
 const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 
-// 🎯 EVENT SYSTEM
+// 🧠 EVENT SYSTEM
 function getEvent(h) {
 
     if ([0,3,6,9,12,15,18,21].includes(h))
-        return {
-            key: "jajko",
-            name: "🥚 RNG EGG",
-            color: 0x00ffc8,
-            role: data.roles.jajko,
-            desc: "Na Anniversary Event znajduje się specjalna wyspa z jajkiem. Zbierasz punkty i rozwijasz Tier, który daje losowe bonusy."
-        };
+        return { key: "jajko", type: "egg" };
 
     if ([1,4,7,10,13,16,19,22].includes(h))
-        return {
-            key: "merchant",
-            name: "🐝 BOSS / HONEY MERCHANT",
-            color: 0xffcc00,
-            role: data.roles.merchant,
-            desc: "Boss Merchant pojawia się na Anniversary Event i oferuje przedmioty za Boss Tokeny. Honey Merchant pojawia się na Bee World i sprzedaje itemy za miód."
-        };
+        return { key: "merchant", type: "merchant" };
 
     if ([2,5,8,11,14,17,20,23].includes(h))
-        return {
-            key: "spin",
-            name: "🎰 DEVS SPIN",
-            color: 0xff0055,
-            role: data.roles.spin,
-            desc: "Na Anniversary Event pojawia się koło losowania. Możesz zakręcić i zdobyć różne nagrody."
-        };
+        return { key: "spin", type: "spin" };
 }
 
+// 📊 FORMAT
 const format = h => `${h.toString().padStart(2, '0')}:00`;
 
-// 💎 EMBED
-function createEmbed(event, status, h) {
+// 💎 EMBEDY
+
+function embedEgg(status, h) {
     return new EmbedBuilder()
-        .setColor(event.color)
-        .setTitle(event.name)
+        .setColor(0x00ffc8)
+        .setTitle("🥚 RNG EGG")
         .setDescription(
 `📊 **Status:** ${status}
 
-${event.desc}
+Na Anniversary Event znajduje się wyspa z jajkiem.
+Zbierasz punkty i rozwijasz Tier → daje losowe bonusy.
 
-⏰ **Godzina:** \`${format(h)}\``
-        )
+⏰ **Godzina:** \`${format(h)}\``)
+        .setFooter({ text: "RCU • Event System" })
+        .setTimestamp();
+}
+
+function embedBoss(status, h) {
+    return new EmbedBuilder()
+        .setColor(0xff8800)
+        .setTitle("👹 BOSS MERCHANT")
+        .setDescription(
+`📊 **Status:** ${status}
+
+Pojawia się na Anniversary Event.
+Kupujesz itemy za Boss Tokeny.
+
+⏰ **Godzina:** \`${format(h)}\``)
+        .setTimestamp();
+}
+
+function embedHoney(status, h) {
+    return new EmbedBuilder()
+        .setColor(0xffcc00)
+        .setTitle("🐝 HONEY MERCHANT")
+        .setDescription(
+`📊 **Status:** ${status}
+
+Pojawia się na Bee World.
+Kupujesz itemy za miód.
+
+⏰ **Godzina:** \`${format(h)}\``)
+        .setTimestamp();
+}
+
+function embedSpin(status, h) {
+    return new EmbedBuilder()
+        .setColor(0xff0055)
+        .setTitle("🎰 DEVS SPIN")
+        .setDescription(
+`📊 **Status:** ${status}
+
+Koło losowania na Anniversary Event.
+
+⏰ **Godzina:** \`${format(h)}\``)
         .setFooter({ text: "RCU • Event System" })
         .setTimestamp();
 }
 
 // 📩 DM
-async function sendDM(embed) {
+async function sendDM(embeds) {
     for (const id of data.dm) {
         try {
             const user = await client.users.fetch(id);
-            await user.send({ embeds: [embed] });
+            await user.send({ embeds });
         } catch {}
     }
 }
@@ -113,37 +137,57 @@ client.once('ready', async () => {
 
     console.log("✅ Commands ready");
 
-    // ⏰ SYSTEM CZASU
     cron.schedule('* * * * *', async () => {
 
         const channel = await client.channels.fetch(CHANNEL_ID);
+
         const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
-        const h = now.getHours();
-        const m = now.getMinutes();
+        let h = now.getHours();
+        let m = now.getMinutes();
 
         // 🔔 5 MIN PRZED
         if (m === 55) {
             const nextH = (h + 1) % 24;
             const e = getEvent(nextH);
 
-            if (!e || !e.role) return;
+            if (!data.roles[e.key]) return;
 
-            const embed = createEmbed(e, "🔔 ZA 5 MINUT", nextH);
+            const ping = `<@&${data.roles[e.key]}>`;
 
-            channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
-            sendDM(embed);
+            let embeds = [];
+
+            if (e.type === "merchant") {
+                embeds = [embedBoss("ZA 5 MINUT", nextH), embedHoney("ZA 5 MINUT", nextH)];
+            } else if (e.type === "egg") {
+                embeds = [embedEgg("ZA 5 MINUT", nextH)];
+            } else {
+                embeds = [embedSpin("ZA 5 MINUT", nextH)];
+            }
+
+            channel.send({ content: ping, embeds });
+            sendDM(embeds);
         }
 
         // ⏰ START
         if (m === 0) {
             const e = getEvent(h);
 
-            if (!e || !e.role) return;
+            if (!data.roles[e.key]) return;
 
-            const embed = createEmbed(e, "⏰ START EVENTU", h);
+            const ping = `<@&${data.roles[e.key]}>`;
 
-            channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
-            sendDM(embed);
+            let embeds = [];
+
+            if (e.type === "merchant") {
+                embeds = [embedBoss("START", h), embedHoney("START", h)];
+            } else if (e.type === "egg") {
+                embeds = [embedEgg("START", h)];
+            } else {
+                embeds = [embedSpin("START", h)];
+            }
+
+            channel.send({ content: ping, embeds });
+            sendDM(embeds);
         }
 
     });
@@ -154,30 +198,60 @@ client.on('interactionCreate', async i => {
 
     if (i.isChatInputCommand()) {
 
-        const h = new Date().getHours();
+        const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+        let h = now.getHours();
+        let m = now.getMinutes();
 
-        // 🧪 TEST (1 EVENT)
+        if (m > 0) h = h; // aktualny event
+
+        // 🧪 TEST
         if (i.commandName === 'test') {
-            return i.reply({
-                embeds: [createEmbed(getEvent(h), "AKTYWNY", h)]
-            });
+
+            const e = getEvent(h);
+
+            if (e.type === "merchant") {
+                return i.reply({
+                    embeds: [embedBoss("AKTYWNY", h), embedHoney("AKTYWNY", h)]
+                });
+            }
+
+            if (e.type === "egg")
+                return i.reply({ embeds: [embedEgg("AKTYWNY", h)] });
+
+            return i.reply({ embeds: [embedSpin("AKTYWNY", h)] });
         }
 
-        // ⏭️ NEXT (2 EMBEDY)
+        // ⏭ NEXT
         if (i.commandName === 'next') {
 
-            const h1 = (h + 1) % 24;
-            const h2 = (h + 2) % 24;
+            if (m > 0) h = (h + 1) % 24;
 
-            return i.reply({
-                embeds: [
-                    createEmbed(getEvent(h1), "NADCHODZI", h1),
-                    createEmbed(getEvent(h2), "KOLEJNY", h2)
-                ]
-            });
+            const h1 = h;
+            const h2 = (h + 1) % 24;
+
+            const e1 = getEvent(h1);
+            const e2 = getEvent(h2);
+
+            const embeds = [];
+
+            if (e1.type === "merchant")
+                embeds.push(embedBoss("NADCHODZI", h1), embedHoney("NADCHODZI", h1));
+            else if (e1.type === "egg")
+                embeds.push(embedEgg("NADCHODZI", h1));
+            else
+                embeds.push(embedSpin("NADCHODZI", h1));
+
+            if (e2.type === "merchant")
+                embeds.push(embedBoss("KOLEJNY", h2), embedHoney("KOLEJNY", h2));
+            else if (e2.type === "egg")
+                embeds.push(embedEgg("KOLEJNY", h2));
+            else
+                embeds.push(embedSpin("KOLEJNY", h2));
+
+            return i.reply({ embeds });
         }
 
-        // 📩 DM
+        // DM
         if (i.commandName === 'dm') {
             const id = i.user.id;
 
@@ -192,12 +266,11 @@ client.on('interactionCreate', async i => {
             }
         }
 
-        // ⚙️ PANEL
+        // PANEL
         if (i.commandName === 'panel') {
 
             const menu = new StringSelectMenuBuilder()
                 .setCustomId('select_event')
-                .setPlaceholder('Wybierz event')
                 .addOptions([
                     { label: '🥚 RNG EGG', value: 'jajko' },
                     { label: '🐝 Merchant', value: 'merchant' },
@@ -210,7 +283,7 @@ client.on('interactionCreate', async i => {
             });
         }
 
-        // 🎮 ROLE
+        // ROLE BUTTONY
         if (i.commandName === 'roles') {
 
             const row = new ActionRowBuilder().addComponents(
@@ -268,9 +341,8 @@ client.on('interactionCreate', async i => {
 
         const roleId = map[i.customId];
 
-        if (!roleId) {
+        if (!roleId)
             return i.reply({ content: "❌ Najpierw ustaw role (/panel)", ephemeral: true });
-        }
 
         const has = i.member.roles.cache.has(roleId);
 
