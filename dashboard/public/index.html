@@ -1,66 +1,43 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="UTF-8">
+<title>RCU Dashboard</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="style.css">
 </head>
 
-<body class="bg-gray-900 text-white p-10">
+<body class="bg-[#0b1220] text-white p-10">
 
-<h1 class="text-4xl mb-10 font-bold">🎛 RCU EVENT PANEL</h1>
+<h1 class="text-4xl font-bold mb-10">🎛 RCU EVENT PANEL</h1>
 
-<div id="time" class="mb-8 text-gray-400"></div>
+<div class="grid md:grid-cols-3 gap-6 mb-10" id="events"></div>
 
-<div id="events" class="grid md:grid-cols-3 gap-6"></div>
+<div class="bg-[#111827] p-6 rounded-xl shadow-xl">
+<h2 class="text-2xl mb-6">⚙️ Ustawienia</h2>
 
-<script>
+<div class="grid md:grid-cols-3 gap-4">
 
-function format(h){
-return h.toString().padStart(2,'0') + ":00";
-}
-
-// ⏰ LIVE TIME
-setInterval(()=>{
-const now = new Date();
-document.getElementById("time").innerText =
-"🕒 " + now.toLocaleTimeString();
-},1000);
-
-// 📊 LOAD EVENTS
-function load(){
-
-fetch('/api/events')
-.then(r=>r.json())
-.then(d=>{
-
-document.getElementById("events").innerHTML = `
-
-<div class="bg-green-600 p-6 rounded-xl">
-<h2 class="text-xl mb-2">${d.now.event}</h2>
-<p>${d.now.status}</p>
-<p>⏰ ${format(d.now.hour)}</p>
+<div>
+<label>🥚 RNG godziny</label>
+<input id="egg" class="input" placeholder="0,3,6...">
 </div>
 
-<div class="bg-yellow-500 p-6 rounded-xl">
-<h2 class="text-xl mb-2">${d.next.event}</h2>
-<p>${d.next.status}</p>
-<p>⏰ ${format(d.next.hour)}</p>
+<div>
+<label>🐝 Merchant godziny</label>
+<input id="merchant" class="input">
 </div>
 
-<div class="bg-red-500 p-6 rounded-xl">
-<h2 class="text-xl mb-2">${d.later.event}</h2>
-<p>${d.later.status}</p>
-<p>⏰ ${format(d.later.hour)}</p>
+<div>
+<label>🎰 Spin godziny</label>
+<input id="spin" class="input">
 </div>
 
-`;
+</div>
 
-});
-}
+<button onclick="save()" class="btn mt-6">💾 Zapisz</button>
+</div>
 
-load();
-setInterval(load, 10000);
-
-</script>
-
+<script src="app.js"></script>
 </body>
 </html>
