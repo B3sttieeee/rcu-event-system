@@ -2,28 +2,27 @@
   "events": {
     "egg": {
       "name": "🥚 RNG EGG",
-      "description": "Zbierasz punkty i rozwijasz Tier.",
+      "description": "Zbierasz punkty i rozwijasz Tier",
       "color": "#00ffc8",
       "image": "",
-      "roleId": "ID_ROLI",
-      "hours": "0,3,6,9,12,15,18,21"
+      "role": "",
+      "hours": [0,3,6,9,12,15,18,21]
     },
     "merchant": {
       "name": "🐝 MERCHANT",
-      "description": "Kupujesz itemy za miód.",
+      "description": "Kupujesz itemy za tokeny",
       "color": "#ffcc00",
       "image": "",
-      "roleId": "ID_ROLI",
-      "hours": "1,4,7,10,13,16,19,22"
+      "role": "",
+      "hours": [1,4,7,10,13,16,19,22]
     },
     "spin": {
       "name": "🎰 SPIN",
-      "description": "Koło losowania.",
+      "description": "Koło losowania nagród",
       "color": "#ff0055",
       "image": "",
-      "roleId": "ID_ROLI",
-      "hours": "2,5,8,11,14,17,20,23"
+      "role": "",
+      "hours": [2,5,8,11,14,17,20,23]
     }
-  },
-  "dm": []
+  }
 }
