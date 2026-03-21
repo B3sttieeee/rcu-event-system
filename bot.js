@@ -5,7 +5,6 @@ const {
     REST,
     Routes,
     SlashCommandBuilder,
-    PermissionsBitField,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle
@@ -53,64 +52,36 @@ function buildEmbed(type, variant=null) {
     if (type === "egg") {
         return new EmbedBuilder()
             .setTitle("🥚 RNG EGG")
-            .setDescription(
-`🎲 Otwieraj Jajka
-
-➜ Drop petów  
-➜ Punkty do Tieru  
-➜ Lepszy Tier = lepsze bonusy`
-            )
+            .setDescription(`🎲 Otwieraj jajka\n➜ Drop petów\n➜ Tiery\n➜ Bonusy`)
             .setThumbnail(IMAGES.egg)
-            .setColor(0x00ffcc)
-            .setTimestamp();
+            .setColor(0x00ffcc);
     }
 
     if (type === "merchant") {
-
         if (variant === "boss") {
             return new EmbedBuilder()
                 .setTitle("🐝 MERCHANT BOSS")
-                .setDescription(
-`🔥 Boss Merchant
-
-➜ Żetony → itemy  
-
-🎯 Supreme (125%)`
-                )
+                .setDescription(`🔥 Żetony → itemy\n🎯 Supreme (125%)`)
                 .setThumbnail(IMAGES.boss)
-                .setColor(0xff0000)
-                .setTimestamp();
+                .setColor(0xff0000);
         }
 
         return new EmbedBuilder()
             .setTitle("🍯 HONEY MERCHANT")
-            .setDescription(
-`🍯 Honey Merchant
-
-➜ Miód → przedmioty  
-
-🎯 Supreme (110%)`
-            )
+            .setDescription(`🍯 Miód → itemy\n🎯 Supreme (110%)`)
             .setThumbnail(IMAGES.honey)
-            .setColor(0xffcc00)
-            .setTimestamp();
+            .setColor(0xffcc00);
     }
 
     return new EmbedBuilder()
         .setTitle("🎰 DEV SPIN")
-        .setDescription(
-`🎰 Kręć kołem
-
-➜ Zdobądź nagrody  
-🎯 Supreme (??%)`
-        )
+        .setDescription(`🎰 Kręć kołem\n🎯 Supreme (??%)`)
         .setThumbnail(IMAGES.spin)
-        .setColor(0x9b59b6)
-        .setTimestamp();
+        .setColor(0x9b59b6);
 }
 
 //////////////////////////////////////////////////
-// 🎁 GIVEAWAY PRO
+// 🎁 GIVEAWAY
 //////////////////////////////////////////////////
 
 let giveaway = {
@@ -129,13 +100,11 @@ function parseTime(str) {
 
 function getEntries(member) {
     let entries = 1;
-
     for (const roleId in giveaway.rolesBonus) {
         if (member.roles.cache.has(roleId)) {
             entries += giveaway.rolesBonus[roleId];
         }
     }
-
     return entries;
 }
 
@@ -161,32 +130,26 @@ async function registerCommands() {
 
         new SlashCommandBuilder()
             .setName('refresh')
-            .setDescription('Refresh komend'),
+            .setDescription('Odśwież komendy'),
 
         new SlashCommandBuilder()
             .setName('giveaway')
             .setDescription('Stwórz giveaway')
-            .addStringOption(o =>
-                o.setName('nagroda').setDescription('Nagroda').setRequired(true)
-            )
-            .addStringOption(o =>
-                o.setName('czas').setDescription('np 10m / 1h').setRequired(true)
-            ),
+            .addStringOption(o => o.setName('nagroda').setDescription('Nagroda').setRequired(true))
+            .addStringOption(o => o.setName('czas').setDescription('np 10m / 1h').setRequired(true)),
 
         new SlashCommandBuilder()
             .setName('giveaway-role')
-            .setDescription('Dodaj bonus dla roli')
-            .addRoleOption(o =>
-                o.setName('rola').setDescription('Rola').setRequired(true)
-            )
-            .addIntegerOption(o =>
-                o.setName('bonus').setDescription('Ile wejść').setRequired(true)
-            )
+            .setDescription('Bonus dla roli')
+            .addRoleOption(o => o.setName('rola').setDescription('Rola').setRequired(true))
+            .addIntegerOption(o => o.setName('bonus').setDescription('Ile wejść').setRequired(true))
 
     ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+
+    console.log("✅ Komendy OK");
 }
 
 //////////////////////////////////////////////////
@@ -199,18 +162,23 @@ client.once('clientReady', async () => {
 
     cron.schedule('* * * * *', async () => {
 
-        const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
-        if (now.getMinutes() !== 0) return;
+        try {
+            const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
+            if (now.getMinutes() !== 0) return;
 
-        const type = getEvent(now.getHours());
-        const variant = type === "merchant" ? getMerchantVariant() : null;
+            const type = getEvent(now.getHours());
+            const variant = type === "merchant" ? getMerchantVariant() : null;
 
-        const channel = await client.channels.fetch(CHANNEL_ID);
+            const channel = await client.channels.fetch(CHANNEL_ID);
 
-        channel.send({
-            content: "@everyone",
-            embeds: [buildEmbed(type, variant)]
-        });
+            await channel.send({
+                content: "@everyone",
+                embeds: [buildEmbed(type, variant)]
+            });
+
+        } catch (e) {
+            console.log("CRON ERROR:", e.message);
+        }
 
     });
 });
@@ -221,138 +189,133 @@ client.once('clientReady', async () => {
 
 client.on('interactionCreate', async i => {
 
-    // JOIN
-    if (i.isButton() && i.customId === "join") {
+    try {
 
-        const entries = getEntries(i.member);
+        if (i.isButton() && i.customId === "join") {
+            const entries = getEntries(i.member);
+            giveaway.entries[i.user.id] = entries;
 
-        giveaway.entries[i.user.id] = entries;
+            return i.reply({
+                content: `🎟️ Masz ${entries} wejść`,
+                ephemeral: true
+            });
+        }
 
-        return i.reply({
-            content: `🎟️ Masz ${entries} wejść`,
-            ephemeral: true
-        });
-    }
+        if (!i.isChatInputCommand()) return;
 
-    if (!i.isChatInputCommand()) return;
+        await i.deferReply(); // 🔥 FIX NA UNKNOWN INTERACTION
 
-    // EVENT
-    if (i.commandName === "event") {
-        return i.reply({
-            embeds: [buildEmbed(getEvent(new Date().getHours()))]
-        });
-    }
+        // EVENT
+        if (i.commandName === "event") {
+            return i.editReply({
+                embeds: [buildEmbed(getEvent(new Date().getHours()))]
+            });
+        }
 
-    // NEXT EVENTS
-    if (i.commandName === "next-events") {
-        const h = new Date().getHours();
+        // NEXT EVENTS
+        if (i.commandName === "next-events") {
+            const h = new Date().getHours();
 
-        return i.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle("📊 System Eventów")
-                    .setDescription(
+            return i.editReply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("📊 Eventy")
+                        .setDescription(
 `🔥 TERAZ → ${getEvent(h)}
+⏰ +1h → ${getEvent((h+1)%24)}
+⏰ +2h → ${getEvent((h+2)%24)}`
+                        )
+                        .setColor(0x5865F2)
+                ]
+            });
+        }
 
-⏰ ${((h+1)%24)}:00 → ${getEvent((h+1)%24)}
-⏰ ${((h+2)%24)}:00 → ${getEvent((h+2)%24)}`
-                    )
-                    .setColor(0x5865F2)
-            ]
-        });
-    }
+        // TEST
+        if (i.commandName === "test-event") {
 
-    // GIVEAWAY
-    if (i.commandName === "giveaway") {
+            const type = getEvent(new Date().getHours());
+            const variant = type === "merchant" ? getMerchantVariant() : null;
 
-        const prize = i.options.getString("nagroda");
-        const time = parseTime(i.options.getString("czas"));
+            const channel = await client.channels.fetch(CHANNEL_ID);
 
-        giveaway = {
-            active: true,
-            prize,
-            entries: {},
-            rolesBonus: giveaway.rolesBonus
-        };
+            await channel.send({
+                content: "@everyone",
+                embeds: [buildEmbed(type, variant)]
+            });
 
-        const bonusText = Object.entries(giveaway.rolesBonus)
-            .map(([role, bonus]) => `<@&${role}> → +${bonus}`)
-            .join("\n") || "Brak bonusów";
+            return i.editReply({ content: "✅ wysłano test" });
+        }
 
-        const embed = new EmbedBuilder()
-            .setTitle("🎉 GIVEAWAY")
-            .setDescription(
-`🎁 **${prize}**
+        // GIVEAWAY
+        if (i.commandName === "giveaway") {
 
-Kliknij przycisk aby wziąć udział!
+            const prize = i.options.getString("nagroda") || "Nagroda";
+            const time = parseTime(i.options.getString("czas") || "1m");
 
-🎯 Bonusy:
-${bonusText}`
-            )
-            .setColor(0x00ffcc);
+            giveaway = {
+                active: true,
+                prize,
+                entries: {},
+                rolesBonus: giveaway.rolesBonus
+            };
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId("join")
-                .setLabel("Weź udział")
-                .setStyle(ButtonStyle.Success)
-        );
+            const embed = new EmbedBuilder()
+                .setTitle("🎉 GIVEAWAY")
+                .setDescription(`🎁 **${prize}**\nKliknij aby dołączyć`)
+                .setColor(0x00ffcc);
 
-        const msg = await i.reply({ embeds: [embed], components: [row], fetchReply: true });
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId("join")
+                    .setLabel("Weź udział")
+                    .setStyle(ButtonStyle.Success)
+            );
 
-        setTimeout(async () => {
+            const msg = await i.editReply({
+                embeds: [embed],
+                components: [row]
+            });
 
-            const pool = [];
+            setTimeout(async () => {
 
-            for (const [id, count] of Object.entries(giveaway.entries)) {
-                for (let i = 0; i < count; i++) pool.push(id);
-            }
+                const pool = [];
 
-            if (pool.length === 0) return;
+                for (const [id, count] of Object.entries(giveaway.entries)) {
+                    for (let i = 0; i < count; i++) pool.push(id);
+                }
 
-            const winner = pool[Math.floor(Math.random() * pool.length)];
+                if (pool.length === 0) return;
 
-            msg.reply(`🎉 Wygrał: <@${winner}> | ${prize}`);
+                const winner = pool[Math.floor(Math.random() * pool.length)];
 
-            giveaway.active = false;
+                await msg.reply(`🎉 Wygrał: <@${winner}> | ${prize}`);
 
-        }, time);
-    }
+                giveaway.active = false;
 
-    // BONUS ROLE
-    if (i.commandName === "giveaway-role") {
+            }, time);
+        }
 
-        const role = i.options.getRole("rola");
-        const bonus = i.options.getInteger("bonus");
+        // BONUS ROLE
+        if (i.commandName === "giveaway-role") {
 
-        giveaway.rolesBonus[role.id] = bonus;
+            const role = i.options.getRole("rola");
+            const bonus = i.options.getInteger("bonus");
 
-        return i.reply({
-            content: `✅ ${role.name} ma teraz +${bonus} wejść`,
-            ephemeral: true
-        });
-    }
+            giveaway.rolesBonus[role.id] = bonus;
 
-    // TEST
-    if (i.commandName === "test-event") {
+            return i.editReply({
+                content: `✅ ${role.name} +${bonus} wejść`
+            });
+        }
 
-        const type = getEvent(new Date().getHours());
-        const variant = type === "merchant" ? getMerchantVariant() : null;
+        // REFRESH
+        if (i.commandName === "refresh") {
+            await registerCommands();
+            return i.editReply({ content: "✅ odświeżono" });
+        }
 
-        const channel = await client.channels.fetch(CHANNEL_ID);
-
-        await channel.send({
-            content: "@everyone",
-            embeds: [buildEmbed(type, variant)]
-        });
-
-        return i.reply({ content: "✅ wysłano test", ephemeral: true });
-    }
-
-    // REFRESH
-    if (i.commandName === "refresh") {
-        await registerCommands();
-        return i.reply({ content: "✅ odświeżono", ephemeral: true });
+    } catch (err) {
+        console.log("INTERACTION ERROR:", err.message);
     }
 
 });
