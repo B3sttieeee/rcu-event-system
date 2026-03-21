@@ -34,50 +34,104 @@ const IMAGES = {
 };
 
 //////////////////////////////////////////////////
-// 🎯 EVENT SYSTEM
+// 🕒 CZAS (POLSKA)
+//////////////////////////////////////////////////
+
+function getPolishTime() {
+    return new Date(new Date().toLocaleString("en-US", {
+        timeZone: "Europe/Warsaw"
+    }));
+}
+
+//////////////////////////////////////////////////
+// 🎯 EVENTY (POPRAWIONE)
 //////////////////////////////////////////////////
 
 function getEvent(h) {
     if ([0,3,6,9,12,15,18,21].includes(h)) return "egg";
     if ([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
-    return "spin";
+    if ([2,5,8,11,14,17,20,23].includes(h)) return "spin";
 }
 
 function getMerchantVariant() {
     return Math.random() < 0.5 ? "boss" : "honey";
 }
 
+//////////////////////////////////////////////////
+// 🎨 EMBEDY (PRO + POPRAWIONE OPISY)
+//////////////////////////////////////////////////
+
 function buildEmbed(type, variant=null) {
 
     if (type === "egg") {
         return new EmbedBuilder()
-            .setTitle("🥚 RNG EGG")
-            .setDescription(`🎲 Otwieraj jajka\n➜ Drop petów\n➜ Tiery\n➜ Bonusy`)
+            .setTitle("🥚┃RNG EGG")
+            .setDescription(
+`🎲 Otwieraj jajka i zdobywaj pety
+
+➜ Punkty do Tieru  
+➜ Lepszy Tier = lepsze bonusy  
+
+📍 Sprawdź swoje postępy`
+            )
             .setThumbnail(IMAGES.egg)
-            .setColor(0x00ffcc);
+            .setColor(0x00ffcc)
+            .setFooter({ text: "Event trwa 15 minut" })
+            .setTimestamp();
     }
 
     if (type === "merchant") {
+
         if (variant === "boss") {
             return new EmbedBuilder()
-                .setTitle("🐝 MERCHANT BOSS")
-                .setDescription(`🔥 Żetony → itemy\n🎯 Supreme (125%)`)
+                .setTitle("🐝┃MERCHANT BOSS")
+                .setDescription(
+`🎉 Eventowy Merchant
+
+📍 Lokalizacja: Anniversary Event  
+
+➜ Za żetony z bossów można zakupić przedmioty  
+🎯 Szansa na Supreme: 125%  
+
+⏳ Przejdź sprawdzić ofertę`
+                )
                 .setThumbnail(IMAGES.boss)
-                .setColor(0xff0000);
+                .setColor(0xff0000)
+                .setFooter({ text: "Event trwa 15 minut" })
+                .setTimestamp();
         }
 
         return new EmbedBuilder()
-            .setTitle("🍯 HONEY MERCHANT")
-            .setDescription(`🍯 Miód → itemy\n🎯 Supreme (110%)`)
+            .setTitle("🍯┃HONEY MERCHANT")
+            .setDescription(
+`🍯 Merchant z miodem
+
+📍 Bee World  
+
+➜ Za miód można zakupić przedmioty  
+🎯 Szansa na Supreme: 110%  
+
+⏳ Przejdź sprawdzić ofertę`
+            )
             .setThumbnail(IMAGES.honey)
-            .setColor(0xffcc00);
+            .setColor(0xffcc00)
+            .setFooter({ text: "Event trwa 15 minut" })
+            .setTimestamp();
     }
 
     return new EmbedBuilder()
-        .setTitle("🎰 DEV SPIN")
-        .setDescription(`🎰 Kręć kołem\n🎯 Supreme (??%)`)
+        .setTitle("🎰┃DEV SPIN")
+        .setDescription(
+`🎰 Zakręć kołem i zdobądź nagrody
+
+🎯 Szansa na Supreme: ??%  
+
+🍀 Spróbuj swojego szczęścia`
+        )
         .setThumbnail(IMAGES.spin)
-        .setColor(0x9b59b6);
+        .setColor(0x9b59b6)
+        .setFooter({ text: "Event trwa 15 minut" })
+        .setTimestamp();
 }
 
 //////////////////////////////////////////////////
@@ -100,11 +154,13 @@ function parseTime(str) {
 
 function getEntries(member) {
     let entries = 1;
+
     for (const roleId in giveaway.rolesBonus) {
         if (member.roles.cache.has(roleId)) {
             entries += giveaway.rolesBonus[roleId];
         }
     }
+
     return entries;
 }
 
@@ -147,9 +203,11 @@ async function registerCommands() {
     ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 
-    console.log("✅ Komendy OK");
+    await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: commands }
+    );
 }
 
 //////////////////////////////////////////////////
@@ -158,12 +216,13 @@ async function registerCommands() {
 
 client.once('clientReady', async () => {
     console.log(`✅ ${client.user.tag}`);
+
     await registerCommands();
 
     cron.schedule('* * * * *', async () => {
 
         try {
-            const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
+            const now = getPolishTime();
             if (now.getMinutes() !== 0) return;
 
             const type = getEvent(now.getHours());
@@ -192,6 +251,7 @@ client.on('interactionCreate', async i => {
     try {
 
         if (i.isButton() && i.customId === "join") {
+
             const entries = getEntries(i.member);
             giveaway.entries[i.user.id] = entries;
 
@@ -203,37 +263,50 @@ client.on('interactionCreate', async i => {
 
         if (!i.isChatInputCommand()) return;
 
-        await i.deferReply(); // 🔥 FIX NA UNKNOWN INTERACTION
+        await i.deferReply();
 
         // EVENT
         if (i.commandName === "event") {
             return i.editReply({
-                embeds: [buildEmbed(getEvent(new Date().getHours()))]
+                embeds: [buildEmbed(getEvent(getPolishTime().getHours()))]
             });
         }
 
         // NEXT EVENTS
         if (i.commandName === "next-events") {
-            const h = new Date().getHours();
+
+            const now = getPolishTime();
+            const h = now.getHours();
+
+            function format(offset) {
+                const d = new Date(now);
+                d.setHours((h + offset) % 24);
+                d.setMinutes(0);
+                return `${String(d.getHours()).padStart(2,"0")}:00 ${d.toLocaleDateString("pl-PL")}`;
+            }
 
             return i.editReply({
                 embeds: [
                     new EmbedBuilder()
-                        .setTitle("📊 Eventy")
+                        .setTitle("📊┃EVENTY")
                         .setDescription(
-`🔥 TERAZ → ${getEvent(h)}
-⏰ +1h → ${getEvent((h+1)%24)}
-⏰ +2h → ${getEvent((h+2)%24)}`
+`🔥 TERAZ  
+➜ ${getEvent(h)}
+
+⏰ NASTĘPNE  
+➜ ${format(1)} → ${getEvent((h+1)%24)}  
+➜ ${format(2)} → ${getEvent((h+2)%24)}`
                         )
                         .setColor(0x5865F2)
                 ]
             });
         }
 
-        // TEST
+        // TEST EVENT
         if (i.commandName === "test-event") {
 
-            const type = getEvent(new Date().getHours());
+            const now = getPolishTime();
+            const type = getEvent(now.getHours());
             const variant = type === "merchant" ? getMerchantVariant() : null;
 
             const channel = await client.channels.fetch(CHANNEL_ID);
@@ -243,14 +316,14 @@ client.on('interactionCreate', async i => {
                 embeds: [buildEmbed(type, variant)]
             });
 
-            return i.editReply({ content: "✅ wysłano test" });
+            return i.editReply({ content: "✅ Wysłano test event" });
         }
 
         // GIVEAWAY
         if (i.commandName === "giveaway") {
 
-            const prize = i.options.getString("nagroda") || "Nagroda";
-            const time = parseTime(i.options.getString("czas") || "1m");
+            const prize = i.options.getString("nagroda");
+            const time = parseTime(i.options.getString("czas"));
 
             giveaway = {
                 active: true,
@@ -261,7 +334,7 @@ client.on('interactionCreate', async i => {
 
             const embed = new EmbedBuilder()
                 .setTitle("🎉 GIVEAWAY")
-                .setDescription(`🎁 **${prize}**\nKliknij aby dołączyć`)
+                .setDescription(`🎁 **${prize}**\nKliknij przycisk, aby wziąć udział`)
                 .setColor(0x00ffcc);
 
             const row = new ActionRowBuilder().addComponents(
@@ -304,18 +377,18 @@ client.on('interactionCreate', async i => {
             giveaway.rolesBonus[role.id] = bonus;
 
             return i.editReply({
-                content: `✅ ${role.name} +${bonus} wejść`
+                content: `✅ ${role.name} ma +${bonus} wejść`
             });
         }
 
         // REFRESH
         if (i.commandName === "refresh") {
             await registerCommands();
-            return i.editReply({ content: "✅ odświeżono" });
+            return i.editReply({ content: "✅ Komendy odświeżone" });
         }
 
     } catch (err) {
-        console.log("INTERACTION ERROR:", err.message);
+        console.log("ERROR:", err.message);
     }
 
 });
