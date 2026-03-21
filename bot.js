@@ -36,7 +36,8 @@ let data = {
     dm: {},
     giveaway: {
         active: false,
-        entries: {}, // userId: entries
+        prize: null,
+        entries: {},
         rolesBonus: {}
     }
 };
@@ -81,31 +82,60 @@ function buildEmbed(type, variant=null) {
     if (type === "egg") {
         return new EmbedBuilder()
             .setTitle("🥚 RNG EGG")
-            .setDescription(`Otwieraj Jajko i zdobywaj Tier!\nLepsze pety = więcej punktów`)
+            .setDescription(
+`🎲 Otwieraj jajka
+
+➜ Zdobywaj pety  
+➜ Punkty do Tieru  
+➜ Lepszy Tier = lepsze bonusy`
+            )
             .setThumbnail(IMAGES.egg)
-            .setColor(0x00ffcc);
+            .setColor(0x00ffcc)
+            .setTimestamp();
     }
 
     if (type === "merchant") {
+
         if (variant === "boss") {
             return new EmbedBuilder()
                 .setTitle("🐝 MERCHANT BOSS")
-                .setDescription(`Żetony z bossów → itemy\nSupreme (125%)`)
+                .setDescription(
+`🔥 Boss Merchant
+
+➜ Żetony z bossów → itemy  
+
+🎯 Supreme (125%)`
+                )
                 .setThumbnail(IMAGES.merchant_boss)
-                .setColor(0xff0000);
+                .setColor(0xff0000)
+                .setTimestamp();
         }
+
         return new EmbedBuilder()
             .setTitle("🍯 HONEY MERCHANT")
-            .setDescription(`Miód → itemy\nSupreme (110%)`)
+            .setDescription(
+`🍯 Honey Merchant
+
+➜ Miód → przedmioty  
+
+🎯 Supreme (110%)`
+            )
             .setThumbnail(IMAGES.merchant_honey)
-            .setColor(0xffcc00);
+            .setColor(0xffcc00)
+            .setTimestamp();
     }
 
     return new EmbedBuilder()
         .setTitle("🎰 DEV SPIN")
-        .setDescription(`Kręć kołem → nagrody\nSupreme (??%)`)
+        .setDescription(
+`🎰 Kręć kołem
+
+➜ Zdobądź nagrody  
+🎯 Supreme (??%)`
+        )
         .setThumbnail(IMAGES.spin)
-        .setColor(0x9b59b6);
+        .setColor(0x9b59b6)
+        .setTimestamp();
 }
 
 //////////////////////////////////////////////////
@@ -122,7 +152,7 @@ function parseTime(str) {
 function getEntries(member) {
     let entries = 1;
 
-    for (const roleId in data.giveaway.rolesBonus) {
+    for (const roleId in data.giveaway.rolesBonus || {}) {
         if (member.roles.cache.has(roleId)) {
             entries += data.giveaway.rolesBonus[roleId];
         }
@@ -136,36 +166,66 @@ function getEntries(member) {
 //////////////////////////////////////////////////
 
 async function registerCommands() {
+
     const commands = [
 
-        new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
+        new SlashCommandBuilder()
+            .setName('event')
+            .setDescription('Aktualny event'),
 
-        new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
+        new SlashCommandBuilder()
+            .setName('next-events')
+            .setDescription('Aktualny + następne eventy'),
 
-        new SlashCommandBuilder().setName('set-dm').setDescription('Ustaw DM'),
+        new SlashCommandBuilder()
+            .setName('set-dm')
+            .setDescription('Ustaw DM'),
 
-        new SlashCommandBuilder().setName('roles-picker').setDescription('Ustaw role'),
+        new SlashCommandBuilder()
+            .setName('roles-picker')
+            .setDescription('Ustaw role'),
 
         new SlashCommandBuilder()
             .setName('giveaway')
             .setDescription('Stwórz giveaway')
-            .addStringOption(o=>o.setName('nagroda').setRequired(true))
-            .addStringOption(o=>o.setName('czas').setRequired(true)),
+            .addStringOption(o =>
+                o.setName('nagroda')
+                 .setDescription('Nagroda')
+                 .setRequired(true)
+            )
+            .addStringOption(o =>
+                o.setName('czas')
+                 .setDescription('np 10m / 1h')
+                 .setRequired(true)
+            ),
 
-        new SlashCommandBuilder().setName('refresh').setDescription('Refresh'),
+        new SlashCommandBuilder()
+            .setName('test-event')
+            .setDescription('Test event'),
 
-    ].map(c=>c.toJSON());
+        new SlashCommandBuilder()
+            .setName('refresh')
+            .setDescription('Odśwież komendy')
+
+    ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+
+    await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: commands }
+    );
+
+    console.log("✅ Komendy zarejestrowane");
 }
 
 //////////////////////////////////////////////////
 // 🚀 READY
 //////////////////////////////////////////////////
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
     console.log(`✅ ${client.user.tag}`);
+
     await registerCommands();
 
     cron.schedule('* * * * *', async () => {
@@ -185,7 +245,7 @@ client.once('ready', async () => {
 
         const channel = await client.channels.fetch(CHANNEL_ID);
 
-        channel.send({
+        await channel.send({
             content: `<@&${role}>`,
             embeds: [embed]
         });
@@ -198,20 +258,26 @@ client.once('ready', async () => {
 
 client.on('interactionCreate', async i => {
 
-    if (i.isButton()) {
+    // 🎁 JOIN
+    if (i.isButton() && i.customId === "join") {
 
-        if (i.customId === "join") {
-            const entries = getEntries(i.member);
+        if (!data.giveaway.active)
+            return i.reply({ content: "❌ brak giveaway", ephemeral: true });
 
-            data.giveaway.entries[i.user.id] = entries;
-            save();
+        const entries = getEntries(i.member);
 
-            return i.reply({ content: `🎟️ Masz ${entries} wejść`, ephemeral: true });
-        }
+        data.giveaway.entries[i.user.id] = entries;
+        save();
+
+        return i.reply({
+            content: `🎟️ Masz ${entries} wejść`,
+            ephemeral: true
+        });
     }
 
     if (!i.isChatInputCommand()) return;
 
+    // 🎁 GIVEAWAY
     if (i.commandName === "giveaway") {
 
         const prize = i.options.getString("nagroda");
@@ -228,7 +294,7 @@ client.on('interactionCreate', async i => {
 
         const embed = new EmbedBuilder()
             .setTitle("🎉 GIVEAWAY")
-            .setDescription(`Nagroda: **${prize}**\nKliknij przycisk!`)
+            .setDescription(`Nagroda: **${prize}**\nKliknij aby dołączyć`)
             .setColor(0x00ffcc);
 
         const row = new ActionRowBuilder().addComponents(
@@ -243,20 +309,17 @@ client.on('interactionCreate', async i => {
         setTimeout(async () => {
 
             const users = Object.entries(data.giveaway.entries);
-
             if (users.length === 0) return;
 
             const pool = [];
 
             users.forEach(([id, count]) => {
-                for (let i = 0; i < count; i++) {
-                    pool.push(id);
-                }
+                for (let i = 0; i < count; i++) pool.push(id);
             });
 
             const winner = pool[Math.floor(Math.random() * pool.length)];
 
-            msg.reply(`🎉 Wygrał: <@${winner}> | Nagroda: ${prize}`);
+            msg.reply(`🎉 Wygrał: <@${winner}> | ${prize}`);
 
             data.giveaway.active = false;
             save();
@@ -264,35 +327,32 @@ client.on('interactionCreate', async i => {
         }, time);
     }
 
+    // 📊 NEXT EVENTS
     if (i.commandName === "next-events") {
 
         const now = new Date();
         const h = now.getHours();
-
-        const events = [
-            getEvent(h),
-            getEvent((h+1)%24),
-            getEvent((h+2)%24)
-        ];
 
         return i.reply({
             embeds: [
                 new EmbedBuilder()
                     .setTitle("📊 Eventy")
                     .setDescription(
-`🔥 TERAZ → ${events[0]}
-⏰ Następny → ${events[1]}
-⏰ Kolejny → ${events[2]}`
+`🔥 TERAZ → ${getEvent(h)}
+⏰ Następny → ${getEvent((h+1)%24)}
+⏰ Kolejny → ${getEvent((h+2)%24)}`
                     )
                     .setColor(0x5865F2)
             ]
         });
     }
 
+    // 🔄 REFRESH
     if (i.commandName === "refresh") {
         await registerCommands();
         return i.reply({ content: "✅ Odświeżono", ephemeral: true });
     }
+
 });
 
 client.login(TOKEN);
