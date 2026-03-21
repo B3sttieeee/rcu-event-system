@@ -1,27 +1,42 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
+<title>RCU Dashboard</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="style.css">
 </head>
 
-<body class="bg-[#0b1220] text-white p-10">
+<body class="bg-[#060b17] text-white p-10">
 
-<h1 class="text-4xl mb-10 font-bold">🎛 PANEL</h1>
+<h1 class="text-5xl font-bold mb-12 glow-text">🎛 RCU PANEL</h1>
 
-<div id="events" class="grid md:grid-cols-3 gap-6 mb-10"></div>
+<!-- EVENT CARDS -->
+<div id="events" class="grid md:grid-cols-3 gap-8 mb-12"></div>
 
-<h2>ROLE</h2>
-<input id="r1" placeholder="RNG">
-<input id="r2" placeholder="Merchant">
-<input id="r3" placeholder="Spin">
+<!-- SETTINGS -->
+<div class="glass p-8 rounded-2xl">
 
-<h2>EMBEDY</h2>
-<textarea id="e1"></textarea>
-<textarea id="e2"></textarea>
-<textarea id="e3"></textarea>
-<textarea id="e4"></textarea>
+<h2 class="text-2xl mb-6">⚙️ CONFIG</h2>
 
-<button onclick="save()">ZAPISZ</button>
+<div class="grid md:grid-cols-3 gap-6">
+
+<input id="r1" class="input" placeholder="🥚 RNG ROLE ID">
+<input id="r2" class="input" placeholder="🐝 MERCHANT ROLE ID">
+<input id="r3" class="input" placeholder="🎰 SPIN ROLE ID">
+
+</div>
+
+<h2 class="text-2xl mt-10 mb-4">📝 EMBEDS</h2>
+
+<textarea id="e1" class="input h-20"></textarea>
+<textarea id="e2" class="input h-20"></textarea>
+<textarea id="e3" class="input h-20"></textarea>
+<textarea id="e4" class="input h-20"></textarea>
+
+<button onclick="save()" class="btn mt-6">💾 ZAPISZ</button>
+
+</div>
 
 <script src="app.js"></script>
 </body>
