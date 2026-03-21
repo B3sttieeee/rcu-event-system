@@ -5,15 +5,15 @@ const {
     REST,
     Routes,
     SlashCommandBuilder,
-    ActionRowBuilder,
-    StringSelectMenuBuilder,
-    ButtonBuilder,
-    ButtonStyle,
     PermissionsBitField
 } = require('discord.js');
 
+const express = require('express');
 const cron = require('node-cron');
 const fs = require('fs');
+
+const app = express();
+app.use(express.json());
 
 const client = new Client({
     intents: [GatewayIntentBits.Guilds]
@@ -25,15 +25,10 @@ const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
 
-// ✅ WAŻNE — JEDEN PLIK Z DASHBOARD
+// 📁 DATA
 const FILE = './dashboard/data.json';
 
-// 📁 LOAD DATA
-let data = {
-    events: {},
-    roles: { jajko: null, merchant: null, spin: null },
-    dm: []
-};
+let data = { events: {}, dm: [] };
 
 function loadData() {
     if (fs.existsSync(FILE)) {
@@ -41,69 +36,65 @@ function loadData() {
     }
 }
 
-function save() {
-    fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
-}
+// 🌐 STRONA (ŻEBY RAILWAY NIE CRASHOWAŁ)
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/dashboard/public/index.html');
+});
 
-// ⏰ FORMAT
-const format = h => `${h.toString().padStart(2, '0')}:00`;
+app.use(express.static('dashboard/public'));
 
-// 🎯 GET EVENT (z dashboard)
+// API SAVE
+app.post('/save', (req, res) => {
+    fs.writeFileSync(FILE, JSON.stringify(req.body, null, 2));
+    res.sendStatus(200);
+});
+
+// 🚀 START SERWERA
+const PORT = process.env.PORT || 8080;
+app.listen(PORT, () => console.log("🌐 Dashboard działa"));
+
+
+// 🎯 EVENT
 function getEventByHour(h) {
     loadData();
 
     for (const key of Object.keys(data.events)) {
         const ev = data.events[key];
-        if (!ev.hours) continue;
+        const hours = ev.hours.split(',').map(x => parseInt(x));
 
-        const hours = ev.hours.split(',').map(x => parseInt(x.trim()));
-        if (hours.includes(h)) {
-            return { ...ev, key };
-        }
+        if (hours.includes(h)) return ev;
     }
-
     return null;
 }
 
+// ⏰ FORMAT
+const format = h => `${h.toString().padStart(2, '0')}:00`;
+
 // 🎨 EMBED
 function createEmbed(event, status, h) {
-    if (!event) return null;
-
     return new EmbedBuilder()
         .setColor(event.color || '#5865F2')
-        .setTitle(`🎯 ${event.name}`)
+        .setTitle(event.name || "EVENT")
         .setDescription(
 `📊 **${status}**
 
-${event.description || "Brak opisu"}
+${event.description || ""}
 
-⏰ Godzina: \`${format(h)}\``
+⏰ ${format(h)}`
         )
         .setImage(event.image || null)
-        .setFooter({ text: "RCU • EVENT SYSTEM" })
         .setTimestamp();
 }
 
-// 📩 DM
-async function sendDM(embed) {
-    for (const id of data.dm || []) {
-        try {
-            const user = await client.users.fetch(id);
-            await user.send({ embeds: [embed] });
-        } catch {}
-    }
-}
-
-// 🚀 READY
+// 🤖 READY
 client.once('ready', async () => {
 
     console.log(`✅ ${client.user.tag}`);
 
     const commands = [
-        new SlashCommandBuilder().setName('test').setDescription('Aktualny event'),
-        new SlashCommandBuilder().setName('next').setDescription('Następne eventy'),
-        new SlashCommandBuilder().setName('dm').setDescription('Toggle DM'),
-        new SlashCommandBuilder().setName('check-pings').setDescription('Status pingów')
+        new SlashCommandBuilder().setName('test').setDescription('Test event'),
+        new SlashCommandBuilder().setName('next').setDescription('Next events'),
+        new SlashCommandBuilder().setName('check-pings').setDescription('Status')
     ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
@@ -111,7 +102,7 @@ client.once('ready', async () => {
 
     console.log("✅ Commands ready");
 
-    // 🔁 CRON
+    // ⏰ CRON
     cron.schedule('* * * * *', async () => {
 
         const channel = await client.channels.fetch(CHANNEL_ID);
@@ -122,121 +113,86 @@ client.once('ready', async () => {
 
         // 🔔 5 MIN PRZED
         if (m === 55) {
-            const nextH = (h + 1) % 24;
-            const event = getEventByHour(nextH);
-            if (!event) return;
-
-            const role = event.roleId;
-            if (!role) return;
-
-            const embed = createEmbed(event, "🔔 ZA 5 MINUT", nextH);
+            const e = getEventByHour((h + 1) % 24);
+            if (!e || !e.roleId) return;
 
             channel.send({
-                content: `<@&${role}>`,
-                embeds: [embed]
+                content: `<@&${e.roleId}>`,
+                embeds: [createEmbed(e, "ZA 5 MINUT", (h + 1) % 24)]
             });
-
-            sendDM(embed);
         }
 
         // ⏰ START
         if (m === 0) {
-            const event = getEventByHour(h);
-            if (!event) return;
-
-            const role = event.roleId;
-            if (!role) return;
-
-            const embed = createEmbed(event, "⏰ START EVENTU", h);
+            const e = getEventByHour(h);
+            if (!e || !e.roleId) return;
 
             channel.send({
-                content: `<@&${role}>`,
-                embeds: [embed]
+                content: `<@&${e.roleId}>`,
+                embeds: [createEmbed(e, "START", h)]
             });
-
-            sendDM(embed);
         }
 
     });
 });
 
-// ⚡ INTERAKCJE
+// ⚡ KOMENDY
 client.on('interactionCreate', async i => {
 
-    if (i.isChatInputCommand()) {
+    if (!i.isChatInputCommand()) return;
 
-        loadData();
+    loadData();
 
-        const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
-        let h = now.getHours();
-        let m = now.getMinutes();
+    const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
+    let h = now.getHours();
+    let m = now.getMinutes();
 
-        // 🧪 TEST
-        if (i.commandName === 'test') {
-            const event = getEventByHour(h);
-            if (!event) return i.reply("Brak eventu");
+    // TEST
+    if (i.commandName === 'test') {
+        const e = getEventByHour(h);
+        if (!e) return i.reply("Brak eventu");
 
-            return i.reply({
-                embeds: [createEmbed(event, "AKTYWNY", h)]
-            });
-        }
-
-        // ⏭ NEXT
-        if (i.commandName === 'next') {
-
-            if (m > 0) h = (h + 1) % 24;
-
-            const e1 = getEventByHour(h);
-            const e2 = getEventByHour((h + 1) % 24);
-
-            const embeds = [];
-
-            if (e1) embeds.push(createEmbed(e1, "NADCHODZI", h));
-            if (e2) embeds.push(createEmbed(e2, "KOLEJNY", (h + 1) % 24));
-
-            return i.reply({ embeds });
-        }
-
-        // 📊 CHECK
-        if (i.commandName === 'check-pings') {
-
-            if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
-                return i.reply({ content: "❌ brak permisji", ephemeral: true });
-
-            const list = Object.values(data.events).map(ev =>
-`${ev.name}: ${ev.roleId ? `<@&${ev.roleId}>` : "❌ brak roli"}`
-            ).join('\n');
-
-            return i.reply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setColor(0x5865F2)
-                        .setTitle("📊 STATUS PINGÓW")
-                        .setDescription(list + `\n\n📡 Kanał: <#${CHANNEL_ID}>`)
-                        .setTimestamp()
-                ],
-                ephemeral: true
-            });
-        }
-
-        // 📩 DM
-        if (i.commandName === 'dm') {
-            const id = i.user.id;
-
-            if (data.dm.includes(id)) {
-                data.dm = data.dm.filter(x => x !== id);
-                save();
-                return i.reply({ content: "❌ DM OFF", ephemeral: true });
-            } else {
-                data.dm.push(id);
-                save();
-                return i.reply({ content: "✅ DM ON", ephemeral: true });
-            }
-        }
+        return i.reply({
+            embeds: [createEmbed(e, "AKTYWNY", h)]
+        });
     }
-});
-client.login(TOKEN);
 
-require('http')
-  .createServer((req, res) => res.end("Bot działa"))
-  .listen(process.env.PORT || 8080);
+    // NEXT
+    if (i.commandName === 'next') {
+
+        if (m > 0) h = (h + 1) % 24;
+
+        const e1 = getEventByHour(h);
+        const e2 = getEventByHour((h + 1) % 24);
+
+        return i.reply({
+            embeds: [
+                e1 ? createEmbed(e1, "NADCHODZI", h) : null,
+                e2 ? createEmbed(e2, "KOLEJNY", (h + 1) % 24) : null
+            ].filter(Boolean)
+        });
+    }
+
+    // CHECK
+    if (i.commandName === 'check-pings') {
+
+        if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
+            return i.reply({ content: "❌ brak permisji", ephemeral: true });
+
+        const list = Object.values(data.events).map(e =>
+`${e.name}: ${e.roleId ? `<@&${e.roleId}>` : "❌ brak roli"}`
+        ).join('\n');
+
+        return i.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle("STATUS PINGÓW")
+                    .setDescription(list)
+            ],
+            ephemeral: true
+        });
+    }
+
+});
+
+client.login(TOKEN);
