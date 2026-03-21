@@ -18,7 +18,6 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds]
 });
 
-// 🔐 TOKEN (Railway)
 const TOKEN = process.env.TOKEN;
 
 // 🔧 TWOJE ID
@@ -35,7 +34,6 @@ let data = {
 };
 
 if (fs.existsSync(FILE)) data = JSON.parse(fs.readFileSync(FILE));
-
 const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 
 // 🎯 EVENT SYSTEM
@@ -51,37 +49,39 @@ function getEvent(h) {
 
 const format = h => `${h.toString().padStart(2, '0')}:00`;
 
-// 🎨 ULTRA EMBED
-function createEmbed(event, type, h) {
+// 🎨 EMBED
+function createEmbed(event, type, h, showNext = true) {
 
-    const nextH = (h + 1) % 24;
-    const next2H = (h + 2) % 24;
+    let desc =
+`✨ **${type}**
 
-    const next = getEvent(nextH);
-    const next2 = getEvent(next2H);
+> ⏰ Godzina: \`${format(h)}\`
+> 📌 Event: ${event.name}`;
+
+    if (showNext) {
+        const next = getEvent((h + 1) % 24);
+        const next2 = getEvent((h + 2) % 24);
+
+        desc += `
+
+╭───────────────
+> ⏭️ Next:
+> ${next.name} \`${format((h + 1) % 24)}\`
+
+> 🔮 Kolejny:
+> ${next2.name} \`${format((h + 2) % 24)}\`
+╰───────────────`;
+    }
+
+    desc += `
+
+🔥 Dołącz i nie przegap!`;
 
     return new EmbedBuilder()
         .setColor(event.color)
-        .setTitle(`╭・${event.emoji} ${event.name}`)
-        .setDescription(
-`╰・✨ **${type}**
-
-> ⏰ **Godzina:** \`${format(h)}\`
-> 📌 **Event:** ${event.name}
-
-╭───────────────
-> ⏭️ **Next:**
-> ${next.name} \`${format(nextH)}\`
-
-> 🔮 **Kolejny:**
-> ${next2.name} \`${format(next2H)}\`
-╰───────────────
-
-🔥 **Dołącz i nie przegap!**`
-        )
-        .setFooter({
-            text: `RCU • EVENT SYSTEM`
-        })
+        .setTitle(`${event.emoji} ${event.name}`)
+        .setDescription(desc)
+        .setFooter({ text: "RCU • EVENT SYSTEM" })
         .setTimestamp();
 }
 
@@ -101,8 +101,8 @@ client.once('ready', async () => {
     console.log(`✅ ${client.user.tag}`);
 
     const commands = [
-        new SlashCommandBuilder().setName('test').setDescription('Test embed'),
-        new SlashCommandBuilder().setName('next').setDescription('Następny event'),
+        new SlashCommandBuilder().setName('test').setDescription('Aktualny event'),
+        new SlashCommandBuilder().setName('next').setDescription('2 następne eventy'),
         new SlashCommandBuilder().setName('dm').setDescription('Toggle DM'),
         new SlashCommandBuilder().setName('panel').setDescription('Ustaw role'),
         new SlashCommandBuilder().setName('roles').setDescription('Wybierz role')
@@ -111,7 +111,7 @@ client.once('ready', async () => {
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 
-    console.log("✅ Slash commands ready");
+    console.log("✅ Commands ready");
 
     // ⏰ SYSTEM
     cron.schedule('* * * * *', async () => {
@@ -121,20 +121,23 @@ client.once('ready', async () => {
         const h = now.getHours();
         const m = now.getMinutes();
 
-        // 🔔 5 MIN PRZED
+        // 🔔 5 MIN PRZED (np 16:55 → event 17)
         if (m === 55) {
-            const e = getEvent((h + 1) % 24);
+            const nextHour = (h + 1) % 24;
+            const e = getEvent(nextHour);
+
             if (!e.role) return;
 
-            const embed = createEmbed(e, "🔔 ZA 5 MINUT", (h + 1) % 24);
+            const embed = createEmbed(e, "🔔 ZA 5 MINUT", nextHour);
 
             channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
             sendDM(embed);
         }
 
-        // ⏰ START
+        // ⏰ START EVENTU (np 17:00)
         if (m === 0) {
             const e = getEvent(h);
+
             if (!e.role) return;
 
             const embed = createEmbed(e, "⏰ START EVENTU", h);
@@ -153,14 +156,25 @@ client.on('interactionCreate', async i => {
 
         const h = new Date().getHours();
 
+        // 🧪 TEST = aktualny event
         if (i.commandName === 'test') {
-            return i.reply({ embeds: [createEmbed(getEvent(h), "🧪 TEST", h)] });
+            return i.reply({
+                embeds: [createEmbed(getEvent(h), "🧪 AKTUALNY EVENT", h)]
+            });
         }
 
+        // ⏭️ NEXT = 2 następne
         if (i.commandName === 'next') {
-            return i.reply({ embeds: [createEmbed(getEvent((h + 1) % 24), "⏭️ NADCHODZI", (h + 1) % 24)] });
+
+            const nextH = (h + 1) % 24;
+            const e = getEvent(nextH);
+
+            return i.reply({
+                embeds: [createEmbed(e, "⏭️ NADCHODZI", nextH)]
+            });
         }
 
+        // 📩 DM
         if (i.commandName === 'dm') {
             const id = i.user.id;
 
@@ -175,6 +189,7 @@ client.on('interactionCreate', async i => {
             }
         }
 
+        // ⚙️ PANEL
         if (i.commandName === 'panel') {
 
             const menu = new StringSelectMenuBuilder()
@@ -192,6 +207,7 @@ client.on('interactionCreate', async i => {
             });
         }
 
+        // 🎮 ROLE
         if (i.commandName === 'roles') {
 
             const row = new ActionRowBuilder().addComponents(
@@ -201,12 +217,13 @@ client.on('interactionCreate', async i => {
             );
 
             return i.reply({
-                content: "🎮 Kliknij aby wybrać powiadomienia:",
+                content: "🎮 Wybierz powiadomienia:",
                 components: [row]
             });
         }
     }
 
+    // SELECT MENU
     if (i.isStringSelectMenu()) {
 
         if (i.customId === 'select_event') {
@@ -220,7 +237,6 @@ client.on('interactionCreate', async i => {
 
             const menu = new StringSelectMenuBuilder()
                 .setCustomId(`set_${type}`)
-                .setPlaceholder('Wybierz rolę')
                 .addOptions(roles);
 
             return i.update({
@@ -238,6 +254,7 @@ client.on('interactionCreate', async i => {
         }
     }
 
+    // BUTTONY
     if (i.isButton()) {
 
         const map = {
