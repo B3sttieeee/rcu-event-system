@@ -19,7 +19,7 @@ const client = new Client({
 });
 
 // 🔧 CONFIG
-const TOKEN = 'MTQ4NDkwNDk3NjU2MzA0NDQ0NA.GXAQdO.UW0N-IoD5ckiyGULP-fpVHtZyMCsSjy-4Vh5tw';
+const TOKEN = process.env.TOKEN;
 const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1475561359851786335';
