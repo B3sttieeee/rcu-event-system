@@ -5,7 +5,10 @@ const {
     REST,
     Routes,
     SlashCommandBuilder,
-    PermissionsBitField
+    PermissionsBitField,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle
 } = require('discord.js');
 
 const fs = require('fs');
@@ -17,7 +20,6 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
-// 🔧 TWOJE ID (ZOSTAWIAMY)
 const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
@@ -26,59 +28,44 @@ const FILE = './data.json';
 
 // 📁 DATA
 let data = {
-    roles: {
-        egg: null,
-        merchant: null,
-        spin: null
+    roles: { egg: null, merchant: null, spin: null },
+    hours: {
+        egg: [0,3,6,9,12,15,18,21],
+        merchant: [1,4,7,10,13,16,19,22],
+        spin: [2,5,8,11,14,17,20,23]
+    },
+    embed: {
+        egg: { title: "🥚 RNG EGG", desc: "Zbierasz punkty", color: 0x00ffc8, image: "" },
+        merchant: { title: "🐝 MERCHANT", desc: "Kupujesz itemy", color: 0xffaa00, image: "" },
+        spin: { title: "🎰 SPIN", desc: "Koło losowania", color: 0xff0055, image: "" }
     },
     dm: []
 };
 
-if (fs.existsSync(FILE)) {
-    data = JSON.parse(fs.readFileSync(FILE));
+if (fs.existsSync(FILE)) data = JSON.parse(fs.readFileSync(FILE));
+const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
+
+// 🎯 EVENT
+function getEvent(h) {
+    if (data.hours.egg.includes(h)) return "egg";
+    if (data.hours.merchant.includes(h)) return "merchant";
+    return "spin";
 }
 
-const save = () => {
-    fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
-};
+// 🎨 EMBED BUILDER
+function buildEmbed(type, status, h) {
+    const e = data.embed[type];
 
-// 🎯 EVENT SYSTEM
-function getEvent(hour) {
-    if ([0,3,6,9,12,15,18,21].includes(hour)) return { type: "egg", name: "RNG EGG" };
-    if ([1,4,7,10,13,16,19,22].includes(hour)) return { type: "merchant", name: "MERCHANT" };
-    return { type: "spin", name: "DEVS SPIN" };
+    const embed = new EmbedBuilder()
+        .setColor(e.color)
+        .setTitle(e.title)
+        .setDescription(`📊 **${status}**\n\n${e.desc}\n\n⏰ ${h}:00`)
+        .setTimestamp();
+
+    if (e.image) embed.setImage(e.image);
+
+    return embed;
 }
-
-const format = h => `${h.toString().padStart(2, '0')}:00`;
-
-// 🎨 EMBEDY
-const embedEgg = (status, h) =>
-    new EmbedBuilder()
-        .setColor(0x00ffc8)
-        .setTitle("🥚 RNG EGG")
-        .setDescription(`📊 **${status}**\n\nZbierasz punkty i rozwijasz Tier.\n\n⏰ \`${format(h)}\``)
-        .setTimestamp();
-
-const embedBoss = (status, h) =>
-    new EmbedBuilder()
-        .setColor(0xff8800)
-        .setTitle("👹 BOSS MERCHANT")
-        .setDescription(`📊 **${status}**\n\nKupujesz itemy za tokeny.\n\n⏰ \`${format(h)}\``)
-        .setTimestamp();
-
-const embedHoney = (status, h) =>
-    new EmbedBuilder()
-        .setColor(0xffcc00)
-        .setTitle("🐝 HONEY MERCHANT")
-        .setDescription(`📊 **${status}**\n\nKupujesz itemy za miód.\n\n⏰ \`${format(h)}\``)
-        .setTimestamp();
-
-const embedSpin = (status, h) =>
-    new EmbedBuilder()
-        .setColor(0xff0055)
-        .setTitle("🎰 DEVS SPIN")
-        .setDescription(`📊 **${status}**\n\nKoło losowania.\n\n⏰ \`${format(h)}\``)
-        .setTimestamp();
 
 // 📩 DM
 async function sendDM(embeds) {
@@ -96,26 +83,39 @@ client.once('ready', async () => {
 
     const commands = [
         new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
-        new SlashCommandBuilder().setName('next-event').setDescription('Następne eventy'),
-        new SlashCommandBuilder().setName('check-pings').setDescription('Status pingów'),
+        new SlashCommandBuilder().setName('next-event').setDescription('Następne'),
+        new SlashCommandBuilder().setName('check-pings').setDescription('Status'),
+
         new SlashCommandBuilder()
             .setName('roles-add')
             .setDescription('Ustaw role')
-            .addStringOption(o =>
-                o.setName('typ')
-                    .setDescription('egg / merchant / spin')
-                    .setRequired(true))
-            .addRoleOption(o =>
-                o.setName('rola')
-                    .setDescription('rola do pingu')
-                    .setRequired(true)),
-        new SlashCommandBuilder().setName('set-dm').setDescription('DM ON/OFF')
+            .addStringOption(o => o.setName('typ').setRequired(true).addChoices(
+                {name:"egg",value:"egg"},
+                {name:"merchant",value:"merchant"},
+                {name:"spin",value:"spin"}
+            ))
+            .addRoleOption(o => o.setName('rola').setRequired(true)),
+
+        new SlashCommandBuilder()
+            .setName('set-hours')
+            .setDescription('Ustaw godziny')
+            .addStringOption(o => o.setName('typ').setRequired(true))
+            .addStringOption(o => o.setName('godziny').setRequired(true)),
+
+        new SlashCommandBuilder()
+            .setName('set-embed')
+            .setDescription('Custom embed')
+            .addStringOption(o => o.setName('typ').setRequired(true))
+            .addStringOption(o => o.setName('title'))
+            .addStringOption(o => o.setName('desc'))
+            .addStringOption(o => o.setName('image')),
+
+        new SlashCommandBuilder().setName('set-dm').setDescription('DM ON/OFF'),
+        new SlashCommandBuilder().setName('panel').setDescription('Panel')
     ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-
-    console.log("✅ Commands ready");
 
     // ⏱ CRON
     cron.schedule('* * * * *', async () => {
@@ -125,118 +125,141 @@ client.once('ready', async () => {
         const h = now.getHours();
         const m = now.getMinutes();
 
-        // 🔔 5 MIN PRZED
+        // 5 min before
         if (m === 55) {
-            const nextH = (h + 1) % 24;
-            const e = getEvent(nextH);
-            const role = data.roles[e.type];
+            const nh = (h + 1) % 24;
+            const type = getEvent(nh);
+            const role = data.roles[type];
             if (!role) return;
 
-            let embeds = [];
-            if (e.type === "merchant") embeds = [embedBoss("ZA 5 MINUT", nextH), embedHoney("ZA 5 MINUT", nextH)];
-            else if (e.type === "egg") embeds = [embedEgg("ZA 5 MINUT", nextH)];
-            else embeds = [embedSpin("ZA 5 MINUT", nextH)];
-
-            channel.send({ content: `<@&${role}>`, embeds });
-            sendDM(embeds);
+            const embed = buildEmbed(type, "ZA 5 MINUT", nh);
+            channel.send({ content: `<@&${role}>`, embeds: [embed] });
+            sendDM([embed]);
         }
 
-        // ⏰ START
+        // start
         if (m === 0) {
-            const e = getEvent(h);
-            const role = data.roles[e.type];
+            const type = getEvent(h);
+            const role = data.roles[type];
             if (!role) return;
 
-            let embeds = [];
-            if (e.type === "merchant") embeds = [embedBoss("START", h), embedHoney("START", h)];
-            else if (e.type === "egg") embeds = [embedEgg("START", h)];
-            else embeds = [embedSpin("START", h)];
-
-            channel.send({ content: `<@&${role}>`, embeds });
-            sendDM(embeds);
+            const embed = buildEmbed(type, "START", h);
+            channel.send({ content: `<@&${role}>`, embeds: [embed] });
+            sendDM([embed]);
         }
     });
 });
 
 // ⚡ KOMENDY
 client.on('interactionCreate', async i => {
-    if (!i.isChatInputCommand()) return;
+    if (!i.isChatInputCommand() && !i.isButton()) return;
 
-    const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
-    let h = now.getHours();
-    let m = now.getMinutes();
+    // PANEL
+    if (i.commandName === 'panel') {
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('status').setLabel('Status').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('dm').setLabel('DM').setStyle(ButtonStyle.Success)
+        );
+
+        return i.reply({ content: "Panel", components: [row], ephemeral: true });
+    }
+
+    // BUTTONY
+    if (i.isButton()) {
+        if (i.customId === 'status') {
+            return i.reply({ content: "Use /check-pings", ephemeral: true });
+        }
+
+        if (i.customId === 'dm') {
+            const id = i.user.id;
+            if (data.dm.includes(id)) {
+                data.dm = data.dm.filter(x => x !== id);
+                save();
+                return i.reply({ content: "❌ DM OFF", ephemeral: true });
+            } else {
+                data.dm.push(id);
+                save();
+                return i.reply({ content: "✅ DM ON", ephemeral: true });
+            }
+        }
+    }
+
+    if (!i.isChatInputCommand()) return;
 
     // EVENT
     if (i.commandName === 'event') {
-        const e = getEvent(h);
+        const now = new Date();
+        const h = now.getHours();
+        const type = getEvent(h);
 
-        if (e.type === "merchant")
-            return i.reply({ embeds: [embedBoss("AKTYWNY", h), embedHoney("AKTYWNY", h)] });
-
-        if (e.type === "egg")
-            return i.reply({ embeds: [embedEgg("AKTYWNY", h)] });
-
-        return i.reply({ embeds: [embedSpin("AKTYWNY", h)] });
+        return i.reply({ embeds: [buildEmbed(type, "AKTYWNY", h)] });
     }
 
     // NEXT
     if (i.commandName === 'next-event') {
-        if (m > 0) h = (h + 1) % 24;
+        const now = new Date();
+        let h = now.getHours() + 1;
 
-        const e1 = getEvent(h);
+        const e1 = getEvent(h % 24);
         const e2 = getEvent((h + 1) % 24);
 
-        let embeds = [];
-
-        const add = (e, txt, hour) => {
-            if (e.type === "merchant") embeds.push(embedBoss(txt, hour), embedHoney(txt, hour));
-            else if (e.type === "egg") embeds.push(embedEgg(txt, hour));
-            else embeds.push(embedSpin(txt, hour));
-        };
-
-        add(e1, "NADCHODZI", h);
-        add(e2, "KOLEJNY", (h + 1) % 24);
-
-        i.reply({ embeds });
+        return i.reply({
+            embeds: [
+                buildEmbed(e1, "NADCHODZI", h % 24),
+                buildEmbed(e2, "KOLEJNY", (h + 1) % 24)
+            ]
+        });
     }
 
     // CHECK
     if (i.commandName === 'check-pings') {
-        if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
-            return i.reply({ content: "❌ brak permisji", ephemeral: true });
-
         return i.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setColor(0x5865F2)
-                    .setTitle("📊 STATUS PINGÓW")
-                    .setDescription(
-`🥚 RNG: ${data.roles.egg ? `<@&${data.roles.egg}>` : "❌"}
-🐝 MERCHANT: ${data.roles.merchant ? `<@&${data.roles.merchant}>` : "❌"}
-🎰 SPIN: ${data.roles.spin ? `<@&${data.roles.spin}>` : "❌"}
-
-📡 Kanał: <#${CHANNEL_ID}>`
-                    )
-            ],
+            content:
+`🥚 ${data.roles.egg ? `<@&${data.roles.egg}>` : "❌"}
+🐝 ${data.roles.merchant ? `<@&${data.roles.merchant}>` : "❌"}
+🎰 ${data.roles.spin ? `<@&${data.roles.spin}>` : "❌"}`,
             ephemeral: true
         });
     }
 
     // ROLES
     if (i.commandName === 'roles-add') {
-        if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
-            return i.reply({ content: "❌ brak permisji", ephemeral: true });
-
         const type = i.options.getString('typ');
         const role = i.options.getRole('rola');
-
-        if (!['egg', 'merchant', 'spin'].includes(type))
-            return i.reply({ content: "❌ wpisz: egg / merchant / spin", ephemeral: true });
 
         data.roles[type] = role.id;
         save();
 
-        i.reply({ content: `✅ ustawiono ${type} → ${role}`, ephemeral: true });
+        return i.reply({ content: "✅ ustawiono", ephemeral: true });
+    }
+
+    // HOURS
+    if (i.commandName === 'set-hours') {
+        const type = i.options.getString('typ');
+        const hours = i.options.getString('godziny')
+            .split(',')
+            .map(x => parseInt(x.trim()));
+
+        data.hours[type] = hours;
+        save();
+
+        return i.reply({ content: "✅ godziny zapisane", ephemeral: true });
+    }
+
+    // EMBED
+    if (i.commandName === 'set-embed') {
+        const type = i.options.getString('typ');
+        const title = i.options.getString('title');
+        const desc = i.options.getString('desc');
+        const image = i.options.getString('image');
+
+        if (title) data.embed[type].title = title;
+        if (desc) data.embed[type].desc = desc;
+        if (image) data.embed[type].image = image;
+
+        save();
+
+        return i.reply({ content: "✅ embed zapisany", ephemeral: true });
     }
 
     // DM
