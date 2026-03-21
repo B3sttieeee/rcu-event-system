@@ -40,7 +40,12 @@ let data = {
 if (fs.existsSync(FILE)) data = JSON.parse(fs.readFileSync(FILE));
 const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 
-// 🌐 API
+/* ================= API ================= */
+
+app.get('/', (req,res)=>{
+    res.sendFile(__dirname + '/dashboard/public/index.html');
+});
+
 app.get('/api/data', (req,res)=> res.json(data));
 
 app.post('/api/set-role', (req,res)=>{
@@ -50,12 +55,32 @@ app.post('/api/set-role', (req,res)=>{
     res.json({ok:true});
 });
 
-// 🌍 DASHBOARD
-app.get('/', (req,res)=>{
-    res.sendFile(__dirname + '/dashboard/public/index.html');
+// 🔥 EVENT PREVIEW API
+app.get('/api/events', (req,res)=>{
+
+    const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
+    let h = now.getHours();
+    const m = now.getMinutes();
+
+    const h1 = h;
+    const h2 = (h+1)%24;
+    const h3 = (h+2)%24;
+
+    const getName = (e)=>{
+        if(e.type==="egg") return "🥚 RNG EGG";
+        if(e.type==="merchant") return "🐝 MERCHANT";
+        return "🎰 DEVS SPIN";
+    };
+
+    res.json({
+        now: { hour: h1, event: getName(getEvent(h1)), status: "AKTYWNY" },
+        next: { hour: h2, event: getName(getEvent(h2)), status: "NADCHODZI" },
+        later:{ hour: h3, event: getName(getEvent(h3)), status: "KOLEJNY" }
+    });
 });
 
-// 🎯 EVENT
+/* ================= EVENT ================= */
+
 function getEvent(h) {
     if ([0,3,6,9,12,15,18,21].includes(h)) return { type: "egg", key: "jajko" };
     if ([1,4,7,10,13,16,19,22].includes(h)) return { type: "merchant", key: "merchant" };
@@ -64,20 +89,34 @@ function getEvent(h) {
 
 const format = h => `${h.toString().padStart(2, '0')}:00`;
 
-// 💎 EMBEDY
-const embedEgg = (s,h)=> new EmbedBuilder().setColor(0x00ffc8).setTitle("🥚 RNG EGG")
-.setDescription(`📊 **${s}**\n\nZbierasz punkty i rozwijasz Tier na Anniversary Event.\n\n⏰ \`${format(h)}\``).setTimestamp();
+/* ================= EMBEDY ================= */
 
-const embedBoss = (s,h)=> new EmbedBuilder().setColor(0xff8800).setTitle("👹 BOSS MERCHANT")
-.setDescription(`📊 **${s}**\n\nKupujesz itemy za Boss Tokeny.\n\n⏰ \`${format(h)}\``).setTimestamp();
+const embedEgg = (s,h)=> new EmbedBuilder()
+.setColor(0x00ffc8)
+.setTitle("🥚 RNG EGG")
+.setDescription(`📊 **${s}**\n\nZbierasz punkty i rozwijasz Tier.\n⏰ \`${format(h)}\``)
+.setTimestamp();
 
-const embedHoney = (s,h)=> new EmbedBuilder().setColor(0xffcc00).setTitle("🐝 HONEY MERCHANT")
-.setDescription(`📊 **${s}**\n\nKupujesz itemy za miód.\n\n⏰ \`${format(h)}\``).setTimestamp();
+const embedBoss = (s,h)=> new EmbedBuilder()
+.setColor(0xff8800)
+.setTitle("👹 BOSS MERCHANT")
+.setDescription(`📊 **${s}**\n\nKupujesz za Boss Tokeny.\n⏰ \`${format(h)}\``)
+.setTimestamp();
 
-const embedSpin = (s,h)=> new EmbedBuilder().setColor(0xff0055).setTitle("🎰 DEVS SPIN")
-.setDescription(`📊 **${s}**\n\nKoło losowania na Anniversary Event.\n\n⏰ \`${format(h)}\``).setTimestamp();
+const embedHoney = (s,h)=> new EmbedBuilder()
+.setColor(0xffcc00)
+.setTitle("🐝 HONEY MERCHANT")
+.setDescription(`📊 **${s}**\n\nKupujesz za miód.\n⏰ \`${format(h)}\``)
+.setTimestamp();
 
-// 📩 DM
+const embedSpin = (s,h)=> new EmbedBuilder()
+.setColor(0xff0055)
+.setTitle("🎰 DEVS SPIN")
+.setDescription(`📊 **${s}**\n\nKoło losowania.\n⏰ \`${format(h)}\``)
+.setTimestamp();
+
+/* ================= DM ================= */
+
 async function sendDM(embeds){
     for(const id of data.dm){
         try{
@@ -87,7 +126,8 @@ async function sendDM(embeds){
     }
 }
 
-// 🚀 READY
+/* ================= READY ================= */
+
 client.once('ready', async () => {
 
     console.log(`✅ ${client.user.tag}`);
@@ -150,13 +190,70 @@ client.once('ready', async () => {
     });
 });
 
-// 🌐 PORT (RAILWAY)
+/* ================= INTERACTIONS ================= */
+
+client.on('interactionCreate', async i => {
+
+    if(i.isChatInputCommand()){
+
+        const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
+        let h = now.getHours();
+        let m = now.getMinutes();
+
+        if(i.commandName==='test'){
+            const e=getEvent(h);
+
+            if(e.type==="merchant")
+                return i.reply({embeds:[embedBoss("AKTYWNY",h),embedHoney("AKTYWNY",h)]});
+            if(e.type==="egg")
+                return i.reply({embeds:[embedEgg("AKTYWNY",h)]});
+            return i.reply({embeds:[embedSpin("AKTYWNY",h)]});
+        }
+
+        if(i.commandName==='next'){
+            if(m>0) h=(h+1)%24;
+
+            const h1=h;
+            const h2=(h+1)%24;
+
+            const e1=getEvent(h1);
+            const e2=getEvent(h2);
+
+            let embeds=[];
+
+            if(e1.type==="merchant") embeds.push(embedBoss("NADCHODZI",h1),embedHoney("NADCHODZI",h1));
+            else if(e1.type==="egg") embeds.push(embedEgg("NADCHODZI",h1));
+            else embeds.push(embedSpin("NADCHODZI",h1));
+
+            if(e2.type==="merchant") embeds.push(embedBoss("KOLEJNY",h2),embedHoney("KOLEJNY",h2));
+            else if(e2.type==="egg") embeds.push(embedEgg("KOLEJNY",h2));
+            else embeds.push(embedSpin("KOLEJNY",h2));
+
+            return i.reply({embeds});
+        }
+
+        if(i.commandName==='check-pings'){
+            if(!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
+                return i.reply({content:"❌ brak permisji",ephemeral:true});
+
+            return i.reply({
+                embeds:[new EmbedBuilder()
+                .setColor(0x5865F2)
+                .setTitle("📊 STATUS")
+                .setDescription(
+`🥚 RNG: ${data.roles.jajko?`<@&${data.roles.jajko}>`:"❌"}
+🐝 MERCHANT: ${data.roles.merchant?`<@&${data.roles.merchant}>`:"❌"}
+🎰 SPIN: ${data.roles.spin?`<@&${data.roles.spin}>`:"❌"}`
+                )],
+                ephemeral:true
+            });
+        }
+    }
+});
+
+/* ================= START ================= */
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log("🌐 API działa"));
-
-// ⚡ INTERAKCJE (twoje – zostaw jak masz)
-client.on('interactionCreate', async i => {
-    // NIE ZMIENIAJ — masz już dobrze
-});
 
 client.login(TOKEN);
