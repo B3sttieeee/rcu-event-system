@@ -1,27 +1,27 @@
 {
   "events": {
     "egg": {
-      "name": "RNG EGG",
+      "name": "🥚 RNG EGG",
       "color": "#00ffc8",
-      "description": "Zbierasz punkty i rozwijasz Tier.",
+      "description": "Zbierasz punkty i rozwijasz Tier na Anniversary Event.",
       "image": "",
-      "role": null,
+      "role": "",
       "hours": [0,3,6,9,12,15,18,21]
     },
     "merchant": {
-      "name": "MERCHANT",
+      "name": "🐝 BOSS / HONEY MERCHANT",
       "color": "#ffaa00",
-      "description": "Kupujesz itemy za tokeny.",
+      "description": "Kupujesz itemy za Boss Tokeny lub miód.",
       "image": "",
-      "role": null,
+      "role": "",
       "hours": [1,4,7,10,13,16,19,22]
     },
     "spin": {
-      "name": "DEVS SPIN",
+      "name": "🎰 DEVS SPIN",
       "color": "#ff0055",
       "description": "Koło losowania nagród.",
       "image": "",
-      "role": null,
+      "role": "",
       "hours": [2,5,8,11,14,17,20,23]
     }
   }
