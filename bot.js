@@ -5,14 +5,18 @@ const {
     REST,
     Routes,
     SlashCommandBuilder,
-    PermissionsBitField
+    PermissionsBitField,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder
 } = require('discord.js');
 
 const fs = require('fs');
 const cron = require('node-cron');
 
 const client = new Client({
-    intents: [GatewayIntentBits.Guilds]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
 const TOKEN = process.env.TOKEN;
@@ -23,68 +27,109 @@ const CHANNEL_ID = '1484937784283369502';
 
 const FILE = './data.json';
 
+// 📦 DATA
 let data = {
-    roles: {
-        egg: null,
-        merchant: null,
-        spin: null
+    roles: { egg: null, merchant: null, spin: null },
+    dm: {},
+    giveaway: {
+        active: false,
+        prize: null,
+        rolesBonus: {} // roleId: bonus entries
     }
 };
 
-if (fs.existsSync(FILE)) {
-    data = JSON.parse(fs.readFileSync(FILE));
+function loadData() {
+    if (fs.existsSync(FILE)) {
+        data = JSON.parse(fs.readFileSync(FILE));
+    }
 }
 
-const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
+function save() {
+    fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
+}
 
-// ===== EVENT SYSTEM =====
+loadData();
+
+//////////////////////////////////////////////////
+// 🎯 EVENT SYSTEM
+//////////////////////////////////////////////////
+
 function getEvent(h) {
     if ([0,3,6,9,12,15,18,21].includes(h)) return "egg";
     if ([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
     return "spin";
 }
 
-function getEventName(type) {
+function getMerchantVariant() {
+    return Math.random() < 0.5 ? "boss" : "honey";
+}
+
+function getName(type, variant=null) {
+    if (type === "merchant") {
+        return variant === "boss"
+            ? "🐝 MERCHANT BOSS"
+            : "🍯 HONEY MERCHANT";
+    }
+
     return {
         egg: "🥚 RNG EGG",
-        merchant: "🐝 MERCHANT",
-        spin: "🎰 DEVS SPIN"
+        spin: "🎰 DEV SPIN"
     }[type];
 }
 
-// ===== KOMENDY =====
-const commands = [
-    new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
-    new SlashCommandBuilder().setName('next-event').setDescription('Następne eventy'),
-    new SlashCommandBuilder().setName('check-pings').setDescription('Status pingów'),
-    new SlashCommandBuilder()
-        .setName('roles-add')
-        .setDescription('Ustaw role do pingów')
-        .addStringOption(o =>
-            o.setName('typ')
-                .setDescription('egg / merchant / spin')
-                .setRequired(true))
-        .addRoleOption(o =>
-            o.setName('rola')
-                .setDescription('rola')
-                .setRequired(true))
-].map(cmd => cmd.toJSON());
+function buildEventEmbed(type, variant=null) {
 
-// ===== READY =====
+    let color = 0x5865F2;
+    let desc = "📢 Event wystartował!";
+
+    if (type === "egg") {
+        color = 0x00ffcc;
+        desc = "🥚 Otwieraj RNG EGG i testuj swoje szczęście!";
+    }
+
+    if (type === "merchant") {
+        color = variant === "boss" ? 0xff0000 : 0xffcc00;
+        desc = variant === "boss"
+            ? "🐝 MERCHANT BOSS pojawił się! Rzadkie itemy!"
+            : "🍯 HONEY MERCHANT dostępny! Sprawdź ofertę!";
+    }
+
+    if (type === "spin") {
+        color = 0x9b59b6;
+        desc = "🎰 DEV SPIN aktywny! Zakręć i wygraj!";
+    }
+
+    return new EmbedBuilder()
+        .setTitle(getName(type, variant))
+        .setDescription(desc)
+        .setFooter({ text: "Event System" })
+        .setColor(color)
+        .setTimestamp();
+}
+
+//////////////////////////////////////////////////
+// 🎁 GIVEAWAY
+//////////////////////////////////////////////////
+
+function getEntries(member) {
+    let entries = 1;
+
+    for (const roleId in data.giveaway.rolesBonus) {
+        if (member.roles.cache.has(roleId)) {
+            entries += data.giveaway.rolesBonus[roleId];
+        }
+    }
+
+    return entries;
+}
+
+//////////////////////////////////////////////////
+// ⏰ CRON
+//////////////////////////////////////////////////
+
 client.once('ready', async () => {
-
     console.log(`✅ ${client.user.tag}`);
 
-    const rest = new REST({ version: '10' }).setToken(TOKEN);
-
-    await rest.put(
-        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-        { body: commands }
-    );
-
-    console.log("✅ Komendy OK");
-
-    // ===== CRON PING =====
     cron.schedule('* * * * *', async () => {
 
         const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
@@ -95,111 +140,171 @@ client.once('ready', async () => {
 
         const type = getEvent(h);
         const role = data.roles[type];
-
         if (!role) return;
+
+        const variant = type === "merchant" ? getMerchantVariant() : null;
+        const embed = buildEventEmbed(type, variant);
 
         const channel = await client.channels.fetch(CHANNEL_ID);
 
-        const embed = new EmbedBuilder()
-            .setTitle(getEventName(type))
-            .setDescription("📢 EVENT START")
-            .setColor(0x5865F2)
-            .setTimestamp();
-
-        channel.send({
+        await channel.send({
             content: `<@&${role}>`,
             embeds: [embed]
         });
 
-        console.log("📢 Ping wysłany:", type);
+        // DM
+        for (const userId in data.dm) {
+            if (!data.dm[userId]?.includes(type)) continue;
 
+            try {
+                const user = await client.users.fetch(userId);
+                await user.send({ embeds: [embed] });
+            } catch {}
+        }
     });
 });
 
-// ===== INTERAKCJE =====
-client.on('interactionCreate', async (interaction) => {
+//////////////////////////////////////////////////
+// ⚡ COMMANDS
+//////////////////////////////////////////////////
 
-    if (!interaction.isChatInputCommand()) return;
+client.on('interactionCreate', async i => {
 
-    const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
-    const h = now.getHours();
+    //////////////////////////////////////////////////
+    // 🎮 GIVEAWAY JOIN
+    //////////////////////////////////////////////////
+    if (i.isButton() && i.customId === "giveaway_join") {
+
+        if (!data.giveaway.active)
+            return i.reply({ content: "❌ brak giveaway", ephemeral: true });
+
+        const entries = getEntries(i.member);
+
+        return i.reply({
+            content: `🎟️ Masz **${entries} wejść** do giveaway!`,
+            ephemeral: true
+        });
+    }
+
+    //////////////////////////////////////////////////
+    // 📋 SELECT MENU (DM + ROLE SET)
+    //////////////////////////////////////////////////
+    if (i.isStringSelectMenu()) {
+
+        if (i.customId === "dm_select") {
+            data.dm[i.user.id] = i.values;
+            save();
+
+            return i.update({
+                content: "✅ Zapisano ustawienia DM",
+                components: []
+            });
+        }
+
+        if (i.customId.startsWith("role_set_")) {
+
+            const type = i.customId.split("_")[2];
+            const roleId = i.values[0];
+
+            data.roles[type] = roleId;
+            save();
+
+            return i.update({
+                content: "✅ Rola ustawiona",
+                components: []
+            });
+        }
+    }
+
+    //////////////////////////////////////////////////
+    // 🎛️ COMMANDY
+    //////////////////////////////////////////////////
+    if (!i.isChatInputCommand()) return;
 
     // EVENT
-    if (interaction.commandName === 'event') {
-        const type = getEvent(h);
+    if (i.commandName === 'event') {
+        const now = new Date();
+        const type = getEvent(now.getHours());
 
-        return interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle("📊 AKTUALNY EVENT")
-                    .setDescription(getEventName(type))
-                    .setColor(0x00ffcc)
-            ]
+        return i.reply({
+            embeds: [buildEventEmbed(type)]
         });
     }
 
-    // NEXT
-    if (interaction.commandName === 'next-event') {
-        const e1 = getEvent((h+1)%24);
-        const e2 = getEvent((h+2)%24);
+    // DM SET
+    if (i.commandName === 'set-dm') {
 
-        return interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle("⏭️ NASTĘPNE EVENTY")
-                    .setDescription(`${getEventName(e1)}\n${getEventName(e2)}`)
-                    .setColor(0xff9900)
-            ]
-        });
-    }
+        const menu = new StringSelectMenuBuilder()
+            .setCustomId('dm_select')
+            .setMinValues(1)
+            .setMaxValues(3)
+            .addOptions([
+                { label: 'RNG EGG', value: 'egg' },
+                { label: 'MERCHANT', value: 'merchant' },
+                { label: 'DEV SPIN', value: 'spin' }
+            ]);
 
-    // CHECK
-    if (interaction.commandName === 'check-pings') {
-
-        return interaction.reply({
-            embeds: [
-                new EmbedBuilder()
-                    .setTitle("📊 STATUS PINGÓW")
-                    .setDescription(
-`🥚 RNG: ${data.roles.egg ? `<@&${data.roles.egg}>` : "❌"}
-🐝 MERCHANT: ${data.roles.merchant ? `<@&${data.roles.merchant}>` : "❌"}
-🎰 SPIN: ${data.roles.spin ? `<@&${data.roles.spin}>` : "❌"}`
-                    )
-            ],
+        return i.reply({
+            content: "📩 Wybierz eventy do DM",
+            components: [new ActionRowBuilder().addComponents(menu)],
             ephemeral: true
         });
     }
 
-    // ROLES
-    if (interaction.commandName === 'roles-add') {
+    // ROLE PICKER (ADMIN)
+    if (i.commandName === 'roles-picker') {
 
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-            return interaction.reply({
-                content: "❌ brak permisji",
-                ephemeral: true
-            });
-        }
+        if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
+            return i.reply({ content: "❌ brak permisji", ephemeral: true });
 
-        const type = interaction.options.getString('typ');
-        const role = interaction.options.getRole('rola');
+        const menu = new StringSelectMenuBuilder()
+            .setCustomId(`role_set_egg`)
+            .setPlaceholder("Wybierz rolę dla RNG EGG")
+            .addOptions(
+                i.guild.roles.cache.map(r => ({
+                    label: r.name,
+                    value: r.id
+                })).slice(0, 25)
+            );
 
-        if (!["egg","merchant","spin"].includes(type)) {
-            return interaction.reply({
-                content: "❌ wpisz: egg / merchant / spin",
-                ephemeral: true
-            });
-        }
+        return i.reply({
+            content: "🎯 Ustaw rolę dla eventu",
+            components: [new ActionRowBuilder().addComponents(menu)],
+            ephemeral: true
+        });
+    }
 
-        data.roles[type] = role.id;
+    // GIVEAWAY START
+    if (i.commandName === 'giveaway') {
+
+        if (!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
+            return i.reply({ content: "❌ brak permisji", ephemeral: true });
+
+        data.giveaway.active = true;
+        data.giveaway.prize = "🎁 Nagroda";
         save();
 
-        return interaction.reply({
-            content: `✅ ustawiono ${type}`,
-            ephemeral: true
-        });
-    }
+        const embed = new EmbedBuilder()
+            .setTitle("🎉 GIVEAWAY")
+            .setDescription("Kliknij przycisk aby dołączyć!")
+            .addFields(
+                Object.entries(data.giveaway.rolesBonus).map(([role, bonus]) => ({
+                    name: `<@&${role}>`,
+                    value: `+${bonus} wejść`,
+                    inline: true
+                }))
+            )
+            .setColor(0x00ffcc);
 
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId("giveaway_join")
+                .setLabel("Weź udział")
+                .setStyle(ButtonStyle.Success)
+        );
+
+        return i.reply({ embeds: [embed], components: [row] });
+    }
 });
 
-// ===== START =====
 client.login(TOKEN);
