@@ -20,12 +20,14 @@ const client = new Client({
 
 const TOKEN = process.env.TOKEN;
 
+// 🔧 TWOJE ID
 const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
 
 const FILE = './data.json';
 
+// 📁 DATA
 let data = {
     roles: { jajko: null, merchant: null, spin: null },
     dm: []
@@ -34,45 +36,50 @@ let data = {
 if (fs.existsSync(FILE)) data = JSON.parse(fs.readFileSync(FILE));
 const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 
-// 🎯 EVENT LOGIC
+// 🎯 EVENT SYSTEM
 function getEvent(h) {
     if ([0,3,6,9,12,15,18,21].includes(h))
-        return { name: "RNG EGG", emoji: "🥚", color: 0x00ffc8, role: data.roles.jajko };
+        return { name: "🥚 RNG EGG", emoji: "🥚", color: 0x00ffc8, role: data.roles.jajko, key: "jajko" };
 
     if ([1,4,7,10,13,16,19,22].includes(h))
-        return { name: "BOSS / HONEY MERCHANT", emoji: "🐝", color: 0xffcc00, role: data.roles.merchant };
+        return { name: "🐝 BOSS / HONEY MERCHANT", emoji: "🐝", color: 0xffcc00, role: data.roles.merchant, key: "merchant" };
 
-    return { name: "DEVS SPIN (EVENT WORLD)", emoji: "🎰", color: 0xff0055, role: data.roles.spin };
+    if ([2,5,8,11,14,17,20,23].includes(h))
+        return { name: "🎰 DEVS SPIN (EVENT WORLD)", emoji: "🎰", color: 0xff0055, role: data.roles.spin, key: "spin" };
 }
 
 const format = h => `${h.toString().padStart(2, '0')}:00`;
 
-// 🔥 CURRENT EVENT EMBED
-function embedCurrent(event, h, status) {
-    return new EmbedBuilder()
-        .setColor(event.color)
-        .setAuthor({ name: "RCU • EVENT TRACKER" })
-        .setTitle(`${event.emoji} ${event.name}`)
-        .addFields(
-            { name: "📌 Status", value: `\`${status}\``, inline: true },
-            { name: "⏰ Godzina", value: `\`${format(h)}\``, inline: true },
-            { name: "🌍 Typ", value: `\`${event.name}\``, inline: false }
-        )
-        .setFooter({ text: "RCU • System Eventów" })
-        .setTimestamp();
-}
+// 🎨 EMBED (lekko ulepszony, ale Twój styl)
+function createEmbed(event, type, h, showNext = true) {
 
-// ✨ NEXT EVENT EMBED (POJEDYNCZY)
-function embedNextSingle(event, h, label) {
+    let desc =
+`✨ **${type}**
+
+> ⏰ Godzina: \`${format(h)}\`
+> 📌 Event: ${event.name}`;
+
+    if (showNext) {
+        const next = getEvent((h + 1) % 24);
+        const next2 = getEvent((h + 2) % 24);
+
+        desc += `
+
+╭───────────────
+> ⏭️ ${next.name} \`${format((h + 1) % 24)}\`
+> 🔮 ${next2.name} \`${format((h + 2) % 24)}\`
+╰───────────────`;
+    }
+
+    desc += `
+
+🔥 Dołącz i nie przegap!`;
+
     return new EmbedBuilder()
         .setColor(event.color)
-        .setTitle(`${event.emoji} ${event.name}`)
-        .setDescription(`**${label}**`)
-        .addFields(
-            { name: "⏰ Start", value: `\`${format(h)}\``, inline: true },
-            { name: "📊 Status", value: "`Nadchodzący`", inline: true }
-        )
-        .setFooter({ text: "RCU • Event Preview" })
+        .setTitle(`${event.name}`)
+        .setDescription(desc)
+        .setFooter({ text: "RCU • EVENT SYSTEM" })
         .setTimestamp();
 }
 
@@ -93,8 +100,8 @@ client.once('ready', async () => {
 
     const commands = [
         new SlashCommandBuilder().setName('test').setDescription('Aktualny event'),
-        new SlashCommandBuilder().setName('next').setDescription('Następne eventy'),
-        new SlashCommandBuilder().setName('dm').setDescription('DM on/off'),
+        new SlashCommandBuilder().setName('next').setDescription('2 następne eventy'),
+        new SlashCommandBuilder().setName('dm').setDescription('Toggle DM'),
         new SlashCommandBuilder().setName('panel').setDescription('Ustaw role'),
         new SlashCommandBuilder().setName('roles').setDescription('Wybierz role')
     ].map(c => c.toJSON());
@@ -104,75 +111,68 @@ client.once('ready', async () => {
 
     console.log("✅ Commands ready");
 
+    // ⏰ SYSTEM
     cron.schedule('* * * * *', async () => {
 
+        const channel = await client.channels.fetch(CHANNEL_ID);
         const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
         const h = now.getHours();
         const m = now.getMinutes();
 
-        const channel = await client.channels.fetch(CHANNEL_ID);
-
-        // 🔔 5 MIN BEFORE
+        // 🔔 5 MIN PRZED
         if (m === 55) {
-            const nextH = (h + 1) % 24;
-            const e = getEvent(nextH);
+            const nextHour = (h + 1) % 24;
+            const e = getEvent(nextHour);
 
-            if (!e.role) return;
+            if (!e || !e.role) return;
 
-            const em = embedCurrent(e, nextH, "ZA 5 MINUT");
+            const embed = createEmbed(e, "🔔 ZA 5 MINUT", nextHour);
 
-            channel.send({ content: `<@&${e.role}>`, embeds: [em] });
-            sendDM(em);
+            channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
+            sendDM(embed);
         }
 
-        // ⏰ START
+        // ⏰ START EVENTU
         if (m === 0) {
             const e = getEvent(h);
 
-            if (!e.role) return;
+            if (!e || !e.role) return;
 
-            const em = embedCurrent(e, h, "START");
+            const embed = createEmbed(e, "⏰ START EVENTU", h);
 
-            channel.send({ content: `<@&${e.role}>`, embeds: [em] });
-            sendDM(em);
+            channel.send({ content: `<@&${e.role}>`, embeds: [embed] });
+            sendDM(embed);
         }
 
     });
 });
 
-// ⚡ INTERACTIONS
+// ⚡ INTERAKCJE
 client.on('interactionCreate', async i => {
 
     if (i.isChatInputCommand()) {
 
-        const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
-        const h = now.getHours();
+        const h = new Date().getHours();
 
-        // 🧪 CURRENT
         if (i.commandName === 'test') {
             return i.reply({
-                embeds: [embedCurrent(getEvent(h), h, "AKTYWNY")]
+                embeds: [createEmbed(getEvent(h), "🧪 AKTUALNY EVENT", h)]
             });
         }
 
-        // 🔮 NEXT (2 EMBEDY)
         if (i.commandName === 'next') {
 
-            const n1H = (h + 1) % 24;
-            const n2H = (h + 2) % 24;
-
-            const e1 = getEvent(n1H);
-            const e2 = getEvent(n2H);
+            const h1 = (h + 1) % 24;
+            const h2 = (h + 2) % 24;
 
             return i.reply({
                 embeds: [
-                    embedNextSingle(e1, n1H, "Najbliższy event"),
-                    embedNextSingle(e2, n2H, "Kolejny event")
+                    createEmbed(getEvent(h1), "⏭️ NADCHODZI", h1, false),
+                    createEmbed(getEvent(h2), "🔮 KOLEJNY", h2, false)
                 ]
             });
         }
 
-        // DM
         if (i.commandName === 'dm') {
             const id = i.user.id;
 
@@ -187,36 +187,66 @@ client.on('interactionCreate', async i => {
             }
         }
 
-        // PANEL
         if (i.commandName === 'panel') {
 
             const menu = new StringSelectMenuBuilder()
                 .setCustomId('select_event')
+                .setPlaceholder('Wybierz event')
                 .addOptions([
-                    { label: 'RNG EGG', value: 'jajko' },
-                    { label: 'Merchant', value: 'merchant' },
-                    { label: 'Spin', value: 'spin' }
+                    { label: '🥚 RNG EGG', value: 'jajko' },
+                    { label: '🐝 Merchant', value: 'merchant' },
+                    { label: '🎰 Spin', value: 'spin' }
                 ]);
 
             return i.reply({
-                content: "⚙️ PANEL USTAWIEŃ",
+                content: "⚙️ PANEL ADMINA",
                 components: [new ActionRowBuilder().addComponents(menu)]
             });
         }
 
-        // ROLE BUTTONY
         if (i.commandName === 'roles') {
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId('r1').setLabel('🥚 RNG').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('r2').setLabel('🐝 MERCHANT').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('r3').setLabel('🎰 SPIN').setStyle(ButtonStyle.Danger)
+                new ButtonBuilder().setCustomId('r2').setLabel('🐝 Merchant').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('r3').setLabel('🎰 Spin').setStyle(ButtonStyle.Danger)
             );
 
             return i.reply({
-                content: "🎮 Wybierz role eventów:",
+                content: "🎮 Wybierz powiadomienia:",
                 components: [row]
             });
+        }
+    }
+
+    // SELECT MENU
+    if (i.isStringSelectMenu()) {
+
+        if (i.customId === 'select_event') {
+
+            const type = i.values[0];
+
+            const roles = i.guild.roles.cache
+                .filter(r => r.editable)
+                .map(r => ({ label: r.name, value: r.id }))
+                .slice(0, 25);
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId(`set_${type}`)
+                .addOptions(roles);
+
+            return i.update({
+                content: "Wybierz rolę",
+                components: [new ActionRowBuilder().addComponents(menu)]
+            });
+        }
+
+        if (i.customId.startsWith('set_')) {
+            const type = i.customId.split('_')[1];
+            data.roles[type] = i.values[0];
+            save();
+
+            return i.update({ content: "✅ Zapisano!", components: [] });
         }
     }
 
@@ -231,17 +261,18 @@ client.on('interactionCreate', async i => {
 
         const roleId = map[i.customId];
 
-        if (!roleId)
+        if (!roleId) {
             return i.reply({ content: "❌ Najpierw ustaw role (/panel)", ephemeral: true });
+        }
 
         const has = i.member.roles.cache.has(roleId);
 
         if (has) {
             await i.member.roles.remove(roleId);
-            return i.reply({ content: "❌ Rola usunięta", ephemeral: true });
+            return i.reply({ content: "❌ Usunięto rolę", ephemeral: true });
         } else {
             await i.member.roles.add(roleId);
-            return i.reply({ content: "✅ Rola dodana", ephemeral: true });
+            return i.reply({ content: "✅ Dodano rolę", ephemeral: true });
         }
     }
 });
