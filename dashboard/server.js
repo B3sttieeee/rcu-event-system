@@ -5,7 +5,7 @@ const app = express();
 app.use(express.json());
 app.use(express.static('public'));
 
-const BOT_URL = "https://TWOJ-BOT.up.railway.app";
+const BOT_URL = "https://rcu-event-system-production.up.railway.app";
 
 // GET DATA
 app.get('/api/data', async (req,res)=>{
