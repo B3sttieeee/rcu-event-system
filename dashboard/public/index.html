@@ -1,43 +1,165 @@
 <!DOCTYPE html>
-<html>
+<html lang="pl">
 <head>
 <meta charset="UTF-8">
 <title>RCU Dashboard</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<link rel="stylesheet" href="style.css">
+
+<style>
+body {
+    background: #0f172a;
+    color: white;
+    font-family: sans-serif;
+    margin: 0;
+}
+
+h1 {
+    text-align: center;
+    margin: 20px;
+}
+
+.container {
+    display: flex;
+    gap: 20px;
+    padding: 20px;
+}
+
+.card {
+    flex: 1;
+    padding: 20px;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.card:hover {
+    transform: scale(1.05);
+}
+
+.editor {
+    background: #1e293b;
+    padding: 20px;
+    border-radius: 10px;
+    margin: 20px;
+}
+
+input, textarea {
+    width: 100%;
+    margin: 5px 0;
+    padding: 8px;
+    border-radius: 5px;
+    border: none;
+}
+
+button {
+    padding: 10px;
+    margin-top: 10px;
+    background: #6366f1;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+}
+</style>
 </head>
 
-<body class="bg-[#060b17] text-white p-10">
+<body>
 
-<h1 class="text-5xl font-bold mb-12 glow-text">🎛 RCU PANEL</h1>
+<h1>⚙️ RCU EVENT DASHBOARD</h1>
 
-<!-- EVENT CARDS -->
-<div id="events" class="grid md:grid-cols-3 gap-8 mb-12"></div>
+<div class="container" id="events"></div>
 
-<!-- SETTINGS -->
-<div class="glass p-8 rounded-2xl">
+<div class="editor" id="editor" style="display:none;">
+    <h2 id="editTitle"></h2>
 
-<h2 class="text-2xl mb-6">⚙️ CONFIG</h2>
+    <label>Nazwa</label>
+    <input id="name">
 
-<div class="grid md:grid-cols-3 gap-6">
+    <label>Opis</label>
+    <textarea id="desc"></textarea>
 
-<input id="r1" class="input" placeholder="🥚 RNG ROLE ID">
-<input id="r2" class="input" placeholder="🐝 MERCHANT ROLE ID">
-<input id="r3" class="input" placeholder="🎰 SPIN ROLE ID">
+    <label>Kolor (#hex)</label>
+    <input id="color">
 
+    <label>Obraz (link)</label>
+    <input id="image">
+
+    <label>Rola ID (ping)</label>
+    <input id="role">
+
+    <label>Godziny (np 0,3,6)</label>
+    <input id="hours">
+
+    <button onclick="save()">💾 Zapisz</button>
 </div>
 
-<h2 class="text-2xl mt-10 mb-4">📝 EMBEDS</h2>
+<script>
+let DATA;
+let currentKey;
 
-<textarea id="e1" class="input h-20"></textarea>
-<textarea id="e2" class="input h-20"></textarea>
-<textarea id="e3" class="input h-20"></textarea>
-<textarea id="e4" class="input h-20"></textarea>
+async function load() {
+    const res = await fetch("/api/data");
+    DATA = await res.json();
 
-<button onclick="save()" class="btn mt-6">💾 ZAPISZ</button>
+    const container = document.getElementById("events");
+    container.innerHTML = "";
 
-</div>
+    for (let key in DATA.events) {
+        const e = DATA.events[key];
 
-<script src="app.js"></script>
+        const div = document.createElement("div");
+        div.className = "card";
+        div.style.background = e.color;
+
+        div.innerHTML = `
+            <h2>${e.name}</h2>
+            <p>${e.description}</p>
+            <p>⏰ ${e.hours.join(", ")}</p>
+        `;
+
+        div.onclick = () => openEditor(key);
+
+        container.appendChild(div);
+    }
+}
+
+function openEditor(key) {
+    currentKey = key;
+    const e = DATA.events[key];
+
+    document.getElementById("editor").style.display = "block";
+
+    document.getElementById("editTitle").innerText = e.name;
+
+    document.getElementById("name").value = e.name;
+    document.getElementById("desc").value = e.description;
+    document.getElementById("color").value = e.color;
+    document.getElementById("image").value = e.image;
+    document.getElementById("role").value = e.role || "";
+    document.getElementById("hours").value = e.hours.join(",");
+}
+
+async function save() {
+    const e = DATA.events[currentKey];
+
+    e.name = document.getElementById("name").value;
+    e.description = document.getElementById("desc").value;
+    e.color = document.getElementById("color").value;
+    e.image = document.getElementById("image").value;
+    e.role = document.getElementById("role").value;
+    e.hours = document.getElementById("hours").value.split(",").map(Number);
+
+    await fetch("/api/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(DATA)
+    });
+
+    alert("Zapisano!");
+    load();
+}
+
+load();
+</script>
+
 </body>
 </html>
