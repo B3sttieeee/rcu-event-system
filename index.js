@@ -34,59 +34,45 @@ let data = {
 if (fs.existsSync(FILE)) data = JSON.parse(fs.readFileSync(FILE));
 const save = () => fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 
-// 🎯 EVENTY
+// 🎯 EVENT LOGIC
 function getEvent(h) {
     if ([0,3,6,9,12,15,18,21].includes(h))
-        return { name: "🥚 RNG EGG", color: 0x00ffc8, role: data.roles.jajko };
+        return { name: "RNG EGG", emoji: "🥚", color: 0x00ffc8, role: data.roles.jajko };
 
     if ([1,4,7,10,13,16,19,22].includes(h))
-        return { name: "🐝 BOSS / HONEY MERCHANT", color: 0xffcc00, role: data.roles.merchant };
+        return { name: "BOSS / HONEY MERCHANT", emoji: "🐝", color: 0xffcc00, role: data.roles.merchant };
 
-    return { name: "🎰 DEVS SPIN (EVENT WORLD)", color: 0xff0055, role: data.roles.spin };
+    return { name: "DEVS SPIN (EVENT WORLD)", emoji: "🎰", color: 0xff0055, role: data.roles.spin };
 }
 
 const format = h => `${h.toString().padStart(2, '0')}:00`;
 
-// 🎨 EMBED
-function embedCurrent(event, h, title) {
+// 🔥 CURRENT EVENT EMBED
+function embedCurrent(event, h, status) {
     return new EmbedBuilder()
         .setColor(event.color)
-        .setTitle(`🔥 ${event.name}`)
-        .setDescription(
-`✨ **${title}**
-
-⏰ Godzina: \`${format(h)}\`
-📌 Event: ${event.name}
-
-━━━━━━━━━━━━━━━━━━
-🔥 Dołącz i nie przegap!`
+        .setAuthor({ name: "RCU • EVENT TRACKER" })
+        .setTitle(`${event.emoji} ${event.name}`)
+        .addFields(
+            { name: "📌 Status", value: `\`${status}\``, inline: true },
+            { name: "⏰ Godzina", value: `\`${format(h)}\``, inline: true },
+            { name: "🌍 Typ", value: `\`${event.name}\``, inline: false }
         )
-        .setFooter({ text: "RCU • EVENT SYSTEM" })
+        .setFooter({ text: "RCU • System Eventów" })
         .setTimestamp();
 }
 
-// 👉 NEXT (TYLKO 2 KOLEJNE)
-function embedNext(h) {
-    const n1H = (h + 1) % 24;
-    const n2H = (h + 2) % 24;
-
-    const e1 = getEvent(n1H);
-    const e2 = getEvent(n2H);
-
+// ✨ NEXT EVENT EMBED (POJEDYNCZY)
+function embedNextSingle(event, h, label) {
     return new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle(`⏭️ Nadchodzące eventy`)
-        .setDescription(
-`🟢 **Najbliższy:**
-${e1.name} → \`${format(n1H)}\`
-
-🟣 **Kolejny:**
-${e2.name} → \`${format(n2H)}\`
-
-━━━━━━━━━━━━━━━━━━
-📊 Sprawdź i bądź gotowy!`
+        .setColor(event.color)
+        .setTitle(`${event.emoji} ${event.name}`)
+        .setDescription(`**${label}**`)
+        .addFields(
+            { name: "⏰ Start", value: `\`${format(h)}\``, inline: true },
+            { name: "📊 Status", value: "`Nadchodzący`", inline: true }
         )
-        .setFooter({ text: "RCU • EVENT SYSTEM" })
+        .setFooter({ text: "RCU • Event Preview" })
         .setTimestamp();
 }
 
@@ -107,7 +93,7 @@ client.once('ready', async () => {
 
     const commands = [
         new SlashCommandBuilder().setName('test').setDescription('Aktualny event'),
-        new SlashCommandBuilder().setName('next').setDescription('2 następne eventy'),
+        new SlashCommandBuilder().setName('next').setDescription('Następne eventy'),
         new SlashCommandBuilder().setName('dm').setDescription('DM on/off'),
         new SlashCommandBuilder().setName('panel').setDescription('Ustaw role'),
         new SlashCommandBuilder().setName('roles').setDescription('Wybierz role')
@@ -118,7 +104,6 @@ client.once('ready', async () => {
 
     console.log("✅ Commands ready");
 
-    // 🌍 FIX CZASU (Polska)
     cron.schedule('* * * * *', async () => {
 
         const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
@@ -127,14 +112,14 @@ client.once('ready', async () => {
 
         const channel = await client.channels.fetch(CHANNEL_ID);
 
-        // 🔔 PRZYPOMNIENIE
+        // 🔔 5 MIN BEFORE
         if (m === 55) {
             const nextH = (h + 1) % 24;
             const e = getEvent(nextH);
 
             if (!e.role) return;
 
-            const em = embedCurrent(e, nextH, "🔔 ZA 5 MINUT");
+            const em = embedCurrent(e, nextH, "ZA 5 MINUT");
 
             channel.send({ content: `<@&${e.role}>`, embeds: [em] });
             sendDM(em);
@@ -146,7 +131,7 @@ client.once('ready', async () => {
 
             if (!e.role) return;
 
-            const em = embedCurrent(e, h, "⏰ START EVENTU");
+            const em = embedCurrent(e, h, "START");
 
             channel.send({ content: `<@&${e.role}>`, embeds: [em] });
             sendDM(em);
@@ -155,7 +140,7 @@ client.once('ready', async () => {
     });
 });
 
-// ⚡ INTERAKCJE
+// ⚡ INTERACTIONS
 client.on('interactionCreate', async i => {
 
     if (i.isChatInputCommand()) {
@@ -163,17 +148,27 @@ client.on('interactionCreate', async i => {
         const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
         const h = now.getHours();
 
-        // ✅ AKTUALNY
+        // 🧪 CURRENT
         if (i.commandName === 'test') {
             return i.reply({
-                embeds: [embedCurrent(getEvent(h), h, "🧪 AKTUALNY EVENT")]
+                embeds: [embedCurrent(getEvent(h), h, "AKTYWNY")]
             });
         }
 
-        // ✅ 2 NASTĘPNE
+        // 🔮 NEXT (2 EMBEDY)
         if (i.commandName === 'next') {
+
+            const n1H = (h + 1) % 24;
+            const n2H = (h + 2) % 24;
+
+            const e1 = getEvent(n1H);
+            const e2 = getEvent(n2H);
+
             return i.reply({
-                embeds: [embedNext(h)]
+                embeds: [
+                    embedNextSingle(e1, n1H, "Najbliższy event"),
+                    embedNextSingle(e2, n2H, "Kolejny event")
+                ]
             });
         }
 
@@ -204,22 +199,22 @@ client.on('interactionCreate', async i => {
                 ]);
 
             return i.reply({
-                content: "⚙️ PANEL",
+                content: "⚙️ PANEL USTAWIEŃ",
                 components: [new ActionRowBuilder().addComponents(menu)]
             });
         }
 
-        // ROLE
+        // ROLE BUTTONY
         if (i.commandName === 'roles') {
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('r1').setLabel('🥚').setStyle(ButtonStyle.Success),
-                new ButtonBuilder().setCustomId('r2').setLabel('🐝').setStyle(ButtonStyle.Primary),
-                new ButtonBuilder().setCustomId('r3').setLabel('🎰').setStyle(ButtonStyle.Danger)
+                new ButtonBuilder().setCustomId('r1').setLabel('🥚 RNG').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId('r2').setLabel('🐝 MERCHANT').setStyle(ButtonStyle.Primary),
+                new ButtonBuilder().setCustomId('r3').setLabel('🎰 SPIN').setStyle(ButtonStyle.Danger)
             );
 
             return i.reply({
-                content: "🎮 Wybierz role:",
+                content: "🎮 Wybierz role eventów:",
                 components: [row]
             });
         }
@@ -237,16 +232,16 @@ client.on('interactionCreate', async i => {
         const roleId = map[i.customId];
 
         if (!roleId)
-            return i.reply({ content: "❌ ustaw role (/panel)", ephemeral: true });
+            return i.reply({ content: "❌ Najpierw ustaw role (/panel)", ephemeral: true });
 
         const has = i.member.roles.cache.has(roleId);
 
         if (has) {
             await i.member.roles.remove(roleId);
-            return i.reply({ content: "❌ usunięto", ephemeral: true });
+            return i.reply({ content: "❌ Rola usunięta", ephemeral: true });
         } else {
             await i.member.roles.add(roleId);
-            return i.reply({ content: "✅ dodano", ephemeral: true });
+            return i.reply({ content: "✅ Rola dodana", ephemeral: true });
         }
     }
 });
