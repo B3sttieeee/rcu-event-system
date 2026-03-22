@@ -10,31 +10,27 @@ const {
   SlashCommandBuilder
 } = require("discord.js");
 
-const fs = require("fs");
+// ================= ENV =================
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = process.env.CLIENT_ID;
+const GUILD_ID = process.env.GUILD_ID;
+
+if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
+  console.log("❌ Brak TOKEN / CLIENT_ID / GUILD_ID w ENV!");
+  process.exit(1);
+}
+
+// ================= CLIENT =================
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
 
 // ================= CONFIG =================
-
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = "TWÓJ_CLIENT_ID"; // 🔥 WPISZ
-const GUILD_ID = "TWÓJ_GUILD_ID";   // 🔥 WPISZ
-
 const CHANNEL_ID = "1484937784283369502";
 
 const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
-
-const config = JSON.parse(fs.readFileSync("./data.json", "utf8"));
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
-
-// ================= TIME =================
-
-function getNow() {
-  return new Date(); // 🔥 ZERO OFFSET
-}
 
 // ================= EVENT =================
 
@@ -47,11 +43,12 @@ function getEventByHour(hour) {
 // ================= NEXT EVENTS =================
 
 function getNextEvents() {
-  const now = getNow();
+  const now = new Date();
   const events = [];
 
   for (let i = 1; i <= 3; i++) {
     const next = new Date(now);
+
     next.setMinutes(0, 0, 0);
     next.setHours(now.getHours() + i);
 
@@ -69,7 +66,7 @@ function getNextEvents() {
 function baseEmbed(embed) {
   return embed
     .setFooter({
-      text: `Start: ${config.startDate} • Twórca: ${config.author}`
+      text: `Start: 2026-03-22 • Twórca: B3sttiee`
     })
     .setTimestamp();
 }
@@ -84,11 +81,11 @@ function getEmbed(type) {
         .setDescription(
 `**➤ Otwieraj jajka i zdobywaj punkty!**
 
-➤ Lepsze pety → więcej punktów  
-➤ Więcej punktów → wyższy tier  
-➤ Lepszy tier → lepsze nagrody  
+➤ Im lepsze pety → więcej punktów  
+➤ Dużo punktów → wyższy tier  
+➤ Wyższy tier → lepsze bonusy  
 
-✨ Farm i zgarnij bonusy!`
+✨ Graj aktywnie i zdobywaj przewagę!`
         )
     );
   }
@@ -103,9 +100,9 @@ function getEmbed(type) {
 
 ➤ Honey + Boss Merchant  
 ➤ Szansa na Supreme  
-➤ Najlepsze itemy w rotacji  
+➤ Rotacyjne przedmioty  
 
-🔥 Sprawdzaj co godzinę!`
+🔥 Nie przegap najlepszych ofert!`
         )
     );
   }
@@ -116,23 +113,23 @@ function getEmbed(type) {
         .setColor("#9b59b6")
         .setTitle("🎡 DEV SPIN EVENT")
         .setDescription(
-`**➤ Zakręć kołem!**
+`**➤ Zakręć kołem i wygraj!**
 
 ➤ Losowe nagrody  
 ➤ Szansa na rzadkie itemy  
-➤ Supreme drop  
+➤ Możliwy Supreme  
 
-🎯 Spróbuj szczęścia!`
+🎯 Spróbuj swojego szczęścia!`
         )
     );
   }
 }
 
-// ================= EVENT SEND =================
+// ================= SEND EVENT =================
 
 async function sendEvent() {
   const channel = await client.channels.fetch(CHANNEL_ID);
-  const now = getNow();
+  const now = new Date();
 
   const type = getEventByHour(now.getHours());
 
@@ -143,6 +140,27 @@ async function sendEvent() {
 
   await channel.send(`${role}\n🚀 EVENT WYSTARTOWAŁ`);
   await channel.send({ embeds: [getEmbed(type)] });
+}
+
+// ================= COMMANDS =================
+
+const commands = [
+  new SlashCommandBuilder().setName("panel").setDescription("Panel eventów"),
+  new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
+  new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy")
+];
+
+// ================= REGISTER =================
+
+async function registerCommands() {
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
+
+  console.log("✅ Komendy zarejestrowane");
 }
 
 // ================= PANEL =================
@@ -166,28 +184,10 @@ function getPanel() {
   );
 }
 
-// ================= COMMAND REGISTER =================
-
-const commands = [
-  new SlashCommandBuilder().setName("panel").setDescription("Panel eventów"),
-  new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
-  new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy")
-];
-
-const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-async function registerCommands() {
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
-  console.log("✅ Komendy zarejestrowane");
-}
-
 // ================= LOOP =================
 
 setInterval(() => {
-  const now = getNow();
+  const now = new Date();
 
   if (now.getMinutes() === 0) sendEvent();
 }, 60000);
@@ -195,8 +195,6 @@ setInterval(() => {
 // ================= INTERACTIONS =================
 
 client.on("interactionCreate", async (i) => {
-
-  // ===== SLASH =====
 
   if (i.isChatInputCommand()) {
 
@@ -210,7 +208,7 @@ client.on("interactionCreate", async (i) => {
 
     if (i.commandName === "event") {
       return i.reply({
-        embeds: [getEmbed(getEventByHour(getNow().getHours()))]
+        embeds: [getEmbed(getEventByHour(new Date().getHours()))]
       });
     }
 
@@ -234,13 +232,11 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // ===== BUTTONS =====
-
   if (i.isButton()) {
 
     if (i.customId === "now") {
       return i.reply({
-        embeds: [getEmbed(getEventByHour(getNow().getHours()))],
+        embeds: [getEmbed(getEventByHour(new Date().getHours()))],
         ephemeral: true
       });
     }
@@ -275,7 +271,10 @@ client.on("interactionCreate", async (i) => {
 
 client.once("clientReady", async () => {
   console.log("✅ BOT ONLINE");
-  await registerCommands(); // 🔥 TO CI BRAKOWAŁO
+
+  await registerCommands();
+
+  console.log("🔥 GOTOWY");
 });
 
 client.login(TOKEN);
