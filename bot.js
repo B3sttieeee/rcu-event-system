@@ -9,31 +9,27 @@ const {
 
 const fs = require("fs");
 
-// ================= CONFIG LOAD =================
 let config = { startDate: "2026-03-22", author: "B3sttiee" };
 try {
   config = JSON.parse(fs.readFileSync("./data.json", "utf8"));
 } catch {}
 
-// ================= CLIENT =================
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// ================= SETTINGS =================
+// ================= CONFIG =================
+
 const CHANNEL_ID = "1484937784283369502";
 
 const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
 
-// ================= TIME (NAJWAŻNIEJSZE - BEZ BUGÓW) =================
+// ================= TIME (FINAL FIX) =================
 
-// 🔥 Jedyna poprawna metoda (Europe/Warsaw bez podwójnego offsetu)
-function getNowPL() {
-  return new Date(new Date().toLocaleString("en-US", {
-    timeZone: "Europe/Warsaw"
-  }));
+function getNow() {
+  return new Date(); // 🔥 żadnych offsetów
 }
 
 // ================= EVENT SYSTEM =================
@@ -44,10 +40,10 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= NEXT EVENTS (NAPRAWIONE) =================
+// ================= NEXT EVENTS =================
 
 function getNextEvents() {
-  const now = getNowPL();
+  const now = getNow();
   const events = [];
 
   for (let i = 1; i <= 3; i++) {
@@ -80,16 +76,16 @@ function getEmbed(type) {
   if (type === "egg") {
     return baseEmbed(
       new EmbedBuilder()
-        .setColor("#ffd93d")
+        .setColor("#f1c40f")
         .setTitle("🥚 RNG EGG EVENT")
         .setDescription(
 `**➤ Otwieraj jajka i zdobywaj punkty!**
 
-➤ Lepsze pety → więcej punktów  
-➤ Więcej punktów → lepszy tier  
-➤ Lepszy tier → lepsze nagrody  
+➤ Im lepsze pety → więcej punktów  
+➤ Dużo punktów → wyższy tier  
+➤ Wyższy tier → lepsze nagrody końcowe  
 
-✨ Graj aktywnie!`
+✨ Graj aktywnie i zgarnij najlepsze bonusy!`
         )
         .setThumbnail("https://imgur.com/JqyeITl.png")
     );
@@ -101,14 +97,31 @@ function getEmbed(type) {
         new EmbedBuilder()
           .setColor("#f39c12")
           .setTitle("🍯 HONEY MERCHANT")
-          .setDescription("**➤ Zbieraj miód i kupuj itemy!**")
+          .setDescription(
+`**➤ Zdobywaj miód na Bee World!**
+
+➤ Zbieraj miód z pszczół 🐝  
+➤ Wymieniaj na przedmioty  
+➤ 🎯 Szansa na Supreme (110%)  
+
+🔥 Im więcej farmisz, tym lepsze nagrody!`
+          )
           .setThumbnail("https://imgur.com/zhLC0zn.png")
       ),
+
       baseEmbed(
         new EmbedBuilder()
           .setColor("#e74c3c")
           .setTitle("💀 BOSS MERCHANT")
-          .setDescription("**➤ Zabij bossy i zdobywaj tokeny!**")
+          .setDescription(
+`**➤ Pokonuj bossy i zdobywaj tokeny!**
+
+➤ Tokeny z bossów ⚔️  
+➤ Wymiana na itemy  
+➤ 🎯 Szansa na Supreme (125%)  
+
+👑 Najlepsze nagrody dla najlepszych graczy!`
+          )
           .setThumbnail("https://imgur.com/yFvb6jY.png")
       )
     ];
@@ -120,9 +133,13 @@ function getEmbed(type) {
         .setColor("#9b59b6")
         .setTitle("🎡 DEV SPIN EVENT")
         .setDescription(
-`**➤ Zakręć kołem i wygraj nagrody!**
+`**➤ Zakręć kołem i zdobądź nagrody!**
 
-🎯 Szansa na Supreme`
+➤ Losowe nagrody 🎁  
+➤ Szansa na rzadkie itemy 💎  
+➤ 🎯 Mała szansa na Supreme  
+
+⚡ Spróbuj swojego szczęścia!`
         )
         .setThumbnail("https://imgur.com/NJI7052.png")
     );
@@ -133,7 +150,7 @@ function getEmbed(type) {
 
 async function sendEvent() {
   const channel = await client.channels.fetch(CHANNEL_ID);
-  const now = getNowPL();
+  const now = getNow();
 
   const type = getEventByHour(now.getHours());
 
@@ -157,17 +174,16 @@ async function sendEvent() {
 
 async function sendReminder() {
   const channel = await client.channels.fetch(CHANNEL_ID);
-
-  const nextEvent = getNextEvents()[0];
+  const next = getNextEvents()[0];
 
   await channel.send(
-    `⏳ <@&${nextEvent.type === "egg" ? ROLE_EGG : nextEvent.type === "merchant" ? ROLE_MERCHANT : ROLE_SPIN}>\n━━━━━━━━━━━━━━━━━━━\n**Event ${nextEvent.type.toUpperCase()} za 5 minut!**`
+    `⏳ <@&${next.type === "egg" ? ROLE_EGG : next.type === "merchant" ? ROLE_MERCHANT : ROLE_SPIN}>\n━━━━━━━━━━━━━━━━━━━\n**Event ${next.type.toUpperCase()} za 5 minut!**`
   );
 }
 
-// ================= PANEL =================
+// ================= PANEL COMMAND =================
 
-async function sendPanel(channel) {
+async function sendPanel(interaction) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("now")
@@ -185,16 +201,17 @@ async function sendPanel(channel) {
       .setStyle(ButtonStyle.Danger)
   );
 
-  await channel.send({
+  await interaction.reply({
     content: "🎮 **PANEL EVENTÓW**",
-    components: [row]
+    components: [row],
+    ephemeral: true
   });
 }
 
 // ================= LOOP =================
 
 setInterval(() => {
-  const now = getNowPL();
+  const now = getNow();
 
   if (now.getMinutes() === 0) sendEvent();
   if (now.getMinutes() === 55) sendReminder();
@@ -205,17 +222,22 @@ setInterval(() => {
 
 client.on("interactionCreate", async (i) => {
 
+  // SLASH COMMAND PANEL
+  if (i.isChatInputCommand()) {
+    if (i.commandName === "panel") {
+      return sendPanel(i);
+    }
+  }
+
   if (!i.isButton()) return;
 
-  // AKTUALNY EVENT
   if (i.customId === "now") {
     return i.reply({
-      embeds: [getEmbed(getEventByHour(getNowPL().getHours()))],
+      embeds: [getEmbed(getEventByHour(getNow().getHours()))],
       ephemeral: true
     });
   }
 
-  // NEXT EVENTS
   if (i.customId === "next") {
     const events = getNextEvents();
 
@@ -235,7 +257,6 @@ client.on("interactionCreate", async (i) => {
     return i.reply({ embeds: [embed], ephemeral: true });
   }
 
-  // FORCE EVENT
   if (i.customId === "force") {
     await sendEvent();
     return i.reply({ content: "✅ Event wysłany", ephemeral: true });
@@ -244,11 +265,8 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 
-client.once("clientReady", async () => {
+client.once("clientReady", () => {
   console.log("✅ BOT ONLINE");
-
-  const channel = await client.channels.fetch(CHANNEL_ID);
-  await sendPanel(channel);
 });
 
 client.login(process.env.TOKEN);
