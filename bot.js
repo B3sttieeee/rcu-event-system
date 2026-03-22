@@ -93,11 +93,11 @@ function honeyEmbed() {
 `**Eventowy merchant — sprawdź ofertę!**
 
 • Za miód kupisz przedmioty
-• Supreme: **110%**
+• Szansa na Supreme: **110%**
 
 ⏳ Znika po 15 minutach`
     )
-    .setThumbnail("https://imgur.com/zhLC0zn");
+    .setThumbnail("https://imgur.com/zhLC0zn.png");
 }
 
 function bossEmbed() {
@@ -108,7 +108,7 @@ function bossEmbed() {
 `**Eventowy merchant na mapie Anniversary Event!**
 
 • Za tokeny z bossów kupisz przedmioty
-• Supreme: **125%**
+• Szansa na Supreme: **125%**
 
 ⏳ Znika po 15 minutach`
     )
