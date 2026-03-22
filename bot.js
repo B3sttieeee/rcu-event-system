@@ -16,8 +16,8 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
-process.on('unhandledRejection', err => console.log(err));
-process.on('uncaughtException', err => console.log(err));
+process.on('unhandledRejection', console.log);
+process.on('uncaughtException', console.log);
 
 const TOKEN = process.env.TOKEN;
 
@@ -51,28 +51,26 @@ let roles = {
 //////////////////////////////////////////////////
 
 let giveaway = {
-    active: false,
     prize: "",
     winners: 1,
     entries: {},
     rolesBonus: {},
     requiredMessages: 0,
     image: null,
-    duration: 0
+    duration: 0,
+    messageId: null
 };
 
 //////////////////////////////////////////////////
 // 🕒 CZAS
 //////////////////////////////////////////////////
 
-function getPolishTime() {
-    return new Date(new Date().toLocaleString("en-US", {
-        timeZone: "Europe/Warsaw"
-    }));
+function nowPL() {
+    return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
 }
 
 //////////////////////////////////////////////////
-// 🎯 EVENTY
+// 🎯 EVENT LOGIC
 //////////////////////////////////////////////////
 
 function getEvent(h) {
@@ -82,131 +80,106 @@ function getEvent(h) {
 }
 
 //////////////////////////////////////////////////
-// 🎨 EVENT EMBEDY (PRO)
+// 🎨 EVENT EMBEDY
 //////////////////////////////////////////////////
 
 function embedEgg() {
     return new EmbedBuilder()
-        .setTitle("🥚┃**RNG EGG**")
+        .setTitle("🥚 **RNG EGG**")
         .setDescription(
 `🎲 **Otwieraj jajka i zdobywaj pety**
 
-➜ **Zdobywaj punkty do Tieru**  
-➜ **Lepsze pety = więcej punktów**  
-➜ **Wyższy Tier = lepsze bonusy**
+**Zdobywaj punkty do Tieru**  
+Lepsze pety = więcej punktów  
+Wyższy Tier = lepsze bonusy
 
-📍 **Sprawdź swoje postępy**`
+📍 Sprawdź swoje postępy`
         )
         .setThumbnail(IMAGES.egg)
-        .setColor(0x00ffcc)
-        .setFooter({ text: "Event trwa 15 minut" })
-        .setTimestamp();
+        .setColor(0x00ffcc);
 }
 
 function embedBoss() {
     return new EmbedBuilder()
-        .setTitle("🐝┃**MERCHANT BOSS**")
+        .setTitle("🐝 **MERCHANT BOSS**")
         .setDescription(
-`🎉 **Eventowy Merchant**
+`🎉 Eventowy merchant
 
-📍 **Mapa: Anniversary Event**
+📍 Mapa: Anniversary Event
 
-➜ **Za żetony z bossów kupisz przedmioty**  
-🎯 **Szansa na Supreme: 125%**
+Za żetony z bossów kupisz przedmioty  
+Szansa na Supreme: 125%
 
-⏳ **Przejdź i sprawdź ofertę**`
+⏳ Przejdź i sprawdź ofertę`
         )
         .setThumbnail(IMAGES.boss)
-        .setColor(0xff0000)
-        .setFooter({ text: "Event trwa 15 minut" })
-        .setTimestamp();
+        .setColor(0xff0000);
 }
 
 function embedHoney() {
     return new EmbedBuilder()
-        .setTitle("🍯┃**HONEY MERCHANT**")
+        .setTitle("🍯 **HONEY MERCHANT**")
         .setDescription(
-`🍯 **Eventowy Merchant**
+`🍯 Eventowy merchant
 
-📍 **Mapa: Bee World**
+📍 Mapa: Bee World
 
-➜ **Za miód kupisz przedmioty**  
-🎯 **Szansa na Supreme: 110%**
+Za miód kupisz przedmioty  
+Szansa na Supreme: 110%
 
-⏳ **Przejdź i sprawdź ofertę**`
+⏳ Przejdź i sprawdź ofertę`
         )
         .setThumbnail(IMAGES.honey)
-        .setColor(0xffcc00)
-        .setFooter({ text: "Event trwa 15 minut" })
-        .setTimestamp();
+        .setColor(0xffcc00);
 }
 
 function embedSpin() {
     return new EmbedBuilder()
-        .setTitle("🎰┃**DEV SPIN**")
+        .setTitle("🎰 **DEV SPIN**")
         .setDescription(
-`🎰 **Zakręć kołem i zdobądź nagrody**
+`🎰 Kręć kołem i zdobywaj nagrody
 
-🎯 **Szansa na Supreme: ??%**
+Szansa na Supreme: ??%
 
-🍀 **Spróbuj swojego szczęścia**`
+🍀 Spróbuj szczęścia`
         )
         .setThumbnail(IMAGES.spin)
-        .setColor(0x9b59b6)
-        .setFooter({ text: "Event trwa 15 minut" })
-        .setTimestamp();
+        .setColor(0x9b59b6);
 }
 
 //////////////////////////////////////////////////
-// 🎁 GIVEAWAY EMBED (PRO)
+// 🎁 GIVEAWAY EMBED (CLEAN)
 //////////////////////////////////////////////////
 
 function buildGiveawayEmbed() {
 
-    const rolesText = Object.entries(giveaway.rolesBonus)
-        .map(([id, val]) => `➜ <@&${id}> — **${val} wejść**`)
-        .join("\n") || "➜ **Brak dodatkowych losów**";
+    const participants = Object.keys(giveaway.entries || {}).length;
+
+    const rolesText = Object.entries(giveaway.rolesBonus || {})
+        .map(([id, val]) => `• <@&${id}> — **${val} wejść**`)
+        .join("\n") || "Brak dodatkowych losów";
 
     const end = Math.floor((Date.now() + giveaway.duration) / 1000);
 
     return new EmbedBuilder()
-        .setTitle(`🎁┃**${giveaway.prize}**`)
+        .setTitle(`🎁 ${giveaway.prize || "Giveaway"}`)
         .setDescription(
-`🎉 **Kliknij przycisk poniżej, aby wziąć udział!**
+`🎉 Kliknij przycisk poniżej, aby wziąć udział
 
-━━━━━━━━━━━━━━━━━━
+👥 **Uczestnicy:** ${participants}
 
-🏆 **INFORMACJE**
-➜ **Wygrani:** \`${giveaway.winners}\`  
-➜ **Koniec:** <t:${end}:R>  
+🏆 **Wygrani:** ${giveaway.winners}  
+⏰ **Koniec:** <t:${end}:R>
 
-━━━━━━━━━━━━━━━━━━
-
-🎯 **DODATKOWE LOSY**
+🎯 **Dodatkowe losy:**
 ${rolesText}
 
-━━━━━━━━━━━━━━━━━━
-
-📨 **WYMAGANIA**
-➜ **${giveaway.requiredMessages} wiadomości**
-
-━━━━━━━━━━━━━━━━━━`
+📨 **Wymagania:**
+${giveaway.requiredMessages} wiadomości`
         )
         .setColor(0x00ffcc)
-        .setFooter({ text: "Powodzenia wszystkim uczestnikom!" })
-        .setTimestamp()
-        .setImage(giveaway.image || null);
-}
-
-//////////////////////////////////////////////////
-// ⏱️ PARSE TIME
-//////////////////////////////////////////////////
-
-function parseTime(str) {
-    const num = parseInt(str);
-    if (str.endsWith("m")) return num * 60000;
-    if (str.endsWith("h")) return num * 3600000;
-    return 60000;
+        .setImage(giveaway.image || null)
+        .setTimestamp();
 }
 
 //////////////////////////////////////////////////
@@ -219,26 +192,18 @@ async function registerCommands() {
 
         new SlashCommandBuilder()
             .setName('event')
-            .setDescription('Sprawdź aktualny event'),
+            .setDescription('Aktualny event'),
 
         new SlashCommandBuilder()
             .setName('next-events')
-            .setDescription('Sprawdź następne eventy'),
-
-        new SlashCommandBuilder()
-            .setName('test-event')
-            .setDescription('Wyślij testowy event'),
-
-        new SlashCommandBuilder()
-            .setName('refresh')
-            .setDescription('Odśwież komendy bota'),
+            .setDescription('Następne eventy'),
 
         new SlashCommandBuilder()
             .setName('set-role')
-            .setDescription('Ustaw rolę dla eventu')
+            .setDescription('Ustaw rolę')
             .addStringOption(o =>
                 o.setName('event')
-                 .setDescription('Typ eventu')
+                 .setDescription('event')
                  .setRequired(true)
                  .addChoices(
                     { name: 'egg', value: 'egg' },
@@ -248,50 +213,30 @@ async function registerCommands() {
             )
             .addRoleOption(o =>
                 o.setName('rola')
-                 .setDescription('Rola do pingowania')
+                 .setDescription('rola')
                  .setRequired(true)
             ),
 
         new SlashCommandBuilder()
             .setName('giveaway')
-            .setDescription('Stwórz giveaway')
-            .addStringOption(o =>
-                o.setName('nagroda')
-                 .setDescription('Nagroda')
-                 .setRequired(true)
-            )
-            .addStringOption(o =>
-                o.setName('czas')
-                 .setDescription('Czas np 10m lub 1h')
-                 .setRequired(true)
-            )
-            .addIntegerOption(o =>
-                o.setName('wygrani')
-                 .setDescription('Ilość zwycięzców')
-                 .setRequired(true)
-            )
-            .addIntegerOption(o =>
-                o.setName('wiadomosci')
-                 .setDescription('Wymagana liczba wiadomości')
-            )
-            .addStringOption(o =>
-                o.setName('obrazek')
-                 .setDescription('Link do obrazka')
-            ),
+            .setDescription('Start giveaway')
+            .addStringOption(o=>o.setName('nagroda').setDescription('nagroda').setRequired(true))
+            .addStringOption(o=>o.setName('czas').setDescription('np 10m').setRequired(true))
+            .addIntegerOption(o=>o.setName('wygrani').setDescription('ilość').setRequired(true)),
 
         new SlashCommandBuilder()
             .setName('giveaway-role')
-            .setDescription('Dodaj bonus dla roli')
-            .addRoleOption(o =>
-                o.setName('rola')
-                 .setDescription('Rola')
-                 .setRequired(true)
-            )
-            .addIntegerOption(o =>
-                o.setName('bonus')
-                 .setDescription('Dodatkowe wejścia')
-                 .setRequired(true)
-            )
+            .setDescription('bonus roli')
+            .addRoleOption(o=>o.setName('rola').setRequired(true))
+            .addIntegerOption(o=>o.setName('bonus').setRequired(true)),
+
+        new SlashCommandBuilder()
+            .setName('reroll')
+            .setDescription('Losuj ponownie'),
+
+        new SlashCommandBuilder()
+            .setName('refresh')
+            .setDescription('Refresh komend')
 
     ].map(c => c.toJSON());
 
@@ -304,52 +249,35 @@ async function registerCommands() {
 }
 
 //////////////////////////////////////////////////
-// 🚀 START + CRON
+// 🚀 START
 //////////////////////////////////////////////////
 
 client.once('clientReady', async () => {
-
     console.log(`✅ ${client.user.tag}`);
     await registerCommands();
 
     cron.schedule('* * * * *', async () => {
 
-        const now = getPolishTime();
+        const now = nowPL();
         const h = now.getHours();
         const m = now.getMinutes();
+
+        if (m !== 0) return;
 
         const type = getEvent(h);
         const role = roles[type];
         if (!role) return;
 
-        const channel = await client.channels.fetch(CHANNEL_ID);
+        const ch = await client.channels.fetch(CHANNEL_ID);
 
-        if (m === 0) {
-
-            if (type === "merchant") {
-                await channel.send({
-                    content: `<@&${role}>`,
-                    embeds: [embedBoss(), embedHoney()]
-                });
-            }
-
-            if (type === "egg") {
-                await channel.send({
-                    content: `<@&${role}>`,
-                    embeds: [embedEgg()]
-                });
-            }
-
-            if (type === "spin") {
-                await channel.send({
-                    content: `<@&${role}>`,
-                    embeds: [embedSpin()]
-                });
-            }
+        if (type === "merchant") {
+            ch.send({ content: `<@&${role}>`, embeds: [embedBoss(), embedHoney()] });
+        } else if (type === "egg") {
+            ch.send({ content: `<@&${role}>`, embeds: [embedEgg()] });
+        } else {
+            ch.send({ content: `<@&${role}>`, embeds: [embedSpin()] });
         }
-
     });
-
 });
 
 //////////////////////////////////////////////////
@@ -361,8 +289,21 @@ client.on('interactionCreate', async i => {
     try {
 
         if (i.isButton() && i.customId === "join") {
-            giveaway.entries[i.user.id] = 1;
-            return i.reply({ content: "🎉 Dołączyłeś do giveaway!", ephemeral: true });
+
+            let bonus = 1;
+
+            for (const r in giveaway.rolesBonus) {
+                if (i.member.roles.cache.has(r)) {
+                    bonus += giveaway.rolesBonus[r];
+                }
+            }
+
+            giveaway.entries[i.user.id] = bonus;
+
+            const msg = await i.channel.messages.fetch(giveaway.messageId).catch(()=>null);
+            if (msg) msg.edit({ embeds: [buildGiveawayEmbed()] });
+
+            return i.reply({ content: `Masz ${bonus} losów`, ephemeral: true });
         }
 
         if (!i.isChatInputCommand()) return;
@@ -371,11 +312,11 @@ client.on('interactionCreate', async i => {
 
         if (i.commandName === "set-role") {
             roles[i.options.getString("event")] = i.options.getRole("rola").id;
-            return i.editReply("✅ Rola ustawiona");
+            return i.editReply("Ustawiono rolę");
         }
 
         if (i.commandName === "event") {
-            const type = getEvent(getPolishTime().getHours());
+            const type = getEvent(nowPL().getHours());
 
             if (type === "merchant") return i.editReply({ embeds: [embedBoss(), embedHoney()] });
             if (type === "egg") return i.editReply({ embeds: [embedEgg()] });
@@ -384,12 +325,12 @@ client.on('interactionCreate', async i => {
 
         if (i.commandName === "next-events") {
 
-            const now = getPolishTime();
+            const now = nowPL();
             const h = now.getHours();
 
-            const ts = (off) => {
+            const next = (x) => {
                 const d = new Date(now);
-                d.setHours((h + off) % 24);
+                d.setHours((h+x)%24);
                 d.setMinutes(0);
                 return Math.floor(d.getTime()/1000);
             };
@@ -397,13 +338,12 @@ client.on('interactionCreate', async i => {
             return i.editReply({
                 embeds: [
                     new EmbedBuilder()
-                        .setTitle("📊┃**NASTĘPNE EVENTY**")
+                        .setTitle("📅 Następne eventy")
                         .setDescription(
-`🔥 **Aktualny:** ${getEvent(h)}
+`Teraz: **${getEvent(h)}**
 
-⏰ **Następne:**
-➜ ${getEvent((h+1)%24)} — <t:${ts(1)}:R>
-➜ ${getEvent((h+2)%24)} — <t:${ts(2)}:R>`
+Za godzinę: **${getEvent((h+1)%24)}** (<t:${next(1)}:R>)
+Za 2 godziny: **${getEvent((h+2)%24)}** (<t:${next(2)}:R>)`
                         )
                         .setColor(0x5865F2)
                 ]
@@ -413,11 +353,8 @@ client.on('interactionCreate', async i => {
         if (i.commandName === "giveaway") {
 
             giveaway.prize = i.options.getString("nagroda");
-            giveaway.duration = parseTime(i.options.getString("czas"));
+            giveaway.duration = parseInt(i.options.getString("czas")) * 60000;
             giveaway.winners = i.options.getInteger("wygrani");
-            giveaway.requiredMessages = i.options.getInteger("wiadomosci") || 0;
-            giveaway.image = i.options.getString("obrazek");
-
             giveaway.entries = {};
 
             const msg = await i.editReply({
@@ -432,27 +369,53 @@ client.on('interactionCreate', async i => {
                 ]
             });
 
-            setTimeout(async () => {
-                const users = Object.keys(giveaway.entries);
-                if (!users.length) return;
+            giveaway.messageId = msg.id;
 
-                const winner = users[Math.floor(Math.random()*users.length)];
-                await msg.reply(`🎉 Wygrał: <@${winner}>`);
+            setTimeout(async () => {
+
+                const pool = [];
+
+                for (const u in giveaway.entries) {
+                    for (let x = 0; x < giveaway.entries[u]; x++) {
+                        pool.push(u);
+                    }
+                }
+
+                if (!pool.length) return;
+
+                const winner = pool[Math.floor(Math.random()*pool.length)];
+                msg.reply(`🎉 Wygrał <@${winner}>`);
+
             }, giveaway.duration);
         }
 
         if (i.commandName === "giveaway-role") {
-            const role = i.options.getRole("rola");
-            const bonus = i.options.getInteger("bonus");
+            giveaway.rolesBonus[i.options.getRole("rola").id] =
+                i.options.getInteger("bonus");
 
-            giveaway.rolesBonus[role.id] = bonus;
+            return i.editReply("Dodano bonus");
+        }
 
-            return i.editReply("✅ Dodano bonus");
+        if (i.commandName === "reroll") {
+
+            const pool = [];
+
+            for (const u in giveaway.entries) {
+                for (let x = 0; x < giveaway.entries[u]; x++) {
+                    pool.push(u);
+                }
+            }
+
+            if (!pool.length) return i.editReply("Brak uczestników");
+
+            const winner = pool[Math.floor(Math.random()*pool.length)];
+
+            return i.editReply(`Nowy zwycięzca: <@${winner}>`);
         }
 
         if (i.commandName === "refresh") {
             await registerCommands();
-            return i.editReply("✅ Komendy odświeżone");
+            return i.editReply("Odświeżono komendy");
         }
 
     } catch (err) {
