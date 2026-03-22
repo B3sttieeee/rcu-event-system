@@ -24,17 +24,17 @@ const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
 
+const FILE = './data.json';
+
 //////////////////////////////////////////////////
 // 📦 DATA
 //////////////////////////////////////////////////
-
-const FILE = './data.json';
 
 let data = {
 roles: { egg:null, merchant:null, spin:null },
 dm: {},
 giveaway: null,
-giveawayBonus: {} // 🔥 BONUS PRZED GIVEAWAY
+giveawayBonus: {}
 };
 
 function load(){
@@ -47,7 +47,7 @@ fs.writeFileSync(FILE, JSON.stringify(data,null,2));
 load();
 
 //////////////////////////////////////////////////
-// 🕒 CZAS (FIXED)
+// 🕒 TIME
 //////////////////////////////////////////////////
 
 function nowPL(){
@@ -72,7 +72,7 @@ time: Math.floor(future.getTime()/1000)
 }
 
 //////////////////////////////////////////////////
-// 🖼 OBRAZKI
+// 🖼 IMAGES
 //////////////////////////////////////////////////
 
 const IMG = {
@@ -83,7 +83,7 @@ spin:"https://imgur.com/LeXDgiJ.png"
 };
 
 //////////////////////////////////////////////////
-// 🎨 EMBEDY
+// 🎨 EMBEDS
 //////////////////////////////////////////////////
 
 const EGG = ()=> new EmbedBuilder()
@@ -116,7 +116,9 @@ const SPIN = ()=> new EmbedBuilder()
 
 function gEmbed(){
 
-const users = Object.keys(data.giveaway?.entries || {});
+if(!data.giveaway) return new EmbedBuilder().setDescription("Brak giveaway");
+
+const users = Object.keys(data.giveaway.entries || {});
 const roles = Object.entries(data.giveawayBonus || {})
 .map(([id,v])=>`<@&${id}> → x${v}`).join("\n") || "Brak";
 
@@ -134,21 +136,19 @@ ${roles}`
 }
 
 //////////////////////////////////////////////////
-// 🚀 READY + CRON
+// 🚀 READY
 //////////////////////////////////////////////////
 
 client.once('clientReady', async()=>{
 
 console.log("✅ BOT ONLINE");
 
-// EVENTY
 cron.schedule('* * * * *', async()=>{
 
 const now = nowPL();
 const h = now.getHours();
 const m = now.getMinutes();
 
-// przypomnienie 5 min
 if(m===55){
 const next = getEvent((h+1)%24);
 const role = data.roles[next];
@@ -158,7 +158,6 @@ ch.send(`⏰ Za 5 minut: <@&${role}>`);
 }
 }
 
-// start
 if(m!==0) return;
 
 const type = getEvent(h);
@@ -187,10 +186,16 @@ ch.send({content:`<@&${role}>`,embeds:[SPIN()]});
 
 client.on('interactionCreate', async i=>{
 
-// PANEL RÓL
+// SELECT MENU FIX
 if(i.isStringSelectMenu()){
 if(i.customId==="roles"){
+
 const roleId = i.values[0];
+
+// 🔥 FIX: ignoruj jeśli null
+if(!roleId || roleId==="null") 
+return i.reply({content:"❌ Rola nie ustawiona",ephemeral:true});
+
 const has = i.member.roles.cache.has(roleId);
 
 if(has){
@@ -203,9 +208,10 @@ return i.reply({content:"✅ Dodano rolę",ephemeral:true});
 }
 }
 
-// BUTTON GIVEAWAY
+// BUTTON
 if(i.isButton()){
 if(i.customId==="join"){
+
 if(!data.giveaway) return;
 
 let bonus = 1;
@@ -226,17 +232,31 @@ return i.reply({content:`🎉 Masz ${bonus} losów`,ephemeral:true});
 // COMMANDY
 if(i.isChatInputCommand()){
 
-// EVENT
-if(i.commandName==="event"){
-const type = getEvent(nowPL().getHours());
+if(i.commandName==="get-role"){
 
-if(type==="merchant") return i.reply({embeds:[BOSS(),HONEY()]});
-if(type==="egg") return i.reply({embeds:[EGG()]});
-if(type==="spin") return i.reply({embeds:[SPIN()]});
+const options = [];
+
+// 🔥 FIX: tylko jeśli istnieją
+if(data.roles.egg) options.push({label:"RNG EGG",value:data.roles.egg});
+if(data.roles.merchant) options.push({label:"MERCHANT",value:data.roles.merchant});
+if(data.roles.spin) options.push({label:"SPIN",value:data.roles.spin});
+
+if(options.length===0)
+return i.reply({content:"❌ Brak ustawionych ról",ephemeral:true});
+
+const menu = new StringSelectMenuBuilder()
+.setCustomId("roles")
+.setPlaceholder("Wybierz rolę")
+.addOptions(options);
+
+return i.reply({
+content:"🎛 Wybierz role",
+components:[new ActionRowBuilder().addComponents(menu)]
+});
 }
 
-// NEXT
 if(i.commandName==="next-events"){
+
 const n1 = nextEvent(1);
 const n2 = nextEvent(2);
 
@@ -246,72 +266,8 @@ embeds:[new EmbedBuilder()
 .setDescription(
 `➡️ **${n1.type}** → <t:${n1.time}:R>
 ➡️ **${n2.type}** → <t:${n2.time}:R>`
-)
-.setColor(0x5865F2)]
+)]
 });
-}
-
-// PANEL USER
-if(i.commandName==="get-role"){
-const menu = new StringSelectMenuBuilder()
-.setCustomId("roles")
-.setPlaceholder("Wybierz rolę")
-.addOptions([
-{label:"RNG EGG",value:data.roles.egg},
-{label:"MERCHANT",value:data.roles.merchant},
-{label:"SPIN",value:data.roles.spin}
-]);
-
-return i.reply({
-content:"🎛 Wybierz role",
-components:[new ActionRowBuilder().addComponents(menu)]
-});
-}
-
-// PANEL ADMIN
-if(i.commandName==="set-role-panel"){
-
-if(!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
-return i.reply({content:"❌ Brak permisji",ephemeral:true});
-
-const type = i.options.getString("typ");
-const role = i.options.getRole("rola");
-
-data.roles[type] = role.id;
-save();
-
-return i.reply("✅ Ustawiono rolę");
-}
-
-// GIVEAWAY START
-if(i.commandName==="giveaway"){
-
-data.giveaway = {
-prize:i.options.getString("nagroda"),
-winners:i.options.getInteger("wygrani"),
-end: Math.floor(Date.now()/1000)+i.options.getInteger("czas")*60,
-entries:{}
-};
-
-save();
-
-const btn = new ActionRowBuilder().addComponents(
-new ButtonBuilder().setCustomId("join").setLabel("🎉 Weź udział").setStyle(ButtonStyle.Success)
-);
-
-return i.reply({embeds:[gEmbed()],components:[btn]});
-}
-
-// BONUS ROLE
-if(i.commandName==="giveaway-bonus"){
-
-const role = i.options.getRole("rola");
-const multi = i.options.getInteger("x");
-
-data.giveawayBonus[role.id] = multi;
-save();
-
-return i.reply("✅ Dodano bonus");
 }
 
 }
@@ -319,41 +275,14 @@ return i.reply("✅ Dodano bonus");
 });
 
 //////////////////////////////////////////////////
-// 📜 REGISTER
+// REGISTER
 //////////////////////////////////////////////////
 
 async function register(){
 
 const cmds = [
-
-new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
-new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy"),
 new SlashCommandBuilder().setName("get-role").setDescription("Panel ról"),
-
-new SlashCommandBuilder()
-.setName("set-role-panel")
-.setDescription("Ustaw role eventów")
-.addStringOption(o=>o.setName("typ").setRequired(true)
-.addChoices(
-{name:"egg",value:"egg"},
-{name:"merchant",value:"merchant"},
-{name:"spin",value:"spin"}
-))
-.addRoleOption(o=>o.setName("rola").setRequired(true)),
-
-new SlashCommandBuilder()
-.setName("giveaway")
-.setDescription("Start giveaway")
-.addStringOption(o=>o.setName("nagroda").setRequired(true))
-.addIntegerOption(o=>o.setName("czas").setRequired(true))
-.addIntegerOption(o=>o.setName("wygrani").setRequired(true)),
-
-new SlashCommandBuilder()
-.setName("giveaway-bonus")
-.setDescription("Bonus ról")
-.addRoleOption(o=>o.setName("rola").setRequired(true))
-.addIntegerOption(o=>o.setName("x").setRequired(true))
-
+new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy")
 ].map(c=>c.toJSON());
 
 const rest = new REST({version:'10'}).setToken(TOKEN);
