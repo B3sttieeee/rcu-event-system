@@ -21,7 +21,7 @@ const ROLE_SPIN = "1484911421903999127";
 const AUTHOR = "B3sttiee";
 const START_DATE = "2026-03-22";
 
-// ================= DM SYSTEM =================
+// ================= DM =================
 
 const dmUsers = {
   egg: new Set(),
@@ -29,10 +29,10 @@ const dmUsers = {
   spin: new Set()
 };
 
-// ================= TIME =================
+// ================= TIME FIX =================
 
-function getNowCET() {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+function getNow() {
+  return new Date(); // 🔥 ZERO offset bug
 }
 
 // ================= EVENT SYSTEM =================
@@ -43,11 +43,10 @@ function getEventByHour(hour) {
   if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
 }
 
-// ================= NEXT EVENTS =================
+// ================= NEXT EVENTS FIX =================
 
 function getNextEvents() {
-  const now = getNowCET();
-
+  const now = getNow();
   let events = [];
 
   for (let i = 1; i <= 3; i++) {
@@ -55,10 +54,8 @@ function getNextEvents() {
     next.setMinutes(0, 0, 0);
     next.setHours(now.getHours() + i);
 
-    let type = getEventByHour(next.getHours());
-
     events.push({
-      type,
+      type: getEventByHour(next.getHours()),
       timestamp: Math.floor(next.getTime() / 1000)
     });
   }
@@ -66,11 +63,13 @@ function getNextEvents() {
   return events;
 }
 
-// ================= EMBED BASE =================
+// ================= EMBED STYLE =================
 
 function baseEmbed(embed) {
   return embed
-    .setFooter({ text: `Start: ${START_DATE} • Twórca: ${AUTHOR}` })
+    .setFooter({
+      text: `Start: ${START_DATE} • Twórca: ${AUTHOR}`
+    })
     .setTimestamp();
 }
 
@@ -78,26 +77,24 @@ function baseEmbed(embed) {
 
 function getEmbed(type) {
 
-  // 🥚 RNG EGG
   if (type === "egg") {
     return baseEmbed(
       new EmbedBuilder()
-        .setColor("#f1c40f")
+        .setColor("#ffd93d")
         .setTitle("🥚 RNG EGG EVENT")
         .setDescription(
 `**➤ Otwieraj jajka i zdobywaj punkty!**
 
-➤ Im lepsze pety zdobędziesz, tym więcej punktów otrzymasz  
-➤ Więcej punktów = wyższy tier  
-➤ Wyższy tier = lepsze nagrody na koniec eventu  
+➤ Im lepsze pety zdobędziesz → tym więcej punktów  
+➤ Więcej punktów → wyższy tier  
+➤ Wyższy tier → lepsze nagrody końcowe  
 
-✨ Graj aktywnie i zgarnij najlepsze bonusy!`
+✨ **Graj aktywnie i zgarnij najlepsze bonusy!**`
         )
         .setThumbnail("https://imgur.com/JqyeITl.png")
     );
   }
 
-  // 🎡 DEV SPIN
   if (type === "spin") {
     return baseEmbed(
       new EmbedBuilder()
@@ -106,51 +103,46 @@ function getEmbed(type) {
         .setDescription(
 `**➤ Zakręć kołem i zdobądź nagrody!**
 
-➤ Losowe nagrody za każdy spin  
-➤ Szansa na rzadkie itemy  
-➤ 🎯 Mała szansa na Supreme (??%)  
+➤ Losowe nagrody 🎁  
+➤ Szansa na rzadkie itemy 💎  
+➤ 🎯 Supreme (??%)  
 
-⚡ Spróbuj swojego szczęścia!`
+⚡ **Spróbuj swojego szczęścia!**`
         )
         .setThumbnail("https://imgur.com/NJI7052.png")
     );
   }
 
-  // 🛒 MERCHANT
   if (type === "merchant") {
     return [
-
-      // 🍯 HONEY
       baseEmbed(
         new EmbedBuilder()
           .setColor("#f39c12")
           .setTitle("🍯 HONEY MERCHANT")
           .setDescription(
-`**➤ Zdobywaj miód na Bee World!**
+`**➤ Farm miód na Bee World!**
 
-➤ Zbieraj miód z pszczółek 🐝  
-➤ Wymieniaj miód na przedmioty u merchanta  
-➤ 🎯 Szansa na Supreme (110%)  
+➤ Zbieraj miód 🐝  
+➤ Wymieniaj na przedmioty  
+➤ 🎯 Supreme (110%)  
 
-🔥 Im więcej farmisz, tym lepsze nagrody!`
+🔥 **Farm = lepsze nagrody!**`
           )
           .setThumbnail("https://imgur.com/zhLC0zn.png")
       ),
 
-      // 💀 BOSS
       baseEmbed(
         new EmbedBuilder()
           .setColor("#e74c3c")
           .setTitle("💀 BOSS MERCHANT")
           .setDescription(
-`**➤ Zdobywaj tokeny z bossów!**
+`**➤ Pokonuj bossy i zdobywaj tokeny!**
 
-➤ Pokonuj bossy ⚔️  
-➤ Zdobywaj tokeny  
-➤ Wymieniaj na przedmioty u merchanta  
-➤ 🎯 Szansa na Supreme (125%)  
+➤ Tokeny ⚔️  
+➤ Zakupy u merchanta  
+➤ 🎯 Supreme (125%)  
 
-👑 Najlepsze nagrody dla najsilniejszych!`
+👑 **Top loot dla najlepszych!**`
           )
           .setThumbnail("https://imgur.com/yFvb6jY.png")
       )
@@ -162,7 +154,7 @@ function getEmbed(type) {
 
 async function sendEvent() {
   const channel = await client.channels.fetch(CHANNEL_ID);
-  const now = getNowCET();
+  const now = getNow();
   const type = getEventByHour(now.getHours());
 
   const role =
@@ -170,24 +162,20 @@ async function sendEvent() {
     type === "merchant" ? `<@&${ROLE_MERCHANT}>` :
     `<@&${ROLE_SPIN}>`;
 
+  await channel.send(`${role}\n━━━━━━━━━━━━━━━━━━━\n🚀 **EVENT WYSTARTOWAŁ!**`);
+
   const embed = getEmbed(type);
 
-  await channel.send({
-    content: `${role}\n━━━━━━━━━━━━━━━━━━━\n🚀 **EVENT WYSTARTOWAŁ!**`
-  });
-
   if (Array.isArray(embed)) {
-    for (const e of embed) {
-      await channel.send({ embeds: [e] });
-    }
+    for (const e of embed) await channel.send({ embeds: [e] });
   } else {
     await channel.send({ embeds: [embed] });
   }
 
   // DM
-  for (const userId of dmUsers[type]) {
+  for (const id of dmUsers[type]) {
     try {
-      const user = await client.users.fetch(userId);
+      const user = await client.users.fetch(id);
       await user.send(`🔔 Event ${type.toUpperCase()} wystartował!`);
     } catch {}
   }
@@ -197,7 +185,7 @@ async function sendEvent() {
 
 async function sendReminder() {
   const channel = await client.channels.fetch(CHANNEL_ID);
-  const now = getNowCET();
+  const now = getNow();
 
   const nextHour = (now.getHours() + 1) % 24;
   const type = getEventByHour(nextHour);
@@ -208,7 +196,7 @@ async function sendReminder() {
     `<@&${ROLE_SPIN}>`;
 
   await channel.send(
-    `⏳ ${role}\n━━━━━━━━━━━━━━━━━━━\n**Event ${type.toUpperCase()} startuje za 5 minut! Przygotuj się!**`
+    `⏳ ${role}\n━━━━━━━━━━━━━━━━━━━\n**Event ${type.toUpperCase()} za 5 minut!**`
   );
 }
 
@@ -231,7 +219,6 @@ async function sendGiveaway(channel, prize, minutes) {
     const users = await fetched.reactions.cache.get("🎉").users.fetch();
 
     const valid = users.filter(u => !u.bot).map(u => u.id);
-
     if (!valid.length) return channel.send("❌ Brak uczestników");
 
     const winner = valid[Math.floor(Math.random() * valid.length)];
@@ -242,7 +229,7 @@ async function sendGiveaway(channel, prize, minutes) {
 // ================= LOOP =================
 
 setInterval(() => {
-  const now = getNowCET();
+  const now = getNow();
 
   if (now.getMinutes() === 0) sendEvent();
   if (now.getMinutes() === 55) sendReminder();
@@ -254,6 +241,11 @@ setInterval(() => {
 client.on("interactionCreate", async (i) => {
 
   if (i.isChatInputCommand()) {
+
+    if (i.commandName === "event") {
+      const embed = getEmbed(getEventByHour(getNow().getHours()));
+      return i.reply({ embeds: Array.isArray(embed) ? embed : [embed] });
+    }
 
     if (i.commandName === "next-events") {
       const events = getNextEvents();
@@ -274,14 +266,32 @@ client.on("interactionCreate", async (i) => {
       return i.reply({ embeds: [embed] });
     }
 
+    if (i.commandName === "roles-picker") {
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("roles")
+          .setMinValues(1)
+          .setMaxValues(3)
+          .addOptions([
+            { label: "EGG", value: ROLE_EGG, emoji: "🥚" },
+            { label: "MERCHANT", value: ROLE_MERCHANT, emoji: "🛒" },
+            { label: "SPIN", value: ROLE_SPIN, emoji: "🎡" }
+          ])
+      );
+
+      return i.reply({ content: "Wybierz role:", components: [row], ephemeral: true });
+    }
+
     if (i.commandName === "set-dm") {
       const type = i.options.getString("event");
-      dmUsers[type].add(i.user.id);
 
-      return i.reply({
-        content: `✅ Ustawiono DM dla ${type}`,
-        ephemeral: true
-      });
+      if (dmUsers[type].has(i.user.id)) {
+        dmUsers[type].delete(i.user.id);
+        return i.reply({ content: "❌ DM wyłączone", ephemeral: true });
+      }
+
+      dmUsers[type].add(i.user.id);
+      return i.reply({ content: "✅ DM włączone", ephemeral: true });
     }
 
     if (i.commandName === "giveaway") {
@@ -291,12 +301,24 @@ client.on("interactionCreate", async (i) => {
       const channel = await client.channels.fetch(CHANNEL_ID);
       await sendGiveaway(channel, prize, time);
 
-      return i.reply({ content: "✅ Giveaway wystartował", ephemeral: true });
+      return i.reply({ content: "✅ Giveaway start!", ephemeral: true });
     }
+  }
 
-    if (i.commandName === "test-event") {
-      await sendEvent();
-      return i.reply({ content: "✅ Event wysłany", ephemeral: true });
+  if (i.isStringSelectMenu()) {
+    if (i.customId === "roles") {
+      const member = await i.guild.members.fetch(i.user.id);
+      const roles = [ROLE_EGG, ROLE_MERCHANT, ROLE_SPIN];
+
+      for (const r of roles) {
+        if (member.roles.cache.has(r)) await member.roles.remove(r);
+      }
+
+      for (const r of i.values) {
+        await member.roles.add(r);
+      }
+
+      return i.reply({ content: "✅ Role ustawione!", ephemeral: true });
     }
   }
 });
