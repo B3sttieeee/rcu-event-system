@@ -8,8 +8,7 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    StringSelectMenuBuilder,
-    PermissionsBitField
+    StringSelectMenuBuilder
 } = require('discord.js');
 
 const fs = require('fs');
@@ -27,20 +26,18 @@ const CHANNEL_ID = '1484937784283369502';
 const FILE = './data.json';
 
 // 📦 DATA
-let data = {
-    dm: {},
-    giveawayRoles: {}
-};
+let data = { dm: {} };
 
 if (fs.existsSync(FILE)) {
-    data = JSON.parse(fs.readFileSync(FILE));
+    const loaded = JSON.parse(fs.readFileSync(FILE));
+    data.dm = loaded.dm || {};
 }
 
 function save() {
     fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
 }
 
-// 📌 STAŁE ROLE
+// 📌 ROLE ID
 const ROLES = {
     egg: "1476000993119568105",
     merchant: "1476000993660502139",
@@ -57,31 +54,38 @@ const IMAGES = {
 
 // ⏰ CZAS (NAPRAWIONY)
 function getTime() {
-    const now = new Date();
-    const warsaw = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
-    return warsaw;
+    return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
 }
 
-// 🎯 EVENT
+// 🎯 EVENT SYSTEM (POPRAWNY)
 function getEvent(h) {
     if ([0,3,6,9,12,15,18,21].includes(h)) return "egg";
     if ([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
     return "spin";
 }
 
-// ⏭️ następny event (NAPRAWIONY)
-function getNextEvent(currentHour) {
+// ⏭️ NEXT EVENT (NAPRAWIONY)
+function getNextEvents(h) {
+    let list = [];
+
     for (let i = 1; i <= 24; i++) {
-        const h = (currentHour + i) % 24;
-        const type = getEvent(h);
-        return { hour: h, type };
+        const hour = (h + i) % 24;
+        list.push({
+            type: getEvent(hour),
+            hour: hour
+        });
+
+        if (list.length === 2) break;
     }
+
+    return list;
 }
 
 // 📩 DM
 async function sendDM(type, embed) {
     for (const userId in data.dm) {
         if (!data.dm[userId]?.includes(type)) continue;
+
         try {
             const user = await client.users.fetch(userId);
             await user.send({ embeds: [embed] });
@@ -89,44 +93,21 @@ async function sendDM(type, embed) {
     }
 }
 
-// 🎉 GIVEAWAY
-let giveaways = new Map();
-
-function parseTime(str) {
-    const num = parseInt(str);
-    if (str.endsWith("s")) return num * 1000;
-    if (str.endsWith("m")) return num * 60000;
-    if (str.endsWith("h")) return num * 3600000;
-    if (str.endsWith("d")) return num * 86400000;
-    return 60000;
-}
-
 // 🔄 COMMANDS
 async function registerCommands() {
     const commands = [
         new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
         new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
-
         new SlashCommandBuilder().setName('get-role').setDescription('Panel ról'),
-
-        new SlashCommandBuilder().setName('set-dm').setDescription('Ustaw powiadomienia DM'),
-
-        new SlashCommandBuilder()
-            .setName('giveaway')
-            .setDescription('Stwórz giveaway')
-            .addStringOption(o=>o.setName('nagroda').setDescription('Nagroda').setRequired(true))
-            .addStringOption(o=>o.setName('czas').setDescription('Czas np 1h').setRequired(true))
-            .addIntegerOption(o=>o.setName('wygrani').setDescription('Ilu wygranych').setRequired(true)),
-
-        new SlashCommandBuilder()
-            .setName('giveaway-role')
-            .setDescription('Dodaj mnożnik roli')
-            .addRoleOption(o=>o.setName('rola').setDescription('Rola').setRequired(true))
-            .addIntegerOption(o=>o.setName('ilosc').setDescription('Ile wejść').setRequired(true))
-    ].map(c=>c.toJSON());
+        new SlashCommandBuilder().setName('set-dm').setDescription('Ustaw DM')
+    ].map(c => c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
-    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+
+    await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: commands }
+    );
 
     console.log("✅ Komendy załadowane");
 }
@@ -134,70 +115,81 @@ async function registerCommands() {
 // 🚀 READY
 client.once('clientReady', async () => {
     console.log("✅ BOT ONLINE");
+
     await registerCommands();
 
     cron.schedule('* * * * *', async () => {
+
         const now = getTime();
         const h = now.getHours();
         const m = now.getMinutes();
 
         const channel = await client.channels.fetch(CHANNEL_ID);
-        const type = getEvent(h);
 
         // 🔔 reminder 5 min
         if (m === 55) {
-            const next = getNextEvent(h);
+            const next = getNextEvents(h)[0];
             const role = ROLES[next.type];
-            channel.send(`⏰ Za 5 minut event <@&${role}>`);
+
+            await channel.send(`⏰ Za 5 minut event <@&${role}>`);
         }
 
-        // 🎯 start
         if (m !== 0) return;
 
+        const type = getEvent(h);
         const role = ROLES[type];
 
+        // 🐝 MERCHANT (2 EMBEDY 1 PING)
         if (type === "merchant") {
+
             await channel.send(`<@&${role}>`);
 
-            await channel.send({
-                embeds: [
-                    new EmbedBuilder()
-                        .setTitle("🔥 **BOSS MERCHANT**")
-                        .setDescription("**Eventowy merchant na mapie Anniversary Event**\n\n➡️ Sprawdź ofertę!\n⏳ Dostępny 15 minut")
-                        .setThumbnail(IMAGES.boss)
-                ]
-            });
-
-            await channel.send({
-                embeds: [
-                    new EmbedBuilder()
-                        .setTitle("🍯 **HONEY MERCHANT**")
-                        .setDescription("**Eventowy merchant**\n\n➡️ Sprawdź ofertę!\n⏳ Dostępny 15 minut")
-                        .setThumbnail(IMAGES.honey)
-                ]
-            });
-
-        } else {
-
-            const embed = new EmbedBuilder()
-                .setTitle(
-                    type === "egg" ? "🥚 **RNG EGG**" :
-                    "🎰 **DEV SPIN**"
-                )
+            const boss = new EmbedBuilder()
+                .setTitle("🔥 **BOSS MERCHANT**")
                 .setDescription(
-                    type === "egg"
-                    ? "**Otwieraj jajka i zdobywaj tier!**"
-                    : "**Kręć kołem i zdobywaj nagrody!**"
+`**Eventowy merchant na mapie Anniversary Event**
+
+➡️ Sprawdź ofertę!
+⏳ Dostępny przez 15 minut`
                 )
-                .setThumbnail(type === "egg" ? IMAGES.egg : IMAGES.spin);
+                .setThumbnail(IMAGES.boss);
 
-            await channel.send({
-                content: `<@&${role}>`,
-                embeds: [embed]
-            });
+            const honey = new EmbedBuilder()
+                .setTitle("🍯 **HONEY MERCHANT**")
+                .setDescription(
+`**Eventowy merchant**
 
-            sendDM(type, embed);
+➡️ Sprawdź ofertę!
+⏳ Dostępny przez 15 minut`
+                )
+                .setThumbnail(IMAGES.honey);
+
+            await channel.send({ embeds: [boss] });
+            await channel.send({ embeds: [honey] });
+
+            return;
         }
+
+        // 🥚 / 🎰
+        const embed = new EmbedBuilder()
+            .setTitle(
+                type === "egg"
+                ? "🥚 **RNG EGG**"
+                : "🎰 **DEV SPIN**"
+            )
+            .setDescription(
+                type === "egg"
+                ? `**Otwieraj jajko i zdobywaj punkty Tier!**`
+                : `**Kręć kołem i zdobywaj nagrody!**`
+            )
+            .setThumbnail(type === "egg" ? IMAGES.egg : IMAGES.spin);
+
+        await channel.send({
+            content: `<@&${role}>`,
+            embeds: [embed]
+        });
+
+        sendDM(type, embed);
     });
 });
 
@@ -211,6 +203,7 @@ client.on('interactionCreate', async i => {
 
         // EVENT
         if (i.commandName === 'event') {
+
             const type = getEvent(h);
 
             return i.reply({
@@ -224,13 +217,17 @@ client.on('interactionCreate', async i => {
 
         // NEXT EVENTS
         if (i.commandName === 'next-events') {
-            const next = getNextEvent(h);
+
+            const list = getNextEvents(h);
 
             return i.reply({
                 embeds: [
                     new EmbedBuilder()
                         .setTitle("📅 **NASTĘPNE EVENTY**")
-                        .setDescription(`➡️ ${next.type} o ${next.hour}:00`)
+                        .setDescription(
+`➡️ ${list[0].type} o ${list[0].hour}:00
+➡️ ${list[1].type} o ${list[1].hour}:00`
+                        )
                 ]
             });
         }
@@ -269,57 +266,20 @@ client.on('interactionCreate', async i => {
                 ]);
 
             return i.reply({
-                content: "📩 Wybierz DM:",
+                content: "📩 Wybierz powiadomienia:",
                 components: [new ActionRowBuilder().addComponents(menu)],
-                ephemeral: true
-            });
-        }
-
-        // GIVEAWAY
-        if (i.commandName === 'giveaway') {
-
-            const reward = i.options.getString('nagroda');
-            const time = i.options.getString('czas');
-            const winners = i.options.getInteger('wygrani');
-
-            const ms = parseTime(time);
-            const end = Date.now() + ms;
-
-            const embed = new EmbedBuilder()
-                .setTitle(`🎁 ${reward}`)
-                .setDescription(`Kliknij 🎉 aby wziąć udział!\n\n🏆 Wygrani: ${winners}\n⏳ Koniec: <t:${Math.floor(end/1000)}:R>`);
-
-            const msg = await i.reply({ embeds: [embed], fetchReply: true });
-
-            await msg.react("🎉");
-
-            giveaways.set(msg.id, {
-                end,
-                winners
-            });
-        }
-
-        // GIVEAWAY ROLE BONUS
-        if (i.commandName === 'giveaway-role') {
-
-            const role = i.options.getRole('rola');
-            const amount = i.options.getInteger('ilosc');
-
-            data.giveawayRoles[role.id] = amount;
-            save();
-
-            return i.reply({
-                content: `✅ ${role} = ${amount} wejść`,
                 ephemeral: true
             });
         }
     }
 
-    // ROLE PICKER
+    // SELECT MENU
     if (i.isStringSelectMenu()) {
 
         if (i.customId === "roles") {
+
             for (const val of i.values) {
+
                 const roleId = ROLES[val];
                 const has = i.member.roles.cache.has(roleId);
 
@@ -327,17 +287,23 @@ client.on('interactionCreate', async i => {
                 else await i.member.roles.add(roleId);
             }
 
-            return i.update({ content: "✅ Zaktualizowano role", components: [] });
+            return i.update({
+                content: "✅ Role zaktualizowane",
+                components: []
+            });
         }
 
         if (i.customId === "dm") {
+
             data.dm[i.user.id] = i.values;
             save();
 
-            return i.update({ content: "✅ DM zapisane", components: [] });
+            return i.update({
+                content: "✅ DM zapisane",
+                components: []
+            });
         }
     }
-
 });
 
 client.login(TOKEN);
