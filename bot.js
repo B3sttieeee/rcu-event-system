@@ -7,7 +7,8 @@ const {
     SlashCommandBuilder,
     ActionRowBuilder,
     ButtonBuilder,
-    ButtonStyle
+    ButtonStyle,
+    StringSelectMenuBuilder
 } = require('discord.js');
 
 const cron = require('node-cron');
@@ -65,12 +66,33 @@ let giveaway = {
 // 🕒 CZAS
 //////////////////////////////////////////////////
 
-function nowPL() {
-    return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+function getPolishHour() {
+    return parseInt(new Date().toLocaleString("en-US", {
+        timeZone: "Europe/Warsaw",
+        hour: "numeric",
+        hour12: false
+    }));
+}
+
+function getNextTimestamp(offset) {
+    const now = new Date();
+
+    const currentPL = getPolishHour();
+    const targetPL = (currentPL + offset) % 24;
+
+    const date = new Date();
+    date.setUTCMinutes(0, 0, 0);
+
+    let diff = targetPL - currentPL;
+    if (diff < 0) diff += 24;
+
+    date.setUTCHours(date.getUTCHours() + diff);
+
+    return Math.floor(date.getTime() / 1000);
 }
 
 //////////////////////////////////////////////////
-// 🎯 EVENT LOGIC
+// 🎯 EVENTY
 //////////////////////////////////////////////////
 
 function getEvent(h) {
@@ -80,21 +102,13 @@ function getEvent(h) {
 }
 
 //////////////////////////////////////////////////
-// 🎨 EVENT EMBEDY
+// 🎨 EMBEDY
 //////////////////////////////////////////////////
 
 function embedEgg() {
     return new EmbedBuilder()
         .setTitle("🥚 **RNG EGG**")
-        .setDescription(
-`🎲 **Otwieraj jajka i zdobywaj pety**
-
-**Zdobywaj punkty do Tieru**  
-Lepsze pety = więcej punktów  
-Wyższy Tier = lepsze bonusy
-
-📍 Sprawdź swoje postępy`
-        )
+        .setDescription(`Otwieraj jajka i zdobywaj pety\nLepsze pety = więcej punktów\nLepszy Tier = lepsze bonusy`)
         .setThumbnail(IMAGES.egg)
         .setColor(0x00ffcc);
 }
@@ -102,16 +116,7 @@ Wyższy Tier = lepsze bonusy
 function embedBoss() {
     return new EmbedBuilder()
         .setTitle("🐝 **MERCHANT BOSS**")
-        .setDescription(
-`🎉 Eventowy merchant
-
-📍 Mapa: Anniversary Event
-
-Za żetony z bossów kupisz przedmioty  
-Szansa na Supreme: 125%
-
-⏳ Przejdź i sprawdź ofertę`
-        )
+        .setDescription(`Eventowy merchant\nMapa: Anniversary Event\nSzansa Supreme: 125%`)
         .setThumbnail(IMAGES.boss)
         .setColor(0xff0000);
 }
@@ -119,16 +124,7 @@ Szansa na Supreme: 125%
 function embedHoney() {
     return new EmbedBuilder()
         .setTitle("🍯 **HONEY MERCHANT**")
-        .setDescription(
-`🍯 Eventowy merchant
-
-📍 Mapa: Bee World
-
-Za miód kupisz przedmioty  
-Szansa na Supreme: 110%
-
-⏳ Przejdź i sprawdź ofertę`
-        )
+        .setDescription(`Eventowy merchant\nMapa: Bee World\nSzansa Supreme: 110%`)
         .setThumbnail(IMAGES.honey)
         .setColor(0xffcc00);
 }
@@ -136,50 +132,43 @@ Szansa na Supreme: 110%
 function embedSpin() {
     return new EmbedBuilder()
         .setTitle("🎰 **DEV SPIN**")
-        .setDescription(
-`🎰 Kręć kołem i zdobywaj nagrody
-
-Szansa na Supreme: ??%
-
-🍀 Spróbuj szczęścia`
-        )
+        .setDescription(`Kręć kołem i zdobywaj nagrody\nSzansa Supreme: ??%`)
         .setThumbnail(IMAGES.spin)
         .setColor(0x9b59b6);
 }
 
 //////////////////////////////////////////////////
-// 🎁 GIVEAWAY EMBED (CLEAN)
+// 🎁 GIVEAWAY EMBED
 //////////////////////////////////////////////////
 
 function buildGiveawayEmbed() {
 
-    const participants = Object.keys(giveaway.entries || {}).length;
+    const count = Object.keys(giveaway.entries || {}).length;
 
     const rolesText = Object.entries(giveaway.rolesBonus || {})
-        .map(([id, val]) => `• <@&${id}> — **${val} wejść**`)
-        .join("\n") || "Brak dodatkowych losów";
+        .map(([id, val]) => `• <@&${id}> — ${val} wejść`)
+        .join("\n") || "Brak";
 
     const end = Math.floor((Date.now() + giveaway.duration) / 1000);
 
     return new EmbedBuilder()
-        .setTitle(`🎁 ${giveaway.prize || "Giveaway"}`)
+        .setTitle(`🎁 ${giveaway.prize}`)
         .setDescription(
-`🎉 Kliknij przycisk poniżej, aby wziąć udział
+`Kliknij przycisk, aby wziąć udział
 
-👥 **Uczestnicy:** ${participants}
+Uczestnicy: ${count}
 
-🏆 **Wygrani:** ${giveaway.winners}  
-⏰ **Koniec:** <t:${end}:R>
+Wygrani: ${giveaway.winners}
+Koniec: <t:${end}:R>
 
-🎯 **Dodatkowe losy:**
+Bonusy:
 ${rolesText}
 
-📨 **Wymagania:**
+Wymagania:
 ${giveaway.requiredMessages} wiadomości`
         )
         .setColor(0x00ffcc)
-        .setImage(giveaway.image || null)
-        .setTimestamp();
+        .setImage(giveaway.image || null);
 }
 
 //////////////////////////////////////////////////
@@ -190,62 +179,42 @@ async function registerCommands() {
 
     const commands = [
 
-        new SlashCommandBuilder()
-            .setName('event')
-            .setDescription('Aktualny event'),
-
-        new SlashCommandBuilder()
-            .setName('next-events')
-            .setDescription('Następne eventy'),
+        new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
+        new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
+        new SlashCommandBuilder().setName('get-role').setDescription('Wybierz role'),
 
         new SlashCommandBuilder()
             .setName('set-role')
             .setDescription('Ustaw rolę')
             .addStringOption(o =>
-                o.setName('event')
-                 .setDescription('event')
-                 .setRequired(true)
-                 .addChoices(
-                    { name: 'egg', value: 'egg' },
-                    { name: 'merchant', value: 'merchant' },
-                    { name: 'spin', value: 'spin' }
-                 )
-            )
-            .addRoleOption(o =>
-                o.setName('rola')
-                 .setDescription('rola')
-                 .setRequired(true)
-            ),
+                o.setName('event').setRequired(true)
+                    .addChoices(
+                        { name: 'egg', value: 'egg' },
+                        { name: 'merchant', value: 'merchant' },
+                        { name: 'spin', value: 'spin' }
+                    ))
+            .addRoleOption(o=>o.setName('rola').setRequired(true)),
 
         new SlashCommandBuilder()
             .setName('giveaway')
             .setDescription('Start giveaway')
-            .addStringOption(o=>o.setName('nagroda').setDescription('nagroda').setRequired(true))
-            .addStringOption(o=>o.setName('czas').setDescription('np 10m').setRequired(true))
-            .addIntegerOption(o=>o.setName('wygrani').setDescription('ilość').setRequired(true)),
+            .addStringOption(o=>o.setName('nagroda').setRequired(true))
+            .addStringOption(o=>o.setName('czas').setRequired(true))
+            .addIntegerOption(o=>o.setName('wygrani').setRequired(true)),
 
         new SlashCommandBuilder()
             .setName('giveaway-role')
-            .setDescription('bonus roli')
+            .setDescription('Bonus roli')
             .addRoleOption(o=>o.setName('rola').setRequired(true))
             .addIntegerOption(o=>o.setName('bonus').setRequired(true)),
 
-        new SlashCommandBuilder()
-            .setName('reroll')
-            .setDescription('Losuj ponownie'),
+        new SlashCommandBuilder().setName('reroll').setDescription('Reroll'),
+        new SlashCommandBuilder().setName('refresh').setDescription('Refresh')
 
-        new SlashCommandBuilder()
-            .setName('refresh')
-            .setDescription('Refresh komend')
-
-    ].map(c => c.toJSON());
+    ].map(c=>c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
-
-    await rest.put(
-        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-        { body: commands }
-    );
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 }
 
 //////////////////////////////////////////////////
@@ -258,10 +227,8 @@ client.once('clientReady', async () => {
 
     cron.schedule('* * * * *', async () => {
 
-        const now = nowPL();
-        const h = now.getHours();
-        const m = now.getMinutes();
-
+        const h = getPolishHour();
+        const m = new Date().getMinutes();
         if (m !== 0) return;
 
         const type = getEvent(h);
@@ -288,6 +255,7 @@ client.on('interactionCreate', async i => {
 
     try {
 
+        // 🎁 JOIN
         if (i.isButton() && i.customId === "join") {
 
             let bonus = 1;
@@ -306,48 +274,86 @@ client.on('interactionCreate', async i => {
             return i.reply({ content: `Masz ${bonus} losów`, ephemeral: true });
         }
 
+        // 🎭 PICKER
+        if (i.isStringSelectMenu() && i.customId === "role_picker") {
+
+            const map = {
+                egg: roles.egg,
+                merchant: roles.merchant,
+                spin: roles.spin
+            };
+
+            for (const key in map) {
+                const roleId = map[key];
+                if (!roleId) continue;
+
+                if (i.values.includes(key)) {
+                    await i.member.roles.add(roleId).catch(()=>{});
+                } else {
+                    await i.member.roles.remove(roleId).catch(()=>{});
+                }
+            }
+
+            return i.update({ content: "Zaktualizowano role", components: [] });
+        }
+
         if (!i.isChatInputCommand()) return;
 
         await i.deferReply();
 
-        if (i.commandName === "set-role") {
-            roles[i.options.getString("event")] = i.options.getRole("rola").id;
-            return i.editReply("Ustawiono rolę");
+        if (i.commandName === "get-role") {
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId("role_picker")
+                .setPlaceholder("Wybierz role")
+                .setMinValues(1)
+                .setMaxValues(3)
+                .addOptions([
+                    { label: "RNG EGG", value: "egg", emoji: "🥚" },
+                    { label: "MERCHANT", value: "merchant", emoji: "🐝" },
+                    { label: "DEV SPIN", value: "spin", emoji: "🎰" }
+                ]);
+
+            return i.editReply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("Wybierz role eventowe")
+                        .setDescription("Zaznacz eventy które chcesz")
+                        .setColor(0x5865F2)
+                ],
+                components: [new ActionRowBuilder().addComponents(menu)]
+            });
+        }
+
+        if (i.commandName === "next-events") {
+            const h = getPolishHour();
+
+            return i.editReply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("Następne eventy")
+                        .setDescription(
+`Teraz: ${getEvent(h)}
+
+➜ ${getEvent((h+1)%24)} — <t:${getNextTimestamp(1)}:R>
+➜ ${getEvent((h+2)%24)} — <t:${getNextTimestamp(2)}:R>`
+                        )
+                        .setColor(0x5865F2)
+                ]
+            });
         }
 
         if (i.commandName === "event") {
-            const type = getEvent(nowPL().getHours());
+            const type = getEvent(getPolishHour());
 
             if (type === "merchant") return i.editReply({ embeds: [embedBoss(), embedHoney()] });
             if (type === "egg") return i.editReply({ embeds: [embedEgg()] });
             return i.editReply({ embeds: [embedSpin()] });
         }
 
-        if (i.commandName === "next-events") {
-
-            const now = nowPL();
-            const h = now.getHours();
-
-            const next = (x) => {
-                const d = new Date(now);
-                d.setHours((h+x)%24);
-                d.setMinutes(0);
-                return Math.floor(d.getTime()/1000);
-            };
-
-            return i.editReply({
-                embeds: [
-                    new EmbedBuilder()
-                        .setTitle("📅 Następne eventy")
-                        .setDescription(
-`Teraz: **${getEvent(h)}**
-
-Za godzinę: **${getEvent((h+1)%24)}** (<t:${next(1)}:R>)
-Za 2 godziny: **${getEvent((h+2)%24)}** (<t:${next(2)}:R>)`
-                        )
-                        .setColor(0x5865F2)
-                ]
-            });
+        if (i.commandName === "set-role") {
+            roles[i.options.getString("event")] = i.options.getRole("rola").id;
+            return i.editReply("OK");
         }
 
         if (i.commandName === "giveaway") {
@@ -393,7 +399,7 @@ Za 2 godziny: **${getEvent((h+2)%24)}** (<t:${next(2)}:R>)`
             giveaway.rolesBonus[i.options.getRole("rola").id] =
                 i.options.getInteger("bonus");
 
-            return i.editReply("Dodano bonus");
+            return i.editReply("Dodano");
         }
 
         if (i.commandName === "reroll") {
@@ -406,7 +412,7 @@ Za 2 godziny: **${getEvent((h+2)%24)}** (<t:${next(2)}:R>)`
                 }
             }
 
-            if (!pool.length) return i.editReply("Brak uczestników");
+            if (!pool.length) return i.editReply("Brak");
 
             const winner = pool[Math.floor(Math.random()*pool.length)];
 
@@ -415,7 +421,7 @@ Za 2 godziny: **${getEvent((h+2)%24)}** (<t:${next(2)}:R>)`
 
         if (i.commandName === "refresh") {
             await registerCommands();
-            return i.editReply("Odświeżono komendy");
+            return i.editReply("OK");
         }
 
     } catch (err) {
