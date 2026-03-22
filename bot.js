@@ -26,42 +26,53 @@ const ROLES = {
   spin: "1484911421903999127"
 };
 
-// GODZINY (ŚWIĘTE)
-const HOURS = {
-  egg: [0,3,6,9,12,15,18,21],
-  merchant: [1,4,7,10,13,16,19,22],
-  spin: [2,5,8,11,14,17,20,23]
-};
+// SLOTY (KLUCZ)
+const SLOTS = [
+  { hour: 0, type: "egg" },
+  { hour: 1, type: "merchant" },
+  { hour: 2, type: "spin" },
+  { hour: 3, type: "egg" },
+  { hour: 4, type: "merchant" },
+  { hour: 5, type: "spin" },
+  { hour: 6, type: "egg" },
+  { hour: 7, type: "merchant" },
+  { hour: 8, type: "spin" },
+  { hour: 9, type: "egg" },
+  { hour: 10, type: "merchant" },
+  { hour: 11, type: "spin" },
+  { hour: 12, type: "egg" },
+  { hour: 13, type: "merchant" },
+  { hour: 14, type: "spin" },
+  { hour: 15, type: "egg" },
+  { hour: 16, type: "merchant" },
+  { hour: 17, type: "spin" },
+  { hour: 18, type: "egg" },
+  { hour: 19, type: "merchant" },
+  { hour: 20, type: "spin" },
+  { hour: 21, type: "egg" },
+  { hour: 22, type: "merchant" },
+  { hour: 23, type: "spin" }
+];
 
-// ================= TIME =================
+// ================= CURRENT =================
 
-function getUTCHour() {
-  return new Date().getUTCHours();
-}
-
-// znajdź event po godzinie
-function getEventByHour(hour) {
-  for (const type in HOURS) {
-    if (HOURS[type].includes(hour)) return type;
-  }
-}
-
-// aktualny event
 function getCurrentEvent() {
-  return getEventByHour(getUTCHour());
+  const h = new Date().getUTCHours();
+  return SLOTS.find(s => s.hour === h).type;
 }
 
-// 🔥 NAJWAŻNIEJSZE — poprawny NEXT
+// ================= NEXT =================
+
 function getNextEvents() {
   const now = new Date();
   const currentHour = now.getUTCHours();
 
-  let results = [];
+  let future = [];
 
   for (let i = 1; i <= 24; i++) {
-    let hour = (currentHour + i) % 24;
+    const hour = (currentHour + i) % 24;
 
-    const eventType = getEventByHour(hour);
+    const slot = SLOTS.find(s => s.hour === hour);
 
     let date = new Date(now);
     date.setUTCHours(hour, 0, 0, 0);
@@ -70,14 +81,13 @@ function getNextEvents() {
       date.setUTCDate(date.getUTCDate() + 1);
     }
 
-    results.push({
-      type: eventType,
+    future.push({
+      type: slot.type,
       time: Math.floor(date.getTime() / 1000)
     });
   }
 
-  // ZWRACAMY 3 NAJBLIŻSZE
-  return results.slice(0, 3);
+  return future.slice(0, 3);
 }
 
 // ================= EMBEDS =================
@@ -86,7 +96,6 @@ function embedEgg() {
   return new EmbedBuilder()
     .setColor("Yellow")
     .setTitle("🥚 **RNG EGG EVENT**")
-    .setDescription("**Otwieraj jajka i zdobywaj punkty Tieru!**")
     .setThumbnail("https://imgur.com/JqyeITl.png");
 }
 
@@ -94,7 +103,6 @@ function embedSpin() {
   return new EmbedBuilder()
     .setColor("Purple")
     .setTitle("🎡 **DEV SPIN EVENT**")
-    .setDescription("**Kręć kołem i zdobywaj nagrody!**")
     .setThumbnail("https://imgur.com/NJI7052.png");
 }
 
@@ -102,7 +110,6 @@ function embedMerchant1() {
   return new EmbedBuilder()
     .setColor("Gold")
     .setTitle("💰 **HONEY MERCHANT**")
-    .setDescription("Za miód kupisz przedmioty\n\n**Szansa Supreme: 110%**")
     .setThumbnail("https://imgur.com/zhLC0zn.png");
 }
 
@@ -110,32 +117,26 @@ function embedMerchant2() {
   return new EmbedBuilder()
     .setColor("Red")
     .setTitle("🔥 **BOSS MERCHANT**")
-    .setDescription("Na mapie Anniversary Event\n\n**Szansa Supreme: 125%**\n\n⏳ Znika po 15 minutach")
+    .setDescription("⏳ Znika po 15 minutach")
     .setThumbnail("https://imgur.com/yFvb6jY.png");
 }
 
-// ================= SEND EVENT =================
+// ================= SEND =================
 
 async function sendEvent() {
   const channel = await client.channels.fetch(CHANNEL_ID);
   const event = getCurrentEvent();
 
   if (event === "egg") {
-    await channel.send({
-      content: `<@&${ROLES.egg}>`,
-      embeds: [embedEgg()]
-    });
+    channel.send({ content: `<@&${ROLES.egg}>`, embeds: [embedEgg()] });
   }
 
   if (event === "spin") {
-    await channel.send({
-      content: `<@&${ROLES.spin}>`,
-      embeds: [embedSpin()]
-    });
+    channel.send({ content: `<@&${ROLES.spin}>`, embeds: [embedSpin()] });
   }
 
   if (event === "merchant") {
-    await channel.send({
+    channel.send({
       content: `<@&${ROLES.merchant}>`,
       embeds: [embedMerchant1(), embedMerchant2()]
     });
@@ -147,31 +148,23 @@ async function sendEvent() {
 setInterval(() => {
   const now = new Date();
 
-  // EVENT DOKŁADNIE
   if (now.getUTCMinutes() === 0 && now.getUTCSeconds() === 0) {
     sendEvent();
   }
 
-  // 5 MIN PRZED
   if (now.getUTCMinutes() === 55 && now.getUTCSeconds() === 0) {
     client.channels.cache.get(CHANNEL_ID)
-      ?.send("⏰ **Event za 5 minut!**");
+      ?.send("⏰ Event za 5 minut!");
   }
 
 }, 1000);
-
-// ================= DM SYSTEM =================
-
-const userDM = new Map();
 
 // ================= COMMANDS =================
 
 const commands = [
   new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
-  new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy"),
-  new SlashCommandBuilder().setName("test-ping").setDescription("Test"),
-  new SlashCommandBuilder().setName("get-role").setDescription("Role"),
-  new SlashCommandBuilder().setName("set-dm").setDescription("DM powiadomienia")
+  new SlashCommandBuilder().setName("next-events").setDescription("Next"),
+  new SlashCommandBuilder().setName("test-ping").setDescription("Test")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -187,62 +180,39 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 client.on("interactionCreate", async (i) => {
 
-  if (i.isChatInputCommand()) {
+  if (!i.isChatInputCommand()) return;
 
-    if (i.commandName === "event") {
-      const e = getCurrentEvent();
+  if (i.commandName === "event") {
+    const e = getCurrentEvent();
 
-      if (e === "egg") return i.reply({ embeds: [embedEgg()] });
-      if (e === "spin") return i.reply({ embeds: [embedSpin()] });
-      if (e === "merchant") return i.reply({ embeds: [embedMerchant1(), embedMerchant2()] });
-    }
-
-    if (i.commandName === "next-events") {
-      const next = getNextEvents();
-
-      const embed = new EmbedBuilder()
-        .setColor("Green")
-        .setTitle("📅 **NASTĘPNE EVENTY**")
-        .setDescription(
-          `**${next[0].type.toUpperCase()}**\n<t:${next[0].time}:R>\n<t:${next[0].time}:F>\n\n` +
-          `**${next[1].type.toUpperCase()}**\n<t:${next[1].time}:R>\n<t:${next[1].time}:F>`
-        );
-
-      i.reply({ embeds: [embed] });
-    }
-
-    if (i.commandName === "test-ping") {
-      await sendEvent();
-      i.reply({ content: "✅ OK", ephemeral: true });
-    }
-
-    if (i.commandName === "set-dm") {
-      const row = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId("dm")
-          .setPlaceholder("Wybierz powiadomienia")
-          .addOptions([
-            { label: "RNG EGG", value: "egg" },
-            { label: "MERCHANT", value: "merchant" },
-            { label: "SPIN", value: "spin" }
-          ])
-      );
-
-      i.reply({ content: "📩 Wybierz:", components: [row], ephemeral: true });
-    }
+    if (e === "egg") return i.reply({ embeds: [embedEgg()] });
+    if (e === "spin") return i.reply({ embeds: [embedSpin()] });
+    if (e === "merchant") return i.reply({ embeds: [embedMerchant1(), embedMerchant2()] });
   }
 
-  if (i.isStringSelectMenu()) {
-    if (i.customId === "dm") {
-      userDM.set(i.user.id, i.values[0]);
-      return i.reply({ content: "✅ Ustawiono DM", ephemeral: true });
-    }
+  if (i.commandName === "next-events") {
+    const next = getNextEvents();
+
+    const embed = new EmbedBuilder()
+      .setColor("Green")
+      .setTitle("📅 NASTĘPNE EVENTY")
+      .setDescription(
+        `**${next[0].type.toUpperCase()}**\n<t:${next[0].time}:R>\n\n` +
+        `**${next[1].type.toUpperCase()}**\n<t:${next[1].time}:R>`
+      );
+
+    i.reply({ embeds: [embed] });
+  }
+
+  if (i.commandName === "test-ping") {
+    sendEvent();
+    i.reply({ content: "OK", ephemeral: true });
   }
 
 });
 
 client.once("clientReady", () => {
-  console.log("✅ BOT ONLINE");
+  console.log("BOT ONLINE");
 });
 
 client.login(TOKEN);
