@@ -34,13 +34,28 @@ const IMAGES = {
 };
 
 //////////////////////////////////////////////////
-// 🎯 ROLE (USTAWIASZ KOMENDĄ)
+// 🎯 ROLE
 //////////////////////////////////////////////////
 
 let roles = {
     egg: null,
     merchant: null,
     spin: null
+};
+
+//////////////////////////////////////////////////
+// 🎁 GIVEAWAY DATA
+//////////////////////////////////////////////////
+
+let giveaway = {
+    active: false,
+    prize: "",
+    winners: 1,
+    entries: {},
+    rolesBonus: {},
+    requiredMessages: 0,
+    image: null,
+    duration: 0
 };
 
 //////////////////////////////////////////////////
@@ -139,6 +154,51 @@ function embedSpin() {
 }
 
 //////////////////////////////////////////////////
+// 🎁 GIVEAWAY EMBED
+//////////////////////////////////////////////////
+
+function buildGiveawayEmbed() {
+
+    const rolesText = Object.entries(giveaway.rolesBonus)
+        .map(([id, val]) => `<@&${id}>: **${val} entries**`)
+        .join("\n") || "Brak";
+
+    const end = Math.floor((Date.now() + giveaway.duration) / 1000);
+
+    return new EmbedBuilder()
+        .setTitle(`🎁 ${giveaway.prize}`)
+        .setDescription(
+`Kliknij 🎉 aby wziąć udział!
+
+🏆 Wygrani: **${giveaway.winners}**
+⏰ Koniec: <t:${end}:R>
+
+━━━━━━━━━━━━━━━━━━
+
+🎯 **DODATKOWE LOSY**
+${rolesText}
+
+━━━━━━━━━━━━━━━━━━
+
+📨 Wymagania:
+➜ ${giveaway.requiredMessages} wiadomości`
+        )
+        .setImage(giveaway.image || null)
+        .setColor(0x00ffcc);
+}
+
+//////////////////////////////////////////////////
+// 🔧 TIME PARSER
+//////////////////////////////////////////////////
+
+function parseTime(str) {
+    const num = parseInt(str);
+    if (str.endsWith("m")) return num * 60000;
+    if (str.endsWith("h")) return num * 3600000;
+    return 60000;
+}
+
+//////////////////////////////////////////////////
 // 🔄 KOMENDY
 //////////////////////////////////////////////////
 
@@ -146,40 +206,45 @@ async function registerCommands() {
 
     const commands = [
 
-        new SlashCommandBuilder()
-            .setName('event')
-            .setDescription('Aktualny event'),
+        new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
 
-        new SlashCommandBuilder()
-            .setName('next-events')
-            .setDescription('Następne eventy'),
+        new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
 
-        new SlashCommandBuilder()
-            .setName('test-event')
-            .setDescription('Test event'),
+        new SlashCommandBuilder().setName('test-event').setDescription('Test event'),
 
-        new SlashCommandBuilder()
-            .setName('refresh')
-            .setDescription('Odśwież komendy'),
+        new SlashCommandBuilder().setName('refresh').setDescription('Odśwież komendy'),
 
         new SlashCommandBuilder()
             .setName('set-role')
-            .setDescription('Ustaw rolę dla eventu')
+            .setDescription('Ustaw rolę')
             .addStringOption(o =>
                 o.setName('event')
-                 .setDescription('Typ eventu')
                  .setRequired(true)
                  .addChoices(
-                    { name: 'RNG EGG', value: 'egg' },
-                    { name: 'MERCHANT', value: 'merchant' },
-                    { name: 'DEV SPIN', value: 'spin' }
+                    { name: 'egg', value: 'egg' },
+                    { name: 'merchant', value: 'merchant' },
+                    { name: 'spin', value: 'spin' }
                  )
             )
             .addRoleOption(o =>
                 o.setName('rola')
-                 .setDescription('Rola')
                  .setRequired(true)
-            )
+            ),
+
+        new SlashCommandBuilder()
+            .setName('giveaway')
+            .setDescription('Stwórz giveaway')
+            .addStringOption(o=>o.setName('nagroda').setRequired(true))
+            .addStringOption(o=>o.setName('czas').setRequired(true))
+            .addIntegerOption(o=>o.setName('wygrani').setRequired(true))
+            .addIntegerOption(o=>o.setName('wiadomosci'))
+            .addStringOption(o=>o.setName('obrazek')),
+
+        new SlashCommandBuilder()
+            .setName('giveaway-role')
+            .setDescription('Bonus roli')
+            .addRoleOption(o=>o.setName('rola').setRequired(true))
+            .addIntegerOption(o=>o.setName('bonus').setRequired(true))
 
     ].map(c => c.toJSON());
 
@@ -189,8 +254,6 @@ async function registerCommands() {
         Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
         { body: commands }
     );
-
-    console.log("✅ Komendy OK");
 }
 
 //////////////////////////////////////////////////
@@ -206,29 +269,51 @@ client.once('clientReady', async () => {
 
         try {
             const now = getPolishTime();
-            if (now.getMinutes() !== 0) return;
+            const h = now.getHours();
+            const m = now.getMinutes();
 
-            const type = getEvent(now.getHours());
+            const type = getEvent(h);
             const role = roles[type];
-
             if (!role) return;
 
             const channel = await client.channels.fetch(CHANNEL_ID);
 
-            if (type === "merchant") {
+            // EVENT START
+            if (m === 0) {
+
+                if (type === "merchant") {
+                    await channel.send({
+                        content: `<@&${role}>`,
+                        embeds: [embedBoss(), embedHoney()]
+                    });
+                } else if (type === "egg") {
+                    await channel.send({
+                        content: `<@&${role}>`,
+                        embeds: [embedEgg()]
+                    });
+                } else {
+                    await channel.send({
+                        content: `<@&${role}>`,
+                        embeds: [embedSpin()]
+                    });
+                }
+            }
+
+            // PRZYPOMNIENIE
+            if (m === 55) {
+
+                const next = getEvent((h + 1) % 24);
+                const nextRole = roles[next];
+                if (!nextRole) return;
+
+                const embed = new EmbedBuilder()
+                    .setTitle("⏰┃ZBLIŻA SIĘ EVENT")
+                    .setDescription(`🔥 ${next.toUpperCase()} za 5 minut`)
+                    .setColor(0xff9900);
+
                 await channel.send({
-                    content: `<@&${role}>`,
-                    embeds: [embedBoss(), embedHoney()]
-                });
-            } else if (type === "egg") {
-                await channel.send({
-                    content: `<@&${role}>`,
-                    embeds: [embedEgg()]
-                });
-            } else {
-                await channel.send({
-                    content: `<@&${role}>`,
-                    embeds: [embedSpin()]
+                    content: `<@&${nextRole}>`,
+                    embeds: [embed]
                 });
             }
 
@@ -248,72 +333,59 @@ client.on('interactionCreate', async i => {
 
     try {
 
+        if (i.isButton() && i.customId === "join") {
+            giveaway.entries[i.user.id] = 1;
+            return i.reply({ content: "🎉 Dołączono!", ephemeral: true });
+        }
+
         if (!i.isChatInputCommand()) return;
 
         await i.deferReply();
 
-        // SET ROLE
         if (i.commandName === "set-role") {
-
-            const type = i.options.getString("event");
-            const role = i.options.getRole("rola");
-
-            roles[type] = role.id;
-
-            return i.editReply({
-                content: `✅ Ustawiono rolę dla ${type}`
-            });
+            roles[i.options.getString("event")] = i.options.getRole("rola").id;
+            return i.editReply("✅ Ustawiono rolę");
         }
 
-        // EVENT
         if (i.commandName === "event") {
-
             const type = getEvent(getPolishTime().getHours());
 
             if (type === "merchant") {
-                return i.editReply({
-                    embeds: [embedBoss(), embedHoney()]
-                });
+                return i.editReply({ embeds: [embedBoss(), embedHoney()] });
             }
 
-            if (type === "egg") {
-                return i.editReply({ embeds: [embedEgg()] });
-            }
+            if (type === "egg") return i.editReply({ embeds: [embedEgg()] });
 
             return i.editReply({ embeds: [embedSpin()] });
         }
 
-        // NEXT EVENTS
         if (i.commandName === "next-events") {
 
             const now = getPolishTime();
             const h = now.getHours();
 
-            function format(offset) {
+            const ts = (off) => {
                 const d = new Date(now);
-                d.setHours((h + offset) % 24);
-                d.setMinutes(0);
-                return `${String(d.getHours()).padStart(2,"0")}:00 ${d.toLocaleDateString("pl-PL")}`;
-            }
+                d.setHours((h + off) % 24);
+                return Math.floor(d.getTime()/1000);
+            };
 
             return i.editReply({
                 embeds: [
                     new EmbedBuilder()
                         .setTitle("📊┃EVENTY")
                         .setDescription(
-`🔥 TERAZ  
-➜ ${getEvent(h)}
+`🔥 TERAZ: **${getEvent(h)}**
 
-⏰ NASTĘPNE  
-➜ ${format(1)} → ${getEvent((h+1)%24)}  
-➜ ${format(2)} → ${getEvent((h+2)%24)}`
+⏰ NASTĘPNE:
+➜ ${getEvent((h+1)%24)} <t:${ts(1)}:R>
+➜ ${getEvent((h+2)%24)} <t:${ts(2)}:R>`
                         )
                         .setColor(0x5865F2)
                 ]
             });
         }
 
-        // TEST EVENT
         if (i.commandName === "test-event") {
 
             const type = getEvent(getPolishTime().getHours());
@@ -338,13 +410,56 @@ client.on('interactionCreate', async i => {
                 });
             }
 
-            return i.editReply({ content: "✅ Wysłano test" });
+            return i.editReply("✅ Test wysłany");
         }
 
-        // REFRESH
+        if (i.commandName === "giveaway") {
+
+            giveaway.prize = i.options.getString("nagroda");
+            giveaway.duration = parseTime(i.options.getString("czas"));
+            giveaway.winners = i.options.getInteger("wygrani");
+            giveaway.requiredMessages = i.options.getInteger("wiadomosci") || 0;
+            giveaway.image = i.options.getString("obrazek");
+
+            giveaway.entries = {};
+
+            const msg = await i.editReply({
+                embeds: [buildGiveawayEmbed()],
+                components: [
+                    new ActionRowBuilder().addComponents(
+                        new ButtonBuilder()
+                            .setCustomId("join")
+                            .setLabel("🎉 Weź udział")
+                            .setStyle(ButtonStyle.Success)
+                    )
+                ]
+            });
+
+            setTimeout(async () => {
+
+                const users = Object.keys(giveaway.entries);
+                if (!users.length) return;
+
+                const winner = users[Math.floor(Math.random()*users.length)];
+
+                await msg.reply(`🎉 Wygrał: <@${winner}>`);
+
+            }, giveaway.duration);
+        }
+
+        if (i.commandName === "giveaway-role") {
+
+            const role = i.options.getRole("rola");
+            const bonus = i.options.getInteger("bonus");
+
+            giveaway.rolesBonus[role.id] = bonus;
+
+            return i.editReply("✅ Dodano bonus");
+        }
+
         if (i.commandName === "refresh") {
             await registerCommands();
-            return i.editReply({ content: "✅ Odświeżono komendy" });
+            return i.editReply("✅ Odświeżono");
         }
 
     } catch (err) {
