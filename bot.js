@@ -26,61 +26,61 @@ const ROLES = {
   spin: "1484911421903999127"
 };
 
-// CYKL EVENTÓW
-const cycle = ["egg", "merchant", "spin"];
+// GODZINY (ŚWIĘTE)
+const HOURS = {
+  egg: [0,3,6,9,12,15,18,21],
+  merchant: [1,4,7,10,13,16,19,22],
+  spin: [2,5,8,11,14,17,20,23]
+};
 
-// ================= CZAS =================
+// ================= TIME =================
 
-function getCurrentHourUTC() {
+function getUTCHour() {
   return new Date().getUTCHours();
 }
 
 // znajdź event po godzinie
 function getEventByHour(hour) {
-  if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
-  if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
-  if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
+  for (const type in HOURS) {
+    if (HOURS[type].includes(hour)) return type;
+  }
 }
 
 // aktualny event
 function getCurrentEvent() {
-  return getEventByHour(getCurrentHourUTC());
+  return getEventByHour(getUTCHour());
 }
 
-// 🔥 KLUCZOWE — poprawne next eventy
+// 🔥 NAJWAŻNIEJSZE — poprawny NEXT
 function getNextEvents() {
   const now = new Date();
   const currentHour = now.getUTCHours();
 
-  const currentEvent = getEventByHour(currentHour);
-  const currentIndex = cycle.indexOf(currentEvent);
-
   let results = [];
 
-  for (let i = 1; i <= 3; i++) {
-    const nextIndex = (currentIndex + i) % 3;
-    const nextType = cycle[nextIndex];
-
+  for (let i = 1; i <= 24; i++) {
     let hour = (currentHour + i) % 24;
 
-    let nextDate = new Date(now);
-    nextDate.setUTCHours(hour, 0, 0, 0);
+    const eventType = getEventByHour(hour);
+
+    let date = new Date(now);
+    date.setUTCHours(hour, 0, 0, 0);
 
     if (hour <= currentHour) {
-      nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+      date.setUTCDate(date.getUTCDate() + 1);
     }
 
     results.push({
-      type: nextType,
-      time: Math.floor(nextDate.getTime() / 1000)
+      type: eventType,
+      time: Math.floor(date.getTime() / 1000)
     });
   }
 
-  return results;
+  // ZWRACAMY 3 NAJBLIŻSZE
+  return results.slice(0, 3);
 }
 
-
-// ================= EMBEDY =================
+// ================= EMBEDS =================
 
 function embedEgg() {
   return new EmbedBuilder()
@@ -114,8 +114,7 @@ function embedMerchant2() {
     .setThumbnail("https://imgur.com/yFvb6jY.png");
 }
 
-
-// ================= WYSYŁKA EVENTU =================
+// ================= SEND EVENT =================
 
 async function sendEvent() {
   const channel = await client.channels.fetch(CHANNEL_ID);
@@ -143,13 +142,12 @@ async function sendEvent() {
   }
 }
 
-
 // ================= TIMER =================
 
 setInterval(() => {
   const now = new Date();
 
-  // EVENT DOKŁADNIE O GODZINIE
+  // EVENT DOKŁADNIE
   if (now.getUTCMinutes() === 0 && now.getUTCSeconds() === 0) {
     sendEvent();
   }
@@ -162,15 +160,18 @@ setInterval(() => {
 
 }, 1000);
 
+// ================= DM SYSTEM =================
 
-// ================= KOMENDY =================
+const userDM = new Map();
+
+// ================= COMMANDS =================
 
 const commands = [
   new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
   new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy"),
-  new SlashCommandBuilder().setName("test-ping").setDescription("Test eventu"),
-  new SlashCommandBuilder().setName("get-role").setDescription("Panel ról"),
-  new SlashCommandBuilder().setName("set-dm").setDescription("Powiadomienia DM")
+  new SlashCommandBuilder().setName("test-ping").setDescription("Test"),
+  new SlashCommandBuilder().setName("get-role").setDescription("Role"),
+  new SlashCommandBuilder().setName("set-dm").setDescription("DM powiadomienia")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -182,8 +183,7 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
   );
 })();
 
-
-// ================= INTERAKCJE =================
+// ================= INTERACTION =================
 
 client.on("interactionCreate", async (i) => {
 
@@ -213,14 +213,14 @@ client.on("interactionCreate", async (i) => {
 
     if (i.commandName === "test-ping") {
       await sendEvent();
-      i.reply({ content: "✅ Test wysłany", ephemeral: true });
+      i.reply({ content: "✅ OK", ephemeral: true });
     }
 
-    if (i.commandName === "get-role") {
+    if (i.commandName === "set-dm") {
       const row = new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
-          .setCustomId("roles")
-          .setPlaceholder("Wybierz role")
+          .setCustomId("dm")
+          .setPlaceholder("Wybierz powiadomienia")
           .addOptions([
             { label: "RNG EGG", value: "egg" },
             { label: "MERCHANT", value: "merchant" },
@@ -228,23 +228,14 @@ client.on("interactionCreate", async (i) => {
           ])
       );
 
-      i.reply({ content: "🎭 Wybierz role:", components: [row], ephemeral: true });
+      i.reply({ content: "📩 Wybierz:", components: [row], ephemeral: true });
     }
-
   }
 
   if (i.isStringSelectMenu()) {
-    if (i.customId === "roles") {
-      const role = ROLES[i.values[0]];
-      const member = await i.guild.members.fetch(i.user.id);
-
-      if (member.roles.cache.has(role)) {
-        await member.roles.remove(role);
-        return i.reply({ content: "❌ Usunięto rolę", ephemeral: true });
-      } else {
-        await member.roles.add(role);
-        return i.reply({ content: "✅ Dodano rolę", ephemeral: true });
-      }
+    if (i.customId === "dm") {
+      userDM.set(i.user.id, i.values[0]);
+      return i.reply({ content: "✅ Ustawiono DM", ephemeral: true });
     }
   }
 
