@@ -72,7 +72,7 @@ function getPolishTime() {
 }
 
 //////////////////////////////////////////////////
-// 🎯 EVENTY (POPRAWIONE GODZINY)
+// 🎯 EVENTY
 //////////////////////////////////////////////////
 
 function getEvent(h) {
@@ -82,20 +82,20 @@ function getEvent(h) {
 }
 
 //////////////////////////////////////////////////
-// 🎨 EMBEDY
+// 🎨 EVENT EMBEDY (PRO)
 //////////////////////////////////////////////////
 
 function embedEgg() {
     return new EmbedBuilder()
-        .setTitle("🥚┃RNG EGG")
+        .setTitle("🥚┃**RNG EGG**")
         .setDescription(
-`🎲 Otwieraj jajka i zdobywaj pety
+`🎲 **Otwieraj jajka i zdobywaj pety**
 
-➜ Zdobywaj punkty do Tieru  
-➜ Im lepsze pety, tym więcej punktów  
-➜ Wyższy Tier daje lepsze bonusy  
+➜ **Zdobywaj punkty do Tieru**  
+➜ **Lepsze pety = więcej punktów**  
+➜ **Wyższy Tier = lepsze bonusy**
 
-📍 Sprawdź swoje postępy`
+📍 **Sprawdź swoje postępy**`
         )
         .setThumbnail(IMAGES.egg)
         .setColor(0x00ffcc)
@@ -105,16 +105,16 @@ function embedEgg() {
 
 function embedBoss() {
     return new EmbedBuilder()
-        .setTitle("🐝┃MERCHANT BOSS")
+        .setTitle("🐝┃**MERCHANT BOSS**")
         .setDescription(
-`🎉 Eventowy Merchant
+`🎉 **Eventowy Merchant**
 
-📍 Mapa: Anniversary Event  
+📍 **Mapa: Anniversary Event**
 
-➜ Za żetony z bossów można zakupić przedmioty  
-🎯 Szansa na Supreme: 125%  
+➜ **Za żetony z bossów kupisz przedmioty**  
+🎯 **Szansa na Supreme: 125%**
 
-⏳ Przejdź i sprawdź ofertę`
+⏳ **Przejdź i sprawdź ofertę**`
         )
         .setThumbnail(IMAGES.boss)
         .setColor(0xff0000)
@@ -124,16 +124,16 @@ function embedBoss() {
 
 function embedHoney() {
     return new EmbedBuilder()
-        .setTitle("🍯┃HONEY MERCHANT")
+        .setTitle("🍯┃**HONEY MERCHANT**")
         .setDescription(
-`🍯 Eventowy Merchant
+`🍯 **Eventowy Merchant**
 
-📍 Mapa: Bee World  
+📍 **Mapa: Bee World**
 
-➜ Za miód można zakupić przedmioty  
-🎯 Szansa na Supreme: 110%  
+➜ **Za miód kupisz przedmioty**  
+🎯 **Szansa na Supreme: 110%**
 
-⏳ Przejdź i sprawdź ofertę`
+⏳ **Przejdź i sprawdź ofertę**`
         )
         .setThumbnail(IMAGES.honey)
         .setColor(0xffcc00)
@@ -143,13 +143,13 @@ function embedHoney() {
 
 function embedSpin() {
     return new EmbedBuilder()
-        .setTitle("🎰┃DEV SPIN")
+        .setTitle("🎰┃**DEV SPIN**")
         .setDescription(
-`🎰 Zakręć kołem i zdobądź nagrody
+`🎰 **Zakręć kołem i zdobądź nagrody**
 
-🎯 Szansa na Supreme: ??%  
+🎯 **Szansa na Supreme: ??%**
 
-🍀 Spróbuj swojego szczęścia`
+🍀 **Spróbuj swojego szczęścia**`
         )
         .setThumbnail(IMAGES.spin)
         .setColor(0x9b59b6)
@@ -158,41 +158,48 @@ function embedSpin() {
 }
 
 //////////////////////////////////////////////////
-// 🎁 GIVEAWAY EMBED
+// 🎁 GIVEAWAY EMBED (PRO)
 //////////////////////////////////////////////////
 
 function buildGiveawayEmbed() {
 
     const rolesText = Object.entries(giveaway.rolesBonus)
-        .map(([id, val]) => `<@&${id}>: **${val} wejść**`)
-        .join("\n") || "Brak";
+        .map(([id, val]) => `➜ <@&${id}> — **${val} wejść**`)
+        .join("\n") || "➜ **Brak dodatkowych losów**";
 
     const end = Math.floor((Date.now() + giveaway.duration) / 1000);
 
     return new EmbedBuilder()
-        .setTitle(`🎁 ${giveaway.prize}`)
+        .setTitle(`🎁┃**${giveaway.prize}**`)
         .setDescription(
-`Kliknij 🎉, aby wziąć udział!
-
-🏆 Wygrani: **${giveaway.winners}**
-⏰ Koniec: <t:${end}:R>
+`🎉 **Kliknij przycisk poniżej, aby wziąć udział!**
 
 ━━━━━━━━━━━━━━━━━━
 
-🎯 **Dodatkowe losy**
+🏆 **INFORMACJE**
+➜ **Wygrani:** \`${giveaway.winners}\`  
+➜ **Koniec:** <t:${end}:R>  
+
+━━━━━━━━━━━━━━━━━━
+
+🎯 **DODATKOWE LOSY**
 ${rolesText}
 
 ━━━━━━━━━━━━━━━━━━
 
-📨 Wymagania:
-➜ ${giveaway.requiredMessages} wiadomości`
+📨 **WYMAGANIA**
+➜ **${giveaway.requiredMessages} wiadomości**
+
+━━━━━━━━━━━━━━━━━━`
         )
-        .setImage(giveaway.image || null)
-        .setColor(0x00ffcc);
+        .setColor(0x00ffcc)
+        .setFooter({ text: "Powodzenia wszystkim uczestnikom!" })
+        .setTimestamp()
+        .setImage(giveaway.image || null);
 }
 
 //////////////////////////////////////////////////
-// ⏱️ TIME PARSER
+// ⏱️ PARSE TIME
 //////////////////////////////////////////////////
 
 function parseTime(str) {
@@ -216,7 +223,7 @@ async function registerCommands() {
 
         new SlashCommandBuilder()
             .setName('next-events')
-            .setDescription('Sprawdź nadchodzące eventy'),
+            .setDescription('Sprawdź następne eventy'),
 
         new SlashCommandBuilder()
             .setName('test-event')
@@ -274,7 +281,7 @@ async function registerCommands() {
 
         new SlashCommandBuilder()
             .setName('giveaway-role')
-            .setDescription('Dodaj bonus dla roli w giveaway')
+            .setDescription('Dodaj bonus dla roli')
             .addRoleOption(o =>
                 o.setName('rola')
                  .setDescription('Rola')
@@ -282,7 +289,7 @@ async function registerCommands() {
             )
             .addIntegerOption(o =>
                 o.setName('bonus')
-                 .setDescription('Ilość dodatkowych wejść')
+                 .setDescription('Dodatkowe wejścia')
                  .setRequired(true)
             )
 
@@ -297,7 +304,7 @@ async function registerCommands() {
 }
 
 //////////////////////////////////////////////////
-// 🚀 START
+// 🚀 START + CRON
 //////////////////////////////////////////////////
 
 client.once('clientReady', async () => {
@@ -307,43 +314,38 @@ client.once('clientReady', async () => {
 
     cron.schedule('* * * * *', async () => {
 
-        try {
-            const now = getPolishTime();
-            const h = now.getHours();
-            const m = now.getMinutes();
+        const now = getPolishTime();
+        const h = now.getHours();
+        const m = now.getMinutes();
 
-            const type = getEvent(h);
-            const role = roles[type];
-            if (!role) return;
+        const type = getEvent(h);
+        const role = roles[type];
+        if (!role) return;
 
-            const channel = await client.channels.fetch(CHANNEL_ID);
+        const channel = await client.channels.fetch(CHANNEL_ID);
 
-            if (m === 0) {
+        if (m === 0) {
 
-                if (type === "merchant") {
-                    await channel.send({
-                        content: `<@&${role}>`,
-                        embeds: [embedBoss(), embedHoney()]
-                    });
-                }
-
-                if (type === "egg") {
-                    await channel.send({
-                        content: `<@&${role}>`,
-                        embeds: [embedEgg()]
-                    });
-                }
-
-                if (type === "spin") {
-                    await channel.send({
-                        content: `<@&${role}>`,
-                        embeds: [embedSpin()]
-                    });
-                }
+            if (type === "merchant") {
+                await channel.send({
+                    content: `<@&${role}>`,
+                    embeds: [embedBoss(), embedHoney()]
+                });
             }
 
-        } catch (e) {
-            console.log(e);
+            if (type === "egg") {
+                await channel.send({
+                    content: `<@&${role}>`,
+                    embeds: [embedEgg()]
+                });
+            }
+
+            if (type === "spin") {
+                await channel.send({
+                    content: `<@&${role}>`,
+                    embeds: [embedSpin()]
+                });
+            }
         }
 
     });
@@ -369,19 +371,14 @@ client.on('interactionCreate', async i => {
 
         if (i.commandName === "set-role") {
             roles[i.options.getString("event")] = i.options.getRole("rola").id;
-            return i.editReply("✅ Rola została ustawiona");
+            return i.editReply("✅ Rola ustawiona");
         }
 
         if (i.commandName === "event") {
-
             const type = getEvent(getPolishTime().getHours());
 
-            if (type === "merchant") {
-                return i.editReply({ embeds: [embedBoss(), embedHoney()] });
-            }
-
+            if (type === "merchant") return i.editReply({ embeds: [embedBoss(), embedHoney()] });
             if (type === "egg") return i.editReply({ embeds: [embedEgg()] });
-
             return i.editReply({ embeds: [embedSpin()] });
         }
 
@@ -400,13 +397,13 @@ client.on('interactionCreate', async i => {
             return i.editReply({
                 embeds: [
                     new EmbedBuilder()
-                        .setTitle("📊┃Następne eventy")
+                        .setTitle("📊┃**NASTĘPNE EVENTY**")
                         .setDescription(
-`🔥 Aktualny: **${getEvent(h)}**
+`🔥 **Aktualny:** ${getEvent(h)}
 
-⏰ Następne:
-➜ ${getEvent((h+1)%24)} <t:${ts(1)}:R>
-➜ ${getEvent((h+2)%24)} <t:${ts(2)}:R>`
+⏰ **Następne:**
+➜ ${getEvent((h+1)%24)} — <t:${ts(1)}:R>
+➜ ${getEvent((h+2)%24)} — <t:${ts(2)}:R>`
                         )
                         .setColor(0x5865F2)
                 ]
@@ -436,30 +433,26 @@ client.on('interactionCreate', async i => {
             });
 
             setTimeout(async () => {
-
                 const users = Object.keys(giveaway.entries);
                 if (!users.length) return;
 
                 const winner = users[Math.floor(Math.random()*users.length)];
-
                 await msg.reply(`🎉 Wygrał: <@${winner}>`);
-
             }, giveaway.duration);
         }
 
         if (i.commandName === "giveaway-role") {
-
             const role = i.options.getRole("rola");
             const bonus = i.options.getInteger("bonus");
 
             giveaway.rolesBonus[role.id] = bonus;
 
-            return i.editReply("✅ Dodano bonus dla roli");
+            return i.editReply("✅ Dodano bonus");
         }
 
         if (i.commandName === "refresh") {
             await registerCommands();
-            return i.editReply("✅ Komendy zostały odświeżone");
+            return i.editReply("✅ Komendy odświeżone");
         }
 
     } catch (err) {
