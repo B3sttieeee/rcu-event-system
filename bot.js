@@ -8,7 +8,8 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    StringSelectMenuBuilder
+    StringSelectMenuBuilder,
+    PermissionsBitField
 } = require('discord.js');
 
 const fs = require('fs');
@@ -23,14 +24,30 @@ const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
 
-// ROLE
+const FILE = './data.json';
+
+// 📦 DATA
+let data = {
+    dm: {},
+    giveawayRoles: {}
+};
+
+if (fs.existsSync(FILE)) {
+    data = JSON.parse(fs.readFileSync(FILE));
+}
+
+function save() {
+    fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
+}
+
+// 📌 STAŁE ROLE
 const ROLES = {
     egg: "1476000993119568105",
     merchant: "1476000993660502139",
     spin: "1484911421903999127"
 };
 
-// OBRAZY
+// 🖼️ OBRAZY
 const IMAGES = {
     egg: "https://imgur.com/pY2xNUL.png",
     boss: "https://imgur.com/VU9KdMS.png",
@@ -38,231 +55,287 @@ const IMAGES = {
     spin: "https://imgur.com/LeXDgiJ.png"
 };
 
-let data = {
-    dm: {},
-    giveaways: {},
-    bonusRoles: {} // roleId: multiplier
-};
-
-function save() {
-    fs.writeFileSync('./data.json', JSON.stringify(data, null, 2));
-}
-
-// 🔥 CZAS PL (NAPRAWIONY NA SZTYWNO)
-function getPolishTime() {
+// ⏰ CZAS (NAPRAWIONY)
+function getTime() {
     const now = new Date();
-    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
-    return new Date(utc + (3600000 * 1)); // UTC+1 (PL)
+    const warsaw = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+    return warsaw;
 }
 
-// EVENT
+// 🎯 EVENT
 function getEvent(h) {
     if ([0,3,6,9,12,15,18,21].includes(h)) return "egg";
     if ([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
-    if ([2,5,8,11,14,17,20,23].includes(h)) return "spin";
+    return "spin";
 }
 
-// NEXT EVENTS (NAPRAWIONE 100%)
-function getNextEvents() {
-
-    const now = getPolishTime();
-    let list = [];
-
-    for (let h = 0; h < 24; h++) {
-
-        let date = new Date(now);
-        date.setHours(h,0,0,0);
-
-        if (date <= now) date.setDate(date.getDate()+1);
-
-        list.push({
-            type: getEvent(h),
-            time: date.getTime()
-        });
+// ⏭️ następny event (NAPRAWIONY)
+function getNextEvent(currentHour) {
+    for (let i = 1; i <= 24; i++) {
+        const h = (currentHour + i) % 24;
+        const type = getEvent(h);
+        return { hour: h, type };
     }
-
-    list.sort((a,b)=>a.time-b.time);
-    return list.slice(0,2);
 }
 
-// EMBEDY
-function embedEgg() {
-    return new EmbedBuilder()
-        .setTitle("🥚 **RNG EGG**")
-        .setDescription(
-`**Otwieraj jajka i zdobywaj punkty Tieru!**
-
-• Lepsze pety = więcej punktów  
-• Lepszy Tier = lepsze nagrody`
-        )
-        .setThumbnail(IMAGES.egg)
-        .setColor(0xffcc00);
+// 📩 DM
+async function sendDM(type, embed) {
+    for (const userId in data.dm) {
+        if (!data.dm[userId]?.includes(type)) continue;
+        try {
+            const user = await client.users.fetch(userId);
+            await user.send({ embeds: [embed] });
+        } catch {}
+    }
 }
 
-function embedHoney() {
-    return new EmbedBuilder()
-        .setTitle("🐝 **HONEY MERCHANT**")
-        .setDescription(
-`Za miód kupisz przedmioty  
-Szansa Supreme: **110%**
+// 🎉 GIVEAWAY
+let giveaways = new Map();
 
-⏳ Znajdziesz na mapie Bee World  
-⏳ Znika po 15 minutach`
-        )
-        .setThumbnail(IMAGES.honey)
-        .setColor(0xff9900);
+function parseTime(str) {
+    const num = parseInt(str);
+    if (str.endsWith("s")) return num * 1000;
+    if (str.endsWith("m")) return num * 60000;
+    if (str.endsWith("h")) return num * 3600000;
+    if (str.endsWith("d")) return num * 86400000;
+    return 60000;
 }
 
-function embedBoss() {
-    return new EmbedBuilder()
-        .setTitle("🔴 **BOSS MERCHANT**")
-        .setDescription(
-`Eventowy merchant  
-Na mapie Anniversary Event  
-
-Szansa Supreme: **125%**
-
-⏳ Znika po 15 minutach`
-        )
-        .setThumbnail(IMAGES.boss)
-        .setColor(0xff0000);
-}
-
-function embedSpin() {
-    return new EmbedBuilder()
-        .setTitle("🎰 **DEV SPIN**")
-        .setDescription(
-`Kręć kołem aby zdobyć nagrody  
-
-Szansa Supreme: **??%**`
-        )
-        .setThumbnail(IMAGES.spin)
-        .setColor(0x00ccff);
-}
-
-// READY
-client.once('clientReady', async () => {
-
-    console.log("✅ BOT ONLINE");
-
+// 🔄 COMMANDS
+async function registerCommands() {
     const commands = [
         new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
         new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
+
         new SlashCommandBuilder().setName('get-role').setDescription('Panel ról'),
-        new SlashCommandBuilder().setName('set-dm').setDescription('DM powiadomienia'),
+
+        new SlashCommandBuilder().setName('set-dm').setDescription('Ustaw powiadomienia DM'),
 
         new SlashCommandBuilder()
             .setName('giveaway')
-            .setDescription('Start giveaway')
+            .setDescription('Stwórz giveaway')
             .addStringOption(o=>o.setName('nagroda').setDescription('Nagroda').setRequired(true))
-            .addStringOption(o=>o.setName('czas').setDescription('np 1h').setRequired(true)),
+            .addStringOption(o=>o.setName('czas').setDescription('Czas np 1h').setRequired(true))
+            .addIntegerOption(o=>o.setName('wygrani').setDescription('Ilu wygranych').setRequired(true)),
 
         new SlashCommandBuilder()
             .setName('giveaway-role')
-            .setDescription('Ustaw bonus wejść')
-            .addRoleOption(o=>o.setName('rola').setRequired(true))
-            .addIntegerOption(o=>o.setName('ile').setRequired(true))
-
+            .setDescription('Dodaj mnożnik roli')
+            .addRoleOption(o=>o.setName('rola').setDescription('Rola').setRequired(true))
+            .addIntegerOption(o=>o.setName('ilosc').setDescription('Ile wejść').setRequired(true))
     ].map(c=>c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 
-    console.log("✅ Komendy OK");
+    console.log("✅ Komendy załadowane");
+}
 
-    // CRON
+// 🚀 READY
+client.once('clientReady', async () => {
+    console.log("✅ BOT ONLINE");
+    await registerCommands();
+
     cron.schedule('* * * * *', async () => {
-
-        const now = getPolishTime();
+        const now = getTime();
         const h = now.getHours();
         const m = now.getMinutes();
 
+        const channel = await client.channels.fetch(CHANNEL_ID);
         const type = getEvent(h);
 
-        const channel = await client.channels.fetch(CHANNEL_ID);
-
-        // 5 MIN BEFORE
+        // 🔔 reminder 5 min
         if (m === 55) {
-            channel.send(`⏰ Za 5 minut: **${type.toUpperCase()}** <@&${ROLES[type]}>`);
+            const next = getNextEvent(h);
+            const role = ROLES[next.type];
+            channel.send(`⏰ Za 5 minut event <@&${role}>`);
         }
 
-        // START
-        if (m === 0) {
+        // 🎯 start
+        if (m !== 0) return;
 
-            if (type === "merchant") {
-                channel.send({
-                    content: `<@&${ROLES.merchant}>`,
-                    embeds: [embedHoney(), embedBoss()]
-                });
-            } else if (type === "egg") {
-                channel.send({
-                    content: `<@&${ROLES.egg}>`,
-                    embeds: [embedEgg()]
-                });
-            } else {
-                channel.send({
-                    content: `<@&${ROLES.spin}>`,
-                    embeds: [embedSpin()]
-                });
-            }
+        const role = ROLES[type];
 
+        if (type === "merchant") {
+            await channel.send(`<@&${role}>`);
+
+            await channel.send({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("🔥 **BOSS MERCHANT**")
+                        .setDescription("**Eventowy merchant na mapie Anniversary Event**\n\n➡️ Sprawdź ofertę!\n⏳ Dostępny 15 minut")
+                        .setThumbnail(IMAGES.boss)
+                ]
+            });
+
+            await channel.send({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("🍯 **HONEY MERCHANT**")
+                        .setDescription("**Eventowy merchant**\n\n➡️ Sprawdź ofertę!\n⏳ Dostępny 15 minut")
+                        .setThumbnail(IMAGES.honey)
+                ]
+            });
+
+        } else {
+
+            const embed = new EmbedBuilder()
+                .setTitle(
+                    type === "egg" ? "🥚 **RNG EGG**" :
+                    "🎰 **DEV SPIN**"
+                )
+                .setDescription(
+                    type === "egg"
+                    ? "**Otwieraj jajka i zdobywaj tier!**"
+                    : "**Kręć kołem i zdobywaj nagrody!**"
+                )
+                .setThumbnail(type === "egg" ? IMAGES.egg : IMAGES.spin);
+
+            await channel.send({
+                content: `<@&${role}>`,
+                embeds: [embed]
+            });
+
+            sendDM(type, embed);
         }
-
     });
-
 });
 
-// INTERACTIONS
+// ⚡ INTERACTIONS
 client.on('interactionCreate', async i => {
 
     if (i.isChatInputCommand()) {
 
-        const now = getPolishTime();
+        const now = getTime();
         const h = now.getHours();
 
+        // EVENT
         if (i.commandName === 'event') {
-
             const type = getEvent(h);
 
-            if (type === "merchant") {
-                return i.reply({ embeds: [embedHoney(), embedBoss()] });
-            }
-
-            if (type === "egg") return i.reply({ embeds: [embedEgg()] });
-            if (type === "spin") return i.reply({ embeds: [embedSpin()] });
+            return i.reply({
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("📊 **AKTUALNY EVENT**")
+                        .setDescription(`🔥 **${type.toUpperCase()}**`)
+                ]
+            });
         }
 
+        // NEXT EVENTS
         if (i.commandName === 'next-events') {
-
-            const next = getNextEvents();
+            const next = getNextEvent(h);
 
             return i.reply({
                 embeds: [
                     new EmbedBuilder()
                         .setTitle("📅 **NASTĘPNE EVENTY**")
-                        .setDescription(
-`🔥 **${next[0].type.toUpperCase()}**
-<t:${Math.floor(next[0].time/1000)}:F>
-
-🔥 **${next[1].type.toUpperCase()}**
-<t:${Math.floor(next[1].time/1000)}:F>`
-                        )
-                        .setColor(0x00ffcc)
+                        .setDescription(`➡️ ${next.type} o ${next.hour}:00`)
                 ]
             });
         }
 
+        // ROLE PANEL
+        if (i.commandName === 'get-role') {
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('roles')
+                .setMinValues(1)
+                .setMaxValues(3)
+                .addOptions([
+                    { label: 'RNG EGG', value: 'egg' },
+                    { label: 'MERCHANT', value: 'merchant' },
+                    { label: 'DEV SPIN', value: 'spin' }
+                ]);
+
+            return i.reply({
+                content: "🎯 Wybierz role:",
+                components: [new ActionRowBuilder().addComponents(menu)],
+                ephemeral: true
+            });
+        }
+
+        // DM
+        if (i.commandName === 'set-dm') {
+
+            const menu = new StringSelectMenuBuilder()
+                .setCustomId('dm')
+                .setMinValues(1)
+                .setMaxValues(3)
+                .addOptions([
+                    { label: 'RNG EGG', value: 'egg' },
+                    { label: 'MERCHANT', value: 'merchant' },
+                    { label: 'DEV SPIN', value: 'spin' }
+                ]);
+
+            return i.reply({
+                content: "📩 Wybierz DM:",
+                components: [new ActionRowBuilder().addComponents(menu)],
+                ephemeral: true
+            });
+        }
+
+        // GIVEAWAY
+        if (i.commandName === 'giveaway') {
+
+            const reward = i.options.getString('nagroda');
+            const time = i.options.getString('czas');
+            const winners = i.options.getInteger('wygrani');
+
+            const ms = parseTime(time);
+            const end = Date.now() + ms;
+
+            const embed = new EmbedBuilder()
+                .setTitle(`🎁 ${reward}`)
+                .setDescription(`Kliknij 🎉 aby wziąć udział!\n\n🏆 Wygrani: ${winners}\n⏳ Koniec: <t:${Math.floor(end/1000)}:R>`);
+
+            const msg = await i.reply({ embeds: [embed], fetchReply: true });
+
+            await msg.react("🎉");
+
+            giveaways.set(msg.id, {
+                end,
+                winners
+            });
+        }
+
+        // GIVEAWAY ROLE BONUS
         if (i.commandName === 'giveaway-role') {
 
             const role = i.options.getRole('rola');
-            const ile = i.options.getInteger('ile');
+            const amount = i.options.getInteger('ilosc');
 
-            data.bonusRoles[role.id] = ile;
+            data.giveawayRoles[role.id] = amount;
             save();
 
-            return i.reply(`✅ ${role} ma teraz x${ile} wejść`);
+            return i.reply({
+                content: `✅ ${role} = ${amount} wejść`,
+                ephemeral: true
+            });
+        }
+    }
+
+    // ROLE PICKER
+    if (i.isStringSelectMenu()) {
+
+        if (i.customId === "roles") {
+            for (const val of i.values) {
+                const roleId = ROLES[val];
+                const has = i.member.roles.cache.has(roleId);
+
+                if (has) await i.member.roles.remove(roleId);
+                else await i.member.roles.add(roleId);
+            }
+
+            return i.update({ content: "✅ Zaktualizowano role", components: [] });
         }
 
+        if (i.customId === "dm") {
+            data.dm[i.user.id] = i.values;
+            save();
+
+            return i.update({ content: "✅ DM zapisane", components: [] });
+        }
     }
 
 });
