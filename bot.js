@@ -3,7 +3,8 @@ const {
   GatewayIntentBits,
   EmbedBuilder,
   ActionRowBuilder,
-  StringSelectMenuBuilder
+  ButtonBuilder,
+  ButtonStyle
 } = require("discord.js");
 
 const fs = require("fs");
@@ -23,30 +24,32 @@ const ROLE_SPIN = "1484911421903999127";
 
 // ================= TIME =================
 
-function getNow() {
-  return new Date();
+// 🔥 KLUCZOWY FIX
+function getNextFullHour() {
+  const now = new Date();
+  const next = new Date(now);
+  next.setMinutes(0, 0, 0);
+  next.setHours(now.getHours() + 1);
+  return next;
 }
 
-// ================= EVENT SYSTEM (FIXED 100%) =================
+// ================= EVENT SYSTEM =================
 
 function getEventByHour(hour) {
-  const mod = hour % 3;
-
-  if (mod === 0) return "egg";
-  if (mod === 1) return "merchant";
-  if (mod === 2) return "spin";
+  if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
+  if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
+  if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
 }
 
-// ================= NEXT EVENTS =================
+// ================= NEXT EVENTS (100% FIXED) =================
 
 function getNextEvents() {
-  const now = getNow();
+  let base = getNextFullHour();
   let events = [];
 
-  for (let i = 1; i <= 3; i++) {
-    let next = new Date(now);
-    next.setMinutes(0, 0, 0);
-    next.setHours(now.getHours() + i);
+  for (let i = 0; i < 3; i++) {
+    let next = new Date(base);
+    next.setHours(base.getHours() + i);
 
     events.push({
       type: getEventByHour(next.getHours()),
@@ -57,7 +60,7 @@ function getNextEvents() {
   return events;
 }
 
-// ================= EMBED BASE =================
+// ================= EMBED =================
 
 function baseEmbed(embed) {
   return embed
@@ -66,8 +69,6 @@ function baseEmbed(embed) {
     })
     .setTimestamp();
 }
-
-// ================= EMBEDS =================
 
 function getEmbed(type) {
 
@@ -79,11 +80,11 @@ function getEmbed(type) {
         .setDescription(
 `**➤ Otwieraj jajka i zdobywaj punkty!**
 
-➤ Im lepsze pety zdobędziesz → więcej punktów  
-➤ Więcej punktów → wyższy tier  
-➤ Wyższy tier → lepsze nagrody  
+➤ Lepsze pety → więcej punktów  
+➤ Więcej punktów → lepszy tier  
+➤ Lepszy tier → lepsze nagrody  
 
-✨ **Graj aktywnie i zgarnij bonusy!**`
+✨ **Farm i zgarnij max bonusy!**`
         )
         .setThumbnail("https://imgur.com/JqyeITl.png")
     );
@@ -95,13 +96,13 @@ function getEmbed(type) {
         .setColor("#9b59b6")
         .setTitle("🎡 DEV SPIN EVENT")
         .setDescription(
-`**➤ Zakręć kołem i zdobądź nagrody!**
+`**➤ Zakręć kołem i wygraj!**
 
 ➤ Losowe nagrody 🎁  
-➤ Szansa na rzadkie itemy 💎  
+➤ Rzadkie itemy 💎  
 ➤ 🎯 Supreme (??%)  
 
-⚡ **Spróbuj szczęścia!**`
+⚡ **Powodzenia!**`
         )
         .setThumbnail("https://imgur.com/NJI7052.png")
     );
@@ -114,29 +115,26 @@ function getEmbed(type) {
           .setColor("#f39c12")
           .setTitle("🍯 HONEY MERCHANT")
           .setDescription(
-`**➤ Zdobywaj miód na Bee World!**
+`**➤ Farm miód 🐝**
 
-➤ Zbieraj miód 🐝  
-➤ Kupuj przedmioty  
+➤ Zbieraj → kupuj  
 ➤ 🎯 Supreme (110%)  
 
-🔥 **Farm = lepsze nagrody!**`
+🔥 **Farm = profit**`
           )
           .setThumbnail("https://imgur.com/zhLC0zn.png")
       ),
-
       baseEmbed(
         new EmbedBuilder()
           .setColor("#e74c3c")
           .setTitle("💀 BOSS MERCHANT")
           .setDescription(
-`**➤ Pokonuj bossy!**
+`**➤ Zabij bossy ⚔️**
 
-➤ Zdobywaj tokeny ⚔️  
-➤ Kupuj itemy  
+➤ Tokeny → itemy  
 ➤ 🎯 Supreme (125%)  
 
-👑 **Top loot dla najlepszych!**`
+👑 **Top loot!**`
           )
           .setThumbnail("https://imgur.com/yFvb6jY.png")
       )
@@ -148,7 +146,7 @@ function getEmbed(type) {
 
 async function sendEvent() {
   const channel = await client.channels.fetch(CHANNEL_ID);
-  const now = getNow();
+  const now = new Date();
   const type = getEventByHour(now.getHours());
 
   const role =
@@ -171,10 +169,9 @@ async function sendEvent() {
 
 async function sendReminder() {
   const channel = await client.channels.fetch(CHANNEL_ID);
-  const now = getNow();
+  const next = getNextFullHour();
 
-  const nextHour = now.getHours() + 1;
-  const type = getEventByHour(nextHour);
+  const type = getEventByHour(next.getHours());
 
   const role =
     type === "egg" ? `<@&${ROLE_EGG}>` :
@@ -186,28 +183,49 @@ async function sendReminder() {
   );
 }
 
+// ================= GUI PANEL =================
+
+async function sendPanel(channel) {
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("event_now")
+      .setLabel("Aktualny Event")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("next_events")
+      .setLabel("Następne Eventy")
+      .setStyle(ButtonStyle.Success)
+  );
+
+  await channel.send({
+    content: "🎮 **Panel Eventów**",
+    components: [row]
+  });
+}
+
 // ================= LOOP =================
 
 setInterval(() => {
-  const now = getNow();
+  const now = new Date();
 
   if (now.getMinutes() === 0) sendEvent();
   if (now.getMinutes() === 55) sendReminder();
 
 }, 60000);
 
-// ================= COMMANDS =================
+// ================= INTERACTIONS =================
 
 client.on("interactionCreate", async (i) => {
 
-  if (i.isChatInputCommand()) {
+  if (i.isButton()) {
 
-    if (i.commandName === "event") {
-      const embed = getEmbed(getEventByHour(getNow().getHours()));
-      return i.reply({ embeds: Array.isArray(embed) ? embed : [embed] });
+    if (i.customId === "event_now") {
+      const embed = getEmbed(getEventByHour(new Date().getHours()));
+      return i.reply({ embeds: Array.isArray(embed) ? embed : [embed], ephemeral: true });
     }
 
-    if (i.commandName === "next-events") {
+    if (i.customId === "next_events") {
       const events = getNextEvents();
 
       const embed = baseEmbed(
@@ -223,53 +241,18 @@ client.on("interactionCreate", async (i) => {
         });
       });
 
-      return i.reply({ embeds: [embed] });
-    }
-
-    if (i.commandName === "roles-picker") {
-      const row = new ActionRowBuilder().addComponents(
-        new StringSelectMenuBuilder()
-          .setCustomId("roles")
-          .setMinValues(1)
-          .setMaxValues(3)
-          .addOptions([
-            { label: "EGG", value: ROLE_EGG, emoji: "🥚" },
-            { label: "MERCHANT", value: ROLE_MERCHANT, emoji: "🛒" },
-            { label: "SPIN", value: ROLE_SPIN, emoji: "🎡" }
-          ])
-      );
-
-      return i.reply({
-        content: "Wybierz role:",
-        components: [row],
-        ephemeral: true
-      });
-    }
-  }
-
-  if (i.isStringSelectMenu()) {
-    if (i.customId === "roles") {
-      const member = await i.guild.members.fetch(i.user.id);
-
-      const roles = [ROLE_EGG, ROLE_MERCHANT, ROLE_SPIN];
-
-      for (const r of roles) {
-        if (member.roles.cache.has(r)) await member.roles.remove(r);
-      }
-
-      for (const r of i.values) {
-        await member.roles.add(r);
-      }
-
-      return i.reply({ content: "✅ Role ustawione!", ephemeral: true });
+      return i.reply({ embeds: [embed], ephemeral: true });
     }
   }
 });
 
 // ================= READY =================
 
-client.once("clientReady", () => {
+client.once("clientReady", async () => {
   console.log("✅ BOT ONLINE");
+
+  const channel = await client.channels.fetch(CHANNEL_ID);
+  await sendPanel(channel);
 });
 
 client.login(process.env.TOKEN);
