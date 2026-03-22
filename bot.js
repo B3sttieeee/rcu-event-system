@@ -1,218 +1,358 @@
 const {
-  Client,
-  GatewayIntentBits,
-  EmbedBuilder,
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
-  SlashCommandBuilder,
-  REST,
-  Routes
+    Client,
+    GatewayIntentBits,
+    EmbedBuilder,
+    REST,
+    Routes,
+    SlashCommandBuilder,
+    PermissionsBitField,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    StringSelectMenuBuilder
 } = require('discord.js');
 
+const fs = require('fs');
+const cron = require('node-cron');
+
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+    intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
 
-const CHANNEL_ID = "1484937784283369502";
+const CLIENT_ID = '1484904976563044444';
+const GUILD_ID = '1475521240058953830';
+const CHANNEL_ID = '1484937784283369502';
 
-// ROLE
-const ROLES = {
-  egg: "1476000993119568105",
-  merchant: "1476000993660502139",
-  spin: "1484911421903999127"
+const FILE = './data.json';
+
+//////////////////////////////////////////////////
+// 📦 DATA
+//////////////////////////////////////////////////
+
+let data = {
+    roles: { egg: null, merchant: null, spin: null },
+    dm: {},
+    giveaway: {
+        active: false,
+        prize: null,
+        entries: {},
+        rolesBonus: {}
+    }
 };
 
-// SLOTY (KLUCZ)
-const SLOTS = [
-  { hour: 0, type: "egg" },
-  { hour: 1, type: "merchant" },
-  { hour: 2, type: "spin" },
-  { hour: 3, type: "egg" },
-  { hour: 4, type: "merchant" },
-  { hour: 5, type: "spin" },
-  { hour: 6, type: "egg" },
-  { hour: 7, type: "merchant" },
-  { hour: 8, type: "spin" },
-  { hour: 9, type: "egg" },
-  { hour: 10, type: "merchant" },
-  { hour: 11, type: "spin" },
-  { hour: 12, type: "egg" },
-  { hour: 13, type: "merchant" },
-  { hour: 14, type: "spin" },
-  { hour: 15, type: "egg" },
-  { hour: 16, type: "merchant" },
-  { hour: 17, type: "spin" },
-  { hour: 18, type: "egg" },
-  { hour: 19, type: "merchant" },
-  { hour: 20, type: "spin" },
-  { hour: 21, type: "egg" },
-  { hour: 22, type: "merchant" },
-  { hour: 23, type: "spin" }
-];
+function loadData() {
+    if (fs.existsSync(FILE)) {
+        data = JSON.parse(fs.readFileSync(FILE));
+    }
+}
+function save() {
+    fs.writeFileSync(FILE, JSON.stringify(data, null, 2));
+}
+loadData();
 
-// ================= CURRENT =================
+//////////////////////////////////////////////////
+// 🎯 EVENT SYSTEM
+//////////////////////////////////////////////////
 
-function getCurrentEvent() {
-  const h = new Date().getUTCHours();
-  return SLOTS.find(s => s.hour === h).type;
+function getEvent(h) {
+    if ([0,3,6,9,12,15,18,21].includes(h)) return "egg";
+    if ([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
+    return "spin";
 }
 
-// ================= NEXT =================
+function getMerchantVariant() {
+    return Math.random() < 0.5 ? "boss" : "honey";
+}
 
-function getNextEvents() {
-  const now = new Date();
-  const currentHour = now.getUTCHours();
+//////////////////////////////////////////////////
+// 🖼️ EMBEDY
+//////////////////////////////////////////////////
 
-  let future = [];
+const IMAGES = {
+    egg: "https://imgur.com/pY2xNUL.png",
+    merchant_boss: "https://imgur.com/VU9KdMS.png",
+    merchant_honey: "https://imgur.com/SsvlJ5a.png",
+    spin: "https://imgur.com/LeXDgiJ.png"
+};
 
-  for (let i = 1; i <= 24; i++) {
-    const hour = (currentHour + i) % 24;
+function buildEmbed(type, variant=null) {
 
-    const slot = SLOTS.find(s => s.hour === hour);
+    if (type === "egg") {
+        return new EmbedBuilder()
+            .setTitle("🥚 RNG EGG")
+            .setDescription(
+`🎲 Otwieraj jajka
 
-    let date = new Date(now);
-    date.setUTCHours(hour, 0, 0, 0);
-
-    if (hour <= currentHour) {
-      date.setUTCDate(date.getUTCDate() + 1);
+➜ Zdobywaj pety  
+➜ Punkty do Tieru  
+➜ Lepszy Tier = lepsze bonusy`
+            )
+            .setThumbnail(IMAGES.egg)
+            .setColor(0x00ffcc)
+            .setTimestamp();
     }
 
-    future.push({
-      type: slot.type,
-      time: Math.floor(date.getTime() / 1000)
+    if (type === "merchant") {
+
+        if (variant === "boss") {
+            return new EmbedBuilder()
+                .setTitle("🐝 MERCHANT BOSS")
+                .setDescription(
+`🔥 Boss Merchant
+
+➜ Żetony z bossów → itemy  
+
+🎯 Supreme (125%)`
+                )
+                .setThumbnail(IMAGES.merchant_boss)
+                .setColor(0xff0000)
+                .setTimestamp();
+        }
+
+        return new EmbedBuilder()
+            .setTitle("🍯 HONEY MERCHANT")
+            .setDescription(
+`🍯 Honey Merchant
+
+➜ Miód → przedmioty  
+
+🎯 Supreme (110%)`
+            )
+            .setThumbnail(IMAGES.merchant_honey)
+            .setColor(0xffcc00)
+            .setTimestamp();
+    }
+
+    return new EmbedBuilder()
+        .setTitle("🎰 DEV SPIN")
+        .setDescription(
+`🎰 Kręć kołem
+
+➜ Zdobądź nagrody  
+🎯 Supreme (??%)`
+        )
+        .setThumbnail(IMAGES.spin)
+        .setColor(0x9b59b6)
+        .setTimestamp();
+}
+
+//////////////////////////////////////////////////
+// 🎁 GIVEAWAY
+//////////////////////////////////////////////////
+
+function parseTime(str) {
+    const num = parseInt(str);
+    if (str.endsWith("m")) return num * 60000;
+    if (str.endsWith("h")) return num * 3600000;
+    return num;
+}
+
+function getEntries(member) {
+    let entries = 1;
+
+    for (const roleId in data.giveaway.rolesBonus || {}) {
+        if (member.roles.cache.has(roleId)) {
+            entries += data.giveaway.rolesBonus[roleId];
+        }
+    }
+
+    return entries;
+}
+
+//////////////////////////////////////////////////
+// 🔄 KOMENDY
+//////////////////////////////////////////////////
+
+async function registerCommands() {
+
+    const commands = [
+
+        new SlashCommandBuilder()
+            .setName('event')
+            .setDescription('Aktualny event'),
+
+        new SlashCommandBuilder()
+            .setName('next-events')
+            .setDescription('Aktualny + następne eventy'),
+
+        new SlashCommandBuilder()
+            .setName('set-dm')
+            .setDescription('Ustaw DM'),
+
+        new SlashCommandBuilder()
+            .setName('roles-picker')
+            .setDescription('Ustaw role'),
+
+        new SlashCommandBuilder()
+            .setName('giveaway')
+            .setDescription('Stwórz giveaway')
+            .addStringOption(o =>
+                o.setName('nagroda')
+                 .setDescription('Nagroda')
+                 .setRequired(true)
+            )
+            .addStringOption(o =>
+                o.setName('czas')
+                 .setDescription('np 10m / 1h')
+                 .setRequired(true)
+            ),
+
+        new SlashCommandBuilder()
+            .setName('test-event')
+            .setDescription('Test event'),
+
+        new SlashCommandBuilder()
+            .setName('refresh')
+            .setDescription('Odśwież komendy')
+
+    ].map(c => c.toJSON());
+
+    const rest = new REST({ version: '10' }).setToken(TOKEN);
+
+    await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: commands }
+    );
+
+    console.log("✅ Komendy zarejestrowane");
+}
+
+//////////////////////////////////////////////////
+// 🚀 READY
+//////////////////////////////////////////////////
+
+client.once('clientReady', async () => {
+    console.log(`✅ ${client.user.tag}`);
+
+    await registerCommands();
+
+    cron.schedule('* * * * *', async () => {
+
+        const now = new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
+        const h = now.getHours();
+        const m = now.getMinutes();
+
+        if (m !== 0) return;
+
+        const type = getEvent(h);
+        const role = data.roles[type];
+        if (!role) return;
+
+        const variant = type === "merchant" ? getMerchantVariant() : null;
+        const embed = buildEmbed(type, variant);
+
+        const channel = await client.channels.fetch(CHANNEL_ID);
+
+        await channel.send({
+            content: `<@&${role}>`,
+            embeds: [embed]
+        });
     });
-  }
-
-  return future.slice(0, 3);
-}
-
-// ================= EMBEDS =================
-
-function embedEgg() {
-  return new EmbedBuilder()
-    .setColor("Yellow")
-    .setTitle("🥚 **RNG EGG EVENT**")
-    .setThumbnail("https://imgur.com/JqyeITl.png");
-}
-
-function embedSpin() {
-  return new EmbedBuilder()
-    .setColor("Purple")
-    .setTitle("🎡 **DEV SPIN EVENT**")
-    .setThumbnail("https://imgur.com/NJI7052.png");
-}
-
-function embedMerchant1() {
-  return new EmbedBuilder()
-    .setColor("Gold")
-    .setTitle("💰 **HONEY MERCHANT**")
-    .setThumbnail("https://imgur.com/zhLC0zn.png");
-}
-
-function embedMerchant2() {
-  return new EmbedBuilder()
-    .setColor("Red")
-    .setTitle("🔥 **BOSS MERCHANT**")
-    .setDescription("⏳ Znika po 15 minutach")
-    .setThumbnail("https://imgur.com/yFvb6jY.png");
-}
-
-// ================= SEND =================
-
-async function sendEvent() {
-  const channel = await client.channels.fetch(CHANNEL_ID);
-  const event = getCurrentEvent();
-
-  if (event === "egg") {
-    channel.send({ content: `<@&${ROLES.egg}>`, embeds: [embedEgg()] });
-  }
-
-  if (event === "spin") {
-    channel.send({ content: `<@&${ROLES.spin}>`, embeds: [embedSpin()] });
-  }
-
-  if (event === "merchant") {
-    channel.send({
-      content: `<@&${ROLES.merchant}>`,
-      embeds: [embedMerchant1(), embedMerchant2()]
-    });
-  }
-}
-
-// ================= TIMER =================
-
-setInterval(() => {
-  const now = new Date();
-
-  if (now.getUTCMinutes() === 0 && now.getUTCSeconds() === 0) {
-    sendEvent();
-  }
-
-  if (now.getUTCMinutes() === 55 && now.getUTCSeconds() === 0) {
-    client.channels.cache.get(CHANNEL_ID)
-      ?.send("⏰ Event za 5 minut!");
-  }
-
-}, 1000);
-
-// ================= COMMANDS =================
-
-const commands = [
-  new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
-  new SlashCommandBuilder().setName("next-events").setDescription("Next"),
-  new SlashCommandBuilder().setName("test-ping").setDescription("Test")
-].map(c => c.toJSON());
-
-const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-(async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
-})();
-
-// ================= INTERACTION =================
-
-client.on("interactionCreate", async (i) => {
-
-  if (!i.isChatInputCommand()) return;
-
-  if (i.commandName === "event") {
-    const e = getCurrentEvent();
-
-    if (e === "egg") return i.reply({ embeds: [embedEgg()] });
-    if (e === "spin") return i.reply({ embeds: [embedSpin()] });
-    if (e === "merchant") return i.reply({ embeds: [embedMerchant1(), embedMerchant2()] });
-  }
-
-  if (i.commandName === "next-events") {
-    const next = getNextEvents();
-
-    const embed = new EmbedBuilder()
-      .setColor("Green")
-      .setTitle("📅 NASTĘPNE EVENTY")
-      .setDescription(
-        `**${next[0].type.toUpperCase()}**\n<t:${next[0].time}:R>\n\n` +
-        `**${next[1].type.toUpperCase()}**\n<t:${next[1].time}:R>`
-      );
-
-    i.reply({ embeds: [embed] });
-  }
-
-  if (i.commandName === "test-ping") {
-    sendEvent();
-    i.reply({ content: "OK", ephemeral: true });
-  }
-
 });
 
-client.once("clientReady", () => {
-  console.log("BOT ONLINE");
+//////////////////////////////////////////////////
+// ⚡ INTERAKCJE
+//////////////////////////////////////////////////
+
+client.on('interactionCreate', async i => {
+
+    // 🎁 JOIN
+    if (i.isButton() && i.customId === "join") {
+
+        if (!data.giveaway.active)
+            return i.reply({ content: "❌ brak giveaway", ephemeral: true });
+
+        const entries = getEntries(i.member);
+
+        data.giveaway.entries[i.user.id] = entries;
+        save();
+
+        return i.reply({
+            content: `🎟️ Masz ${entries} wejść`,
+            ephemeral: true
+        });
+    }
+
+    if (!i.isChatInputCommand()) return;
+
+    // 🎁 GIVEAWAY
+    if (i.commandName === "giveaway") {
+
+        const prize = i.options.getString("nagroda");
+        const time = parseTime(i.options.getString("czas"));
+
+        data.giveaway = {
+            active: true,
+            prize,
+            entries: {},
+            rolesBonus: data.giveaway.rolesBonus || {}
+        };
+
+        save();
+
+        const embed = new EmbedBuilder()
+            .setTitle("🎉 GIVEAWAY")
+            .setDescription(`Nagroda: **${prize}**\nKliknij aby dołączyć`)
+            .setColor(0x00ffcc);
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId("join")
+                .setLabel("Weź udział")
+                .setStyle(ButtonStyle.Success)
+        );
+
+        const msg = await i.reply({ embeds: [embed], components: [row], fetchReply: true });
+
+        setTimeout(async () => {
+
+            const users = Object.entries(data.giveaway.entries);
+            if (users.length === 0) return;
+
+            const pool = [];
+
+            users.forEach(([id, count]) => {
+                for (let i = 0; i < count; i++) pool.push(id);
+            });
+
+            const winner = pool[Math.floor(Math.random() * pool.length)];
+
+            msg.reply(`🎉 Wygrał: <@${winner}> | ${prize}`);
+
+            data.giveaway.active = false;
+            save();
+
+        }, time);
+    }
+
+    // 📊 NEXT EVENTS
+    if (i.commandName === "next-events") {
+
+        const now = new Date();
+        const h = now.getHours();
+
+        return i.reply({
+            embeds: [
+                new EmbedBuilder()
+                    .setTitle("📊 Eventy")
+                    .setDescription(
+`🔥 TERAZ → ${getEvent(h)}
+⏰ Następny → ${getEvent((h+1)%24)}
+⏰ Kolejny → ${getEvent((h+2)%24)}`
+                    )
+                    .setColor(0x5865F2)
+            ]
+        });
+    }
+
+    // 🔄 REFRESH
+    if (i.commandName === "refresh") {
+        await registerCommands();
+        return i.reply({ content: "✅ Odświeżono", ephemeral: true });
+    }
+
 });
 
 client.login(TOKEN);
