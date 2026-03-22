@@ -9,29 +9,31 @@ const {
 
 const fs = require("fs");
 
+// ================= CONFIG LOAD =================
 let config = { startDate: "2026-03-22", author: "B3sttiee" };
 try {
   config = JSON.parse(fs.readFileSync("./data.json", "utf8"));
 } catch {}
 
+// ================= CLIENT =================
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// ================= CONFIG =================
-
+// ================= SETTINGS =================
 const CHANNEL_ID = "1484937784283369502";
 
 const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
 
-// ================= TIME =================
+// ================= TIME (NAJWAŻNIEJSZE - BEZ BUGÓW) =================
 
+// 🔥 Jedyna poprawna metoda (Europe/Warsaw bez podwójnego offsetu)
 function getNowPL() {
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
-  );
+  return new Date(new Date().toLocaleString("en-US", {
+    timeZone: "Europe/Warsaw"
+  }));
 }
 
 // ================= EVENT SYSTEM =================
@@ -42,7 +44,7 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= NEXT EVENTS (FIXED) =================
+// ================= NEXT EVENTS (NAPRAWIONE) =================
 
 function getNextEvents() {
   const now = getNowPL();
@@ -50,6 +52,7 @@ function getNextEvents() {
 
   for (let i = 1; i <= 3; i++) {
     const next = new Date(now);
+
     next.setMinutes(0, 0, 0);
     next.setHours(now.getHours() + i);
 
@@ -62,7 +65,7 @@ function getNextEvents() {
   return events;
 }
 
-// ================= EMBED =================
+// ================= EMBEDS =================
 
 function baseEmbed(embed) {
   return embed
@@ -73,22 +76,42 @@ function baseEmbed(embed) {
 }
 
 function getEmbed(type) {
+
   if (type === "egg") {
     return baseEmbed(
       new EmbedBuilder()
         .setColor("#ffd93d")
         .setTitle("🥚 RNG EGG EVENT")
-        .setDescription("**Otwieraj jajka i zdobywaj punkty!**")
+        .setDescription(
+`**➤ Otwieraj jajka i zdobywaj punkty!**
+
+➤ Lepsze pety → więcej punktów  
+➤ Więcej punktów → lepszy tier  
+➤ Lepszy tier → lepsze nagrody  
+
+✨ Graj aktywnie!`
+        )
+        .setThumbnail("https://imgur.com/JqyeITl.png")
     );
   }
 
   if (type === "merchant") {
-    return baseEmbed(
-      new EmbedBuilder()
-        .setColor("#f39c12")
-        .setTitle("🛒 MERCHANT EVENT")
-        .setDescription("**Kupuj przedmioty i farm!**")
-    );
+    return [
+      baseEmbed(
+        new EmbedBuilder()
+          .setColor("#f39c12")
+          .setTitle("🍯 HONEY MERCHANT")
+          .setDescription("**➤ Zbieraj miód i kupuj itemy!**")
+          .setThumbnail("https://imgur.com/zhLC0zn.png")
+      ),
+      baseEmbed(
+        new EmbedBuilder()
+          .setColor("#e74c3c")
+          .setTitle("💀 BOSS MERCHANT")
+          .setDescription("**➤ Zabij bossy i zdobywaj tokeny!**")
+          .setThumbnail("https://imgur.com/yFvb6jY.png")
+      )
+    ];
   }
 
   if (type === "spin") {
@@ -96,7 +119,12 @@ function getEmbed(type) {
       new EmbedBuilder()
         .setColor("#9b59b6")
         .setTitle("🎡 DEV SPIN EVENT")
-        .setDescription("**Zakręć kołem i wygraj!**")
+        .setDescription(
+`**➤ Zakręć kołem i wygraj nagrody!**
+
+🎯 Szansa na Supreme`
+        )
+        .setThumbnail("https://imgur.com/NJI7052.png")
     );
   }
 }
@@ -114,8 +142,15 @@ async function sendEvent() {
     type === "merchant" ? `<@&${ROLE_MERCHANT}>` :
     `<@&${ROLE_SPIN}>`;
 
-  await channel.send(`${role}\n🚀 EVENT WYSTARTOWAŁ`);
-  await channel.send({ embeds: [getEmbed(type)] });
+  await channel.send(`${role}\n━━━━━━━━━━━━━━━━━━━\n🚀 **EVENT WYSTARTOWAŁ!**`);
+
+  const embed = getEmbed(type);
+
+  if (Array.isArray(embed)) {
+    for (const e of embed) await channel.send({ embeds: [e] });
+  } else {
+    await channel.send({ embeds: [embed] });
+  }
 }
 
 // ================= REMINDER =================
@@ -123,35 +158,35 @@ async function sendEvent() {
 async function sendReminder() {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
-  const next = getNextEvents()[0];
+  const nextEvent = getNextEvents()[0];
 
   await channel.send(
-    `⏳ Event ${next.type.toUpperCase()} za 5 minut!`
+    `⏳ <@&${nextEvent.type === "egg" ? ROLE_EGG : nextEvent.type === "merchant" ? ROLE_MERCHANT : ROLE_SPIN}>\n━━━━━━━━━━━━━━━━━━━\n**Event ${nextEvent.type.toUpperCase()} za 5 minut!**`
   );
 }
 
-// ================= HELP PANEL =================
+// ================= PANEL =================
 
-async function sendHelpPanel(channel) {
+async function sendPanel(channel) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("event_now")
+      .setCustomId("now")
       .setLabel("Aktualny Event")
       .setStyle(ButtonStyle.Primary),
 
     new ButtonBuilder()
-      .setCustomId("event_next")
+      .setCustomId("next")
       .setLabel("Następne Eventy")
       .setStyle(ButtonStyle.Success),
 
     new ButtonBuilder()
-      .setCustomId("event_ping")
+      .setCustomId("force")
       .setLabel("Wyślij Event")
       .setStyle(ButtonStyle.Danger)
   );
 
   await channel.send({
-    content: "🎮 **PANEL EVENTÓW (HELP)**",
+    content: "🎮 **PANEL EVENTÓW**",
     components: [row]
   });
 }
@@ -166,14 +201,14 @@ setInterval(() => {
 
 }, 60000);
 
-// ================= INTERACTION =================
+// ================= INTERACTIONS =================
 
 client.on("interactionCreate", async (i) => {
 
   if (!i.isButton()) return;
 
   // AKTUALNY EVENT
-  if (i.customId === "event_now") {
+  if (i.customId === "now") {
     return i.reply({
       embeds: [getEmbed(getEventByHour(getNowPL().getHours()))],
       ephemeral: true
@@ -181,7 +216,7 @@ client.on("interactionCreate", async (i) => {
   }
 
   // NEXT EVENTS
-  if (i.customId === "event_next") {
+  if (i.customId === "next") {
     const events = getNextEvents();
 
     const embed = baseEmbed(
@@ -200,10 +235,10 @@ client.on("interactionCreate", async (i) => {
     return i.reply({ embeds: [embed], ephemeral: true });
   }
 
-  // TEST EVENT
-  if (i.customId === "event_ping") {
+  // FORCE EVENT
+  if (i.customId === "force") {
     await sendEvent();
-    return i.reply({ content: "✅ Wysłano event", ephemeral: true });
+    return i.reply({ content: "✅ Event wysłany", ephemeral: true });
   }
 });
 
@@ -213,7 +248,7 @@ client.once("clientReady", async () => {
   console.log("✅ BOT ONLINE");
 
   const channel = await client.channels.fetch(CHANNEL_ID);
-  await sendHelpPanel(channel);
+  await sendPanel(channel);
 });
 
 client.login(process.env.TOKEN);
