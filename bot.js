@@ -26,7 +26,7 @@ const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
 
-// ================= TIME FIX (NAJWAŻNIEJSZE) =================
+// ================= TIME =================
 
 function getNowPL() {
   return new Date(
@@ -34,17 +34,7 @@ function getNowPL() {
   );
 }
 
-function getNextFullHour() {
-  const now = getNowPL();
-  const next = new Date(now);
-
-  next.setMinutes(0, 0, 0);
-  next.setHours(now.getHours() + 1);
-
-  return next;
-}
-
-// ================= EVENT LOGIC =================
+// ================= EVENT SYSTEM =================
 
 function getEventByHour(hour) {
   if (hour % 3 === 0) return "egg";
@@ -52,15 +42,16 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= NEXT EVENTS =================
+// ================= NEXT EVENTS (FIXED) =================
 
 function getNextEvents() {
-  const base = getNextFullHour();
-  let events = [];
+  const now = getNowPL();
+  const events = [];
 
-  for (let i = 0; i < 3; i++) {
-    let next = new Date(base);
-    next.setHours(base.getHours() + i);
+  for (let i = 1; i <= 3; i++) {
+    const next = new Date(now);
+    next.setMinutes(0, 0, 0);
+    next.setHours(now.getHours() + i);
 
     events.push({
       type: getEventByHour(next.getHours()),
@@ -71,7 +62,7 @@ function getNextEvents() {
   return events;
 }
 
-// ================= EMBEDS =================
+// ================= EMBED =================
 
 function baseEmbed(embed) {
   return embed
@@ -82,14 +73,12 @@ function baseEmbed(embed) {
 }
 
 function getEmbed(type) {
-
   if (type === "egg") {
     return baseEmbed(
       new EmbedBuilder()
         .setColor("#ffd93d")
         .setTitle("🥚 RNG EGG EVENT")
-        .setDescription(`**➤ Otwieraj jajka i zdobywaj punkty!**`)
-        .setThumbnail("https://imgur.com/JqyeITl.png")
+        .setDescription("**Otwieraj jajka i zdobywaj punkty!**")
     );
   }
 
@@ -97,9 +86,8 @@ function getEmbed(type) {
     return baseEmbed(
       new EmbedBuilder()
         .setColor("#f39c12")
-        .setTitle("🍯 MERCHANT EVENT")
-        .setDescription(`**➤ Kupuj itemy i farm!**`)
-        .setThumbnail("https://imgur.com/zhLC0zn.png")
+        .setTitle("🛒 MERCHANT EVENT")
+        .setDescription("**Kupuj przedmioty i farm!**")
     );
   }
 
@@ -108,8 +96,7 @@ function getEmbed(type) {
       new EmbedBuilder()
         .setColor("#9b59b6")
         .setTitle("🎡 DEV SPIN EVENT")
-        .setDescription(`**➤ Zakręć kołem!**`)
-        .setThumbnail("https://imgur.com/NJI7052.png")
+        .setDescription("**Zakręć kołem i wygraj!**")
     );
   }
 }
@@ -128,9 +115,7 @@ async function sendEvent() {
     `<@&${ROLE_SPIN}>`;
 
   await channel.send(`${role}\n🚀 EVENT WYSTARTOWAŁ`);
-
-  const embed = getEmbed(type);
-  await channel.send({ embeds: [embed] });
+  await channel.send({ embeds: [getEmbed(type)] });
 }
 
 // ================= REMINDER =================
@@ -138,29 +123,35 @@ async function sendEvent() {
 async function sendReminder() {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
-  const next = getNextFullHour();
-  const type = getEventByHour(next.getHours());
+  const next = getNextEvents()[0];
 
-  await channel.send(`⏳ Event ${type.toUpperCase()} za 5 minut!`);
+  await channel.send(
+    `⏳ Event ${next.type.toUpperCase()} za 5 minut!`
+  );
 }
 
-// ================= PANEL =================
+// ================= HELP PANEL =================
 
-async function sendPanel(channel) {
+async function sendHelpPanel(channel) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("now")
+      .setCustomId("event_now")
       .setLabel("Aktualny Event")
       .setStyle(ButtonStyle.Primary),
 
     new ButtonBuilder()
-      .setCustomId("next")
+      .setCustomId("event_next")
       .setLabel("Następne Eventy")
-      .setStyle(ButtonStyle.Success)
+      .setStyle(ButtonStyle.Success),
+
+    new ButtonBuilder()
+      .setCustomId("event_ping")
+      .setLabel("Wyślij Event")
+      .setStyle(ButtonStyle.Danger)
   );
 
   await channel.send({
-    content: "🎮 Panel Eventów",
+    content: "🎮 **PANEL EVENTÓW (HELP)**",
     components: [row]
   });
 }
@@ -181,28 +172,38 @@ client.on("interactionCreate", async (i) => {
 
   if (!i.isButton()) return;
 
-  if (i.customId === "now") {
-    const embed = getEmbed(getEventByHour(getNowPL().getHours()));
-    return i.reply({ embeds: [embed], ephemeral: true });
+  // AKTUALNY EVENT
+  if (i.customId === "event_now") {
+    return i.reply({
+      embeds: [getEmbed(getEventByHour(getNowPL().getHours()))],
+      ephemeral: true
+    });
   }
 
-  if (i.customId === "next") {
+  // NEXT EVENTS
+  if (i.customId === "event_next") {
     const events = getNextEvents();
 
     const embed = baseEmbed(
       new EmbedBuilder()
-        .setTitle("📅 NASTĘPNE EVENTY")
         .setColor("#2ecc71")
+        .setTitle("📅 NASTĘPNE EVENTY")
     );
 
     events.forEach(e => {
       embed.addFields({
-        name: e.type.toUpperCase(),
+        name: `➤ ${e.type.toUpperCase()}`,
         value: `<t:${e.timestamp}:R>\n<t:${e.timestamp}:F>`
       });
     });
 
     return i.reply({ embeds: [embed], ephemeral: true });
+  }
+
+  // TEST EVENT
+  if (i.customId === "event_ping") {
+    await sendEvent();
+    return i.reply({ content: "✅ Wysłano event", ephemeral: true });
   }
 });
 
@@ -212,7 +213,7 @@ client.once("clientReady", async () => {
   console.log("✅ BOT ONLINE");
 
   const channel = await client.channels.fetch(CHANNEL_ID);
-  await sendPanel(channel);
+  await sendHelpPanel(channel);
 });
 
 client.login(process.env.TOKEN);
