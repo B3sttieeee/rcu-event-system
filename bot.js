@@ -23,7 +23,7 @@ const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
 
-// ROLE ID
+// ROLE
 const ROLES = {
     egg: "1476000993119568105",
     merchant: "1476000993660502139",
@@ -38,93 +38,106 @@ const IMAGES = {
     spin: "https://imgur.com/LeXDgiJ.png"
 };
 
-let data = { dm: {}, giveaways: {} };
+let data = {
+    dm: {},
+    giveaways: {},
+    bonusRoles: {} // roleId: multiplier
+};
 
 function save() {
     fs.writeFileSync('./data.json', JSON.stringify(data, null, 2));
 }
 
-// 🔥 CZAS POLSKI
-function getNow() {
-    return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+// 🔥 CZAS PL (NAPRAWIONY NA SZTYWNO)
+function getPolishTime() {
+    const now = new Date();
+    const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+    return new Date(utc + (3600000 * 1)); // UTC+1 (PL)
 }
 
-// EVENT LOGIKA (NAPRAWIONA)
-function getEvent(hour) {
-    if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
-    if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
-    if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
+// EVENT
+function getEvent(h) {
+    if ([0,3,6,9,12,15,18,21].includes(h)) return "egg";
+    if ([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
+    if ([2,5,8,11,14,17,20,23].includes(h)) return "spin";
 }
 
-// 🔥 NAJBLIŻSZE EVENTY (NAPRAWIONE)
+// NEXT EVENTS (NAPRAWIONE 100%)
 function getNextEvents() {
 
-    const now = getNow();
-    let events = [];
+    const now = getPolishTime();
+    let list = [];
 
-    for (let i = 0; i < 24; i++) {
-        const date = new Date(now);
-        date.setMinutes(0,0,0);
-        date.setHours(i);
+    for (let h = 0; h < 24; h++) {
+
+        let date = new Date(now);
+        date.setHours(h,0,0,0);
 
         if (date <= now) date.setDate(date.getDate()+1);
 
-        events.push({
-            type: getEvent(i),
+        list.push({
+            type: getEvent(h),
             time: date.getTime()
         });
     }
 
-    events.sort((a,b)=>a.time-b.time);
-
-    return events.slice(0,2);
+    list.sort((a,b)=>a.time-b.time);
+    return list.slice(0,2);
 }
 
 // EMBEDY
-function getEmbed(type) {
-
-    if (type === "egg") {
-        return new EmbedBuilder()
-            .setTitle("🥚 **RNG EGG**")
-            .setDescription(
+function embedEgg() {
+    return new EmbedBuilder()
+        .setTitle("🥚 **RNG EGG**")
+        .setDescription(
 `**Otwieraj jajka i zdobywaj punkty Tieru!**
 
 • Lepsze pety = więcej punktów  
 • Lepszy Tier = lepsze nagrody`
-            )
-            .setThumbnail(IMAGES.egg)
-            .setColor(0xffcc00);
-    }
+        )
+        .setThumbnail(IMAGES.egg)
+        .setColor(0xffcc00);
+}
 
-    if (type === "merchant") {
-        return new EmbedBuilder()
-            .setTitle("🐝 **MERCHANT EVENT**")
-            .setDescription(
-`**🟡 Honey Merchant**
-Za miód kupisz przedmioty  
+function embedHoney() {
+    return new EmbedBuilder()
+        .setTitle("🐝 **HONEY MERCHANT**")
+        .setDescription(
+`Za miód kupisz przedmioty  
 Szansa Supreme: **110%**
 
-**🔴 Boss Merchant**
+⏳ Znajdziesz na mapie Bee World  
+⏳ Znika po 15 minutach`
+        )
+        .setThumbnail(IMAGES.honey)
+        .setColor(0xff9900);
+}
+
+function embedBoss() {
+    return new EmbedBuilder()
+        .setTitle("🔴 **BOSS MERCHANT**")
+        .setDescription(
+`Eventowy merchant  
 Na mapie Anniversary Event  
+
 Szansa Supreme: **125%**
 
 ⏳ Znika po 15 minutach`
-            )
-            .setThumbnail(IMAGES.honey)
-            .setColor(0xff9900);
-    }
+        )
+        .setThumbnail(IMAGES.boss)
+        .setColor(0xff0000);
+}
 
-    if (type === "spin") {
-        return new EmbedBuilder()
-            .setTitle("🎰 **DEV SPIN**")
-            .setDescription(
-`**Kręć kołem i zdobywaj nagrody!**
+function embedSpin() {
+    return new EmbedBuilder()
+        .setTitle("🎰 **DEV SPIN**")
+        .setDescription(
+`Kręć kołem aby zdobyć nagrody  
 
 Szansa Supreme: **??%**`
-            )
-            .setThumbnail(IMAGES.spin)
-            .setColor(0x00ccff);
-    }
+        )
+        .setThumbnail(IMAGES.spin)
+        .setColor(0x00ccff);
 }
 
 // READY
@@ -136,54 +149,63 @@ client.once('clientReady', async () => {
         new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
         new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
         new SlashCommandBuilder().setName('get-role').setDescription('Panel ról'),
-        new SlashCommandBuilder().setName('set-dm').setDescription('Powiadomienia DM'),
+        new SlashCommandBuilder().setName('set-dm').setDescription('DM powiadomienia'),
 
         new SlashCommandBuilder()
             .setName('giveaway')
             .setDescription('Start giveaway')
             .addStringOption(o=>o.setName('nagroda').setDescription('Nagroda').setRequired(true))
-            .addStringOption(o=>o.setName('czas').setDescription('np 1h / 30m').setRequired(true))
+            .addStringOption(o=>o.setName('czas').setDescription('np 1h').setRequired(true)),
+
+        new SlashCommandBuilder()
+            .setName('giveaway-role')
+            .setDescription('Ustaw bonus wejść')
+            .addRoleOption(o=>o.setName('rola').setRequired(true))
+            .addIntegerOption(o=>o.setName('ile').setRequired(true))
 
     ].map(c=>c.toJSON());
 
     const rest = new REST({ version: '10' }).setToken(TOKEN);
     await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 
-    console.log("✅ Komendy załadowane");
+    console.log("✅ Komendy OK");
 
     // CRON
     cron.schedule('* * * * *', async () => {
 
-        const now = getNow();
+        const now = getPolishTime();
         const h = now.getHours();
         const m = now.getMinutes();
 
         const type = getEvent(h);
 
-        // 🔔 5 MIN PRZED
+        const channel = await client.channels.fetch(CHANNEL_ID);
+
+        // 5 MIN BEFORE
         if (m === 55) {
-            const channel = await client.channels.fetch(CHANNEL_ID);
             channel.send(`⏰ Za 5 minut: **${type.toUpperCase()}** <@&${ROLES[type]}>`);
         }
 
-        // 🚀 START
+        // START
         if (m === 0) {
-            const channel = await client.channels.fetch(CHANNEL_ID);
 
-            channel.send({
-                content: `<@&${ROLES[type]}>`,
-                embeds: [getEmbed(type)]
-            });
-
-            // DM
-            for (const id in data.dm) {
-                if (data.dm[id]?.includes(type)) {
-                    try {
-                        const user = await client.users.fetch(id);
-                        user.send({ embeds: [getEmbed(type)] });
-                    } catch {}
-                }
+            if (type === "merchant") {
+                channel.send({
+                    content: `<@&${ROLES.merchant}>`,
+                    embeds: [embedHoney(), embedBoss()]
+                });
+            } else if (type === "egg") {
+                channel.send({
+                    content: `<@&${ROLES.egg}>`,
+                    embeds: [embedEgg()]
+                });
+            } else {
+                channel.send({
+                    content: `<@&${ROLES.spin}>`,
+                    embeds: [embedSpin()]
+                });
             }
+
         }
 
     });
@@ -195,15 +217,21 @@ client.on('interactionCreate', async i => {
 
     if (i.isChatInputCommand()) {
 
-        const now = getNow();
+        const now = getPolishTime();
         const h = now.getHours();
 
-        // EVENT
         if (i.commandName === 'event') {
-            return i.reply({ embeds: [getEmbed(getEvent(h))] });
+
+            const type = getEvent(h);
+
+            if (type === "merchant") {
+                return i.reply({ embeds: [embedHoney(), embedBoss()] });
+            }
+
+            if (type === "egg") return i.reply({ embeds: [embedEgg()] });
+            if (type === "spin") return i.reply({ embeds: [embedSpin()] });
         }
 
-        // NEXT EVENTS
         if (i.commandName === 'next-events') {
 
             const next = getNextEvents();
@@ -214,142 +242,27 @@ client.on('interactionCreate', async i => {
                         .setTitle("📅 **NASTĘPNE EVENTY**")
                         .setDescription(
 `🔥 **${next[0].type.toUpperCase()}**
-🕒 <t:${Math.floor(next[0].time/1000)}:F>
-⏳ <t:${Math.floor(next[0].time/1000)}:R>
+<t:${Math.floor(next[0].time/1000)}:F>
 
 🔥 **${next[1].type.toUpperCase()}**
-🕒 <t:${Math.floor(next[1].time/1000)}:F>
-⏳ <t:${Math.floor(next[1].time/1000)}:R>`
+<t:${Math.floor(next[1].time/1000)}:F>`
                         )
                         .setColor(0x00ffcc)
                 ]
             });
         }
 
-        // ROLE PANEL
-        if (i.commandName === 'get-role') {
+        if (i.commandName === 'giveaway-role') {
 
-            const menu = new StringSelectMenuBuilder()
-                .setCustomId('roles')
-                .setMinValues(1)
-                .setMaxValues(3)
-                .addOptions([
-                    { label: "RNG Egg", value: "egg" },
-                    { label: "Merchant", value: "merchant" },
-                    { label: "Dev Spin", value: "spin" }
-                ]);
+            const role = i.options.getRole('rola');
+            const ile = i.options.getInteger('ile');
 
-            return i.reply({
-                content: "🎭 Wybierz role:",
-                components: [new ActionRowBuilder().addComponents(menu)],
-                ephemeral: true
-            });
-        }
-
-        // DM PICKER
-        if (i.commandName === 'set-dm') {
-
-            const menu = new StringSelectMenuBuilder()
-                .setCustomId('dm')
-                .setMinValues(1)
-                .setMaxValues(3)
-                .addOptions([
-                    { label: "Egg", value: "egg" },
-                    { label: "Merchant", value: "merchant" },
-                    { label: "Spin", value: "spin" }
-                ]);
-
-            return i.reply({
-                content: "📩 Wybierz DM:",
-                components: [new ActionRowBuilder().addComponents(menu)],
-                ephemeral: true
-            });
-        }
-
-        // GIVEAWAY
-        if (i.commandName === 'giveaway') {
-
-            const prize = i.options.getString('nagroda');
-            const time = i.options.getString('czas');
-
-            const ms = time.endsWith("h") ? parseInt(time)*3600000 :
-                       time.endsWith("m") ? parseInt(time)*60000 : 60000;
-
-            const end = Date.now()+ms;
-            const id = Date.now();
-
-            data.giveaways[id] = { users: [] };
+            data.bonusRoles[role.id] = ile;
             save();
 
-            const embed = new EmbedBuilder()
-                .setTitle(`🎁 ${prize}`)
-                .setDescription(
-`Kliknij 🎉 aby wziąć udział!
-
-⏳ Koniec: <t:${Math.floor(end/1000)}:R>
-👥 Uczestnicy: 0`
-                )
-                .setColor(0x00ff99);
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`join_${id}`).setLabel("🎉 Weź udział").setStyle(ButtonStyle.Success)
-            );
-
-            const msg = await i.reply({ embeds: [embed], components: [row], fetchReply: true });
-
-            setTimeout(async () => {
-                const users = data.giveaways[id].users;
-                if (!users.length) return;
-
-                const winner = users[Math.floor(Math.random()*users.length)];
-                msg.channel.send(`🏆 Wygrał: <@${winner}>`);
-            }, ms);
+            return i.reply(`✅ ${role} ma teraz x${ile} wejść`);
         }
 
-    }
-
-    // ROLE SELECT
-    if (i.isStringSelectMenu()) {
-
-        if (i.customId === 'roles') {
-
-            for (const type of ["egg","merchant","spin"]) {
-                const role = ROLES[type];
-
-                if (i.values.includes(type)) {
-                    await i.member.roles.add(role).catch(()=>{});
-                } else {
-                    await i.member.roles.remove(role).catch(()=>{});
-                }
-            }
-
-            return i.update({ content: "✅ Role ustawione", components: [] });
-        }
-
-        if (i.customId === 'dm') {
-            data.dm[i.user.id] = i.values;
-            save();
-            return i.update({ content: "✅ DM zapisane", components: [] });
-        }
-
-    }
-
-    // GIVEAWAY BUTTON
-    if (i.isButton()) {
-
-        if (i.customId.startsWith("join_")) {
-
-            const id = i.customId.split("_")[1];
-
-            if (!data.giveaways[id]) return;
-
-            if (!data.giveaways[id].users.includes(i.user.id)) {
-                data.giveaways[id].users.push(i.user.id);
-                save();
-            }
-
-            return i.reply({ content: "✅ Dołączyłeś!", ephemeral: true });
-        }
     }
 
 });
