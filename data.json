@@ -1,5 +1,3 @@
 {
-  "roles": { "egg": null, "merchant": null, "spin": null },
-  "dm": {},
-  "giveaway": null
+  "dm": {}
 }
