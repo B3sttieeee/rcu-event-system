@@ -16,6 +16,9 @@ const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers]
 });
 
+process.on('unhandledRejection', err => console.log(err));
+process.on('uncaughtException', err => console.log(err));
+
 const TOKEN = process.env.TOKEN;
 
 const CLIENT_ID = '1484904976563044444';
@@ -44,7 +47,7 @@ let roles = {
 };
 
 //////////////////////////////////////////////////
-// 🎁 GIVEAWAY DATA
+// 🎁 GIVEAWAY
 //////////////////////////////////////////////////
 
 let giveaway = {
@@ -69,7 +72,7 @@ function getPolishTime() {
 }
 
 //////////////////////////////////////////////////
-// 🎯 EVENTY
+// 🎯 EVENTY (POPRAWIONE GODZINY)
 //////////////////////////////////////////////////
 
 function getEvent(h) {
@@ -88,8 +91,9 @@ function embedEgg() {
         .setDescription(
 `🎲 Otwieraj jajka i zdobywaj pety
 
-➜ Punkty do Tieru  
-➜ Lepszy Tier = lepsze bonusy  
+➜ Zdobywaj punkty do Tieru  
+➜ Im lepsze pety, tym więcej punktów  
+➜ Wyższy Tier daje lepsze bonusy  
 
 📍 Sprawdź swoje postępy`
         )
@@ -105,12 +109,12 @@ function embedBoss() {
         .setDescription(
 `🎉 Eventowy Merchant
 
-📍 Anniversary Event  
+📍 Mapa: Anniversary Event  
 
 ➜ Za żetony z bossów można zakupić przedmioty  
 🎯 Szansa na Supreme: 125%  
 
-⏳ Przejdź sprawdzić ofertę`
+⏳ Przejdź i sprawdź ofertę`
         )
         .setThumbnail(IMAGES.boss)
         .setColor(0xff0000)
@@ -122,14 +126,14 @@ function embedHoney() {
     return new EmbedBuilder()
         .setTitle("🍯┃HONEY MERCHANT")
         .setDescription(
-`🍯 Merchant z miodem
+`🍯 Eventowy Merchant
 
-📍 Bee World  
+📍 Mapa: Bee World  
 
 ➜ Za miód można zakupić przedmioty  
 🎯 Szansa na Supreme: 110%  
 
-⏳ Przejdź sprawdzić ofertę`
+⏳ Przejdź i sprawdź ofertę`
         )
         .setThumbnail(IMAGES.honey)
         .setColor(0xffcc00)
@@ -160,7 +164,7 @@ function embedSpin() {
 function buildGiveawayEmbed() {
 
     const rolesText = Object.entries(giveaway.rolesBonus)
-        .map(([id, val]) => `<@&${id}>: **${val} entries**`)
+        .map(([id, val]) => `<@&${id}>: **${val} wejść**`)
         .join("\n") || "Brak";
 
     const end = Math.floor((Date.now() + giveaway.duration) / 1000);
@@ -168,14 +172,14 @@ function buildGiveawayEmbed() {
     return new EmbedBuilder()
         .setTitle(`🎁 ${giveaway.prize}`)
         .setDescription(
-`Kliknij 🎉 aby wziąć udział!
+`Kliknij 🎉, aby wziąć udział!
 
 🏆 Wygrani: **${giveaway.winners}**
 ⏰ Koniec: <t:${end}:R>
 
 ━━━━━━━━━━━━━━━━━━
 
-🎯 **DODATKOWE LOSY**
+🎯 **Dodatkowe losy**
 ${rolesText}
 
 ━━━━━━━━━━━━━━━━━━
@@ -188,7 +192,7 @@ ${rolesText}
 }
 
 //////////////////////////////////////////////////
-// 🔧 TIME PARSER
+// ⏱️ TIME PARSER
 //////////////////////////////////////////////////
 
 function parseTime(str) {
@@ -206,19 +210,28 @@ async function registerCommands() {
 
     const commands = [
 
-        new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
+        new SlashCommandBuilder()
+            .setName('event')
+            .setDescription('Sprawdź aktualny event'),
 
-        new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
+        new SlashCommandBuilder()
+            .setName('next-events')
+            .setDescription('Sprawdź nadchodzące eventy'),
 
-        new SlashCommandBuilder().setName('test-event').setDescription('Test event'),
+        new SlashCommandBuilder()
+            .setName('test-event')
+            .setDescription('Wyślij testowy event'),
 
-        new SlashCommandBuilder().setName('refresh').setDescription('Odśwież komendy'),
+        new SlashCommandBuilder()
+            .setName('refresh')
+            .setDescription('Odśwież komendy bota'),
 
         new SlashCommandBuilder()
             .setName('set-role')
-            .setDescription('Ustaw rolę')
+            .setDescription('Ustaw rolę dla eventu')
             .addStringOption(o =>
                 o.setName('event')
+                 .setDescription('Typ eventu')
                  .setRequired(true)
                  .addChoices(
                     { name: 'egg', value: 'egg' },
@@ -228,23 +241,50 @@ async function registerCommands() {
             )
             .addRoleOption(o =>
                 o.setName('rola')
+                 .setDescription('Rola do pingowania')
                  .setRequired(true)
             ),
 
         new SlashCommandBuilder()
             .setName('giveaway')
             .setDescription('Stwórz giveaway')
-            .addStringOption(o=>o.setName('nagroda').setRequired(true))
-            .addStringOption(o=>o.setName('czas').setRequired(true))
-            .addIntegerOption(o=>o.setName('wygrani').setRequired(true))
-            .addIntegerOption(o=>o.setName('wiadomosci'))
-            .addStringOption(o=>o.setName('obrazek')),
+            .addStringOption(o =>
+                o.setName('nagroda')
+                 .setDescription('Nagroda')
+                 .setRequired(true)
+            )
+            .addStringOption(o =>
+                o.setName('czas')
+                 .setDescription('Czas np 10m lub 1h')
+                 .setRequired(true)
+            )
+            .addIntegerOption(o =>
+                o.setName('wygrani')
+                 .setDescription('Ilość zwycięzców')
+                 .setRequired(true)
+            )
+            .addIntegerOption(o =>
+                o.setName('wiadomosci')
+                 .setDescription('Wymagana liczba wiadomości')
+            )
+            .addStringOption(o =>
+                o.setName('obrazek')
+                 .setDescription('Link do obrazka')
+            ),
 
         new SlashCommandBuilder()
             .setName('giveaway-role')
-            .setDescription('Bonus roli')
-            .addRoleOption(o=>o.setName('rola').setRequired(true))
-            .addIntegerOption(o=>o.setName('bonus').setRequired(true))
+            .setDescription('Dodaj bonus dla roli w giveaway')
+            .addRoleOption(o =>
+                o.setName('rola')
+                 .setDescription('Rola')
+                 .setRequired(true)
+            )
+            .addIntegerOption(o =>
+                o.setName('bonus')
+                 .setDescription('Ilość dodatkowych wejść')
+                 .setRequired(true)
+            )
 
     ].map(c => c.toJSON());
 
@@ -257,7 +297,7 @@ async function registerCommands() {
 }
 
 //////////////////////////////////////////////////
-// 🚀 READY + CRON
+// 🚀 START
 //////////////////////////////////////////////////
 
 client.once('clientReady', async () => {
@@ -278,7 +318,6 @@ client.once('clientReady', async () => {
 
             const channel = await client.channels.fetch(CHANNEL_ID);
 
-            // EVENT START
             if (m === 0) {
 
                 if (type === "merchant") {
@@ -286,12 +325,16 @@ client.once('clientReady', async () => {
                         content: `<@&${role}>`,
                         embeds: [embedBoss(), embedHoney()]
                     });
-                } else if (type === "egg") {
+                }
+
+                if (type === "egg") {
                     await channel.send({
                         content: `<@&${role}>`,
                         embeds: [embedEgg()]
                     });
-                } else {
+                }
+
+                if (type === "spin") {
                     await channel.send({
                         content: `<@&${role}>`,
                         embeds: [embedSpin()]
@@ -299,26 +342,8 @@ client.once('clientReady', async () => {
                 }
             }
 
-            // PRZYPOMNIENIE
-            if (m === 55) {
-
-                const next = getEvent((h + 1) % 24);
-                const nextRole = roles[next];
-                if (!nextRole) return;
-
-                const embed = new EmbedBuilder()
-                    .setTitle("⏰┃ZBLIŻA SIĘ EVENT")
-                    .setDescription(`🔥 ${next.toUpperCase()} za 5 minut`)
-                    .setColor(0xff9900);
-
-                await channel.send({
-                    content: `<@&${nextRole}>`,
-                    embeds: [embed]
-                });
-            }
-
         } catch (e) {
-            console.log("CRON ERROR:", e.message);
+            console.log(e);
         }
 
     });
@@ -335,7 +360,7 @@ client.on('interactionCreate', async i => {
 
         if (i.isButton() && i.customId === "join") {
             giveaway.entries[i.user.id] = 1;
-            return i.reply({ content: "🎉 Dołączono!", ephemeral: true });
+            return i.reply({ content: "🎉 Dołączyłeś do giveaway!", ephemeral: true });
         }
 
         if (!i.isChatInputCommand()) return;
@@ -344,10 +369,11 @@ client.on('interactionCreate', async i => {
 
         if (i.commandName === "set-role") {
             roles[i.options.getString("event")] = i.options.getRole("rola").id;
-            return i.editReply("✅ Ustawiono rolę");
+            return i.editReply("✅ Rola została ustawiona");
         }
 
         if (i.commandName === "event") {
+
             const type = getEvent(getPolishTime().getHours());
 
             if (type === "merchant") {
@@ -367,50 +393,24 @@ client.on('interactionCreate', async i => {
             const ts = (off) => {
                 const d = new Date(now);
                 d.setHours((h + off) % 24);
+                d.setMinutes(0);
                 return Math.floor(d.getTime()/1000);
             };
 
             return i.editReply({
                 embeds: [
                     new EmbedBuilder()
-                        .setTitle("📊┃EVENTY")
+                        .setTitle("📊┃Następne eventy")
                         .setDescription(
-`🔥 TERAZ: **${getEvent(h)}**
+`🔥 Aktualny: **${getEvent(h)}**
 
-⏰ NASTĘPNE:
+⏰ Następne:
 ➜ ${getEvent((h+1)%24)} <t:${ts(1)}:R>
 ➜ ${getEvent((h+2)%24)} <t:${ts(2)}:R>`
                         )
                         .setColor(0x5865F2)
                 ]
             });
-        }
-
-        if (i.commandName === "test-event") {
-
-            const type = getEvent(getPolishTime().getHours());
-            const role = roles[type];
-
-            const channel = await client.channels.fetch(CHANNEL_ID);
-
-            if (type === "merchant") {
-                await channel.send({
-                    content: `<@&${role}>`,
-                    embeds: [embedBoss(), embedHoney()]
-                });
-            } else if (type === "egg") {
-                await channel.send({
-                    content: `<@&${role}>`,
-                    embeds: [embedEgg()]
-                });
-            } else {
-                await channel.send({
-                    content: `<@&${role}>`,
-                    embeds: [embedSpin()]
-                });
-            }
-
-            return i.editReply("✅ Test wysłany");
         }
 
         if (i.commandName === "giveaway") {
@@ -454,16 +454,16 @@ client.on('interactionCreate', async i => {
 
             giveaway.rolesBonus[role.id] = bonus;
 
-            return i.editReply("✅ Dodano bonus");
+            return i.editReply("✅ Dodano bonus dla roli");
         }
 
         if (i.commandName === "refresh") {
             await registerCommands();
-            return i.editReply("✅ Odświeżono");
+            return i.editReply("✅ Komendy zostały odświeżone");
         }
 
     } catch (err) {
-        console.log("ERROR:", err.message);
+        console.log(err);
     }
 
 });
