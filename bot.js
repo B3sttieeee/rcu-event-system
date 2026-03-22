@@ -34,7 +34,17 @@ const IMAGES = {
 };
 
 //////////////////////////////////////////////////
-// 🕒 CZAS (POLSKA)
+// 🎯 ROLE (USTAWIASZ KOMENDĄ)
+//////////////////////////////////////////////////
+
+let roles = {
+    egg: null,
+    merchant: null,
+    spin: null
+};
+
+//////////////////////////////////////////////////
+// 🕒 CZAS
 //////////////////////////////////////////////////
 
 function getPolishTime() {
@@ -44,7 +54,7 @@ function getPolishTime() {
 }
 
 //////////////////////////////////////////////////
-// 🎯 EVENTY (POPRAWIONE)
+// 🎯 EVENTY
 //////////////////////////////////////////////////
 
 function getEvent(h) {
@@ -53,57 +63,50 @@ function getEvent(h) {
     if ([2,5,8,11,14,17,20,23].includes(h)) return "spin";
 }
 
-function getMerchantVariant() {
-    return Math.random() < 0.5 ? "boss" : "honey";
-}
-
 //////////////////////////////////////////////////
-// 🎨 EMBEDY (PRO + POPRAWIONE OPISY)
+// 🎨 EMBEDY
 //////////////////////////////////////////////////
 
-function buildEmbed(type, variant=null) {
-
-    if (type === "egg") {
-        return new EmbedBuilder()
-            .setTitle("🥚┃RNG EGG")
-            .setDescription(
+function embedEgg() {
+    return new EmbedBuilder()
+        .setTitle("🥚┃RNG EGG")
+        .setDescription(
 `🎲 Otwieraj jajka i zdobywaj pety
 
 ➜ Punkty do Tieru  
 ➜ Lepszy Tier = lepsze bonusy  
 
 📍 Sprawdź swoje postępy`
-            )
-            .setThumbnail(IMAGES.egg)
-            .setColor(0x00ffcc)
-            .setFooter({ text: "Event trwa 30 minut" })
-            .setTimestamp();
-    }
+        )
+        .setThumbnail(IMAGES.egg)
+        .setColor(0x00ffcc)
+        .setFooter({ text: "Event trwa 15 minut" })
+        .setTimestamp();
+}
 
-    if (type === "merchant") {
-
-        if (variant === "boss") {
-            return new EmbedBuilder()
-                .setTitle("🐝┃MERCHANT BOSS")
-                .setDescription(
+function embedBoss() {
+    return new EmbedBuilder()
+        .setTitle("🐝┃MERCHANT BOSS")
+        .setDescription(
 `🎉 Eventowy Merchant
 
-📍 Lokalizacja: Anniversary Event  
+📍 Anniversary Event  
 
 ➜ Za żetony z bossów można zakupić przedmioty  
 🎯 Szansa na Supreme: 125%  
 
 ⏳ Przejdź sprawdzić ofertę`
-                )
-                .setThumbnail(IMAGES.boss)
-                .setColor(0xff0000)
-                .setFooter({ text: "Event trwa 15 minut" })
-                .setTimestamp();
-        }
+        )
+        .setThumbnail(IMAGES.boss)
+        .setColor(0xff0000)
+        .setFooter({ text: "Event trwa 15 minut" })
+        .setTimestamp();
+}
 
-        return new EmbedBuilder()
-            .setTitle("🍯┃HONEY MERCHANT")
-            .setDescription(
+function embedHoney() {
+    return new EmbedBuilder()
+        .setTitle("🍯┃HONEY MERCHANT")
+        .setDescription(
 `🍯 Merchant z miodem
 
 📍 Bee World  
@@ -112,13 +115,14 @@ function buildEmbed(type, variant=null) {
 🎯 Szansa na Supreme: 110%  
 
 ⏳ Przejdź sprawdzić ofertę`
-            )
-            .setThumbnail(IMAGES.honey)
-            .setColor(0xffcc00)
-            .setFooter({ text: "Event trwa 15 minut" })
-            .setTimestamp();
-    }
+        )
+        .setThumbnail(IMAGES.honey)
+        .setColor(0xffcc00)
+        .setFooter({ text: "Event trwa 15 minut" })
+        .setTimestamp();
+}
 
+function embedSpin() {
     return new EmbedBuilder()
         .setTitle("🎰┃DEV SPIN")
         .setDescription(
@@ -132,36 +136,6 @@ function buildEmbed(type, variant=null) {
         .setColor(0x9b59b6)
         .setFooter({ text: "Event trwa 15 minut" })
         .setTimestamp();
-}
-
-//////////////////////////////////////////////////
-// 🎁 GIVEAWAY
-//////////////////////////////////////////////////
-
-let giveaway = {
-    active: false,
-    prize: "",
-    entries: {},
-    rolesBonus: {}
-};
-
-function parseTime(str) {
-    const num = parseInt(str);
-    if (str.endsWith("m")) return num * 60000;
-    if (str.endsWith("h")) return num * 3600000;
-    return 60000;
-}
-
-function getEntries(member) {
-    let entries = 1;
-
-    for (const roleId in giveaway.rolesBonus) {
-        if (member.roles.cache.has(roleId)) {
-            entries += giveaway.rolesBonus[roleId];
-        }
-    }
-
-    return entries;
 }
 
 //////////////////////////////////////////////////
@@ -189,16 +163,23 @@ async function registerCommands() {
             .setDescription('Odśwież komendy'),
 
         new SlashCommandBuilder()
-            .setName('giveaway')
-            .setDescription('Stwórz giveaway')
-            .addStringOption(o => o.setName('nagroda').setDescription('Nagroda').setRequired(true))
-            .addStringOption(o => o.setName('czas').setDescription('np 10m / 1h').setRequired(true)),
-
-        new SlashCommandBuilder()
-            .setName('giveaway-role')
-            .setDescription('Bonus dla roli')
-            .addRoleOption(o => o.setName('rola').setDescription('Rola').setRequired(true))
-            .addIntegerOption(o => o.setName('bonus').setDescription('Ile wejść').setRequired(true))
+            .setName('set-role')
+            .setDescription('Ustaw rolę dla eventu')
+            .addStringOption(o =>
+                o.setName('event')
+                 .setDescription('Typ eventu')
+                 .setRequired(true)
+                 .addChoices(
+                    { name: 'RNG EGG', value: 'egg' },
+                    { name: 'MERCHANT', value: 'merchant' },
+                    { name: 'DEV SPIN', value: 'spin' }
+                 )
+            )
+            .addRoleOption(o =>
+                o.setName('rola')
+                 .setDescription('Rola')
+                 .setRequired(true)
+            )
 
     ].map(c => c.toJSON());
 
@@ -208,15 +189,17 @@ async function registerCommands() {
         Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
         { body: commands }
     );
+
+    console.log("✅ Komendy OK");
 }
 
 //////////////////////////////////////////////////
-// 🚀 READY
+// 🚀 READY + CRON
 //////////////////////////////////////////////////
 
 client.once('clientReady', async () => {
-    console.log(`✅ ${client.user.tag}`);
 
+    console.log(`✅ ${client.user.tag}`);
     await registerCommands();
 
     cron.schedule('* * * * *', async () => {
@@ -226,20 +209,35 @@ client.once('clientReady', async () => {
             if (now.getMinutes() !== 0) return;
 
             const type = getEvent(now.getHours());
-            const variant = type === "merchant" ? getMerchantVariant() : null;
+            const role = roles[type];
+
+            if (!role) return;
 
             const channel = await client.channels.fetch(CHANNEL_ID);
 
-            await channel.send({
-                content: "@everyone",
-                embeds: [buildEmbed(type, variant)]
-            });
+            if (type === "merchant") {
+                await channel.send({
+                    content: `<@&${role}>`,
+                    embeds: [embedBoss(), embedHoney()]
+                });
+            } else if (type === "egg") {
+                await channel.send({
+                    content: `<@&${role}>`,
+                    embeds: [embedEgg()]
+                });
+            } else {
+                await channel.send({
+                    content: `<@&${role}>`,
+                    embeds: [embedSpin()]
+                });
+            }
 
         } catch (e) {
             console.log("CRON ERROR:", e.message);
         }
 
     });
+
 });
 
 //////////////////////////////////////////////////
@@ -250,26 +248,39 @@ client.on('interactionCreate', async i => {
 
     try {
 
-        if (i.isButton() && i.customId === "join") {
-
-            const entries = getEntries(i.member);
-            giveaway.entries[i.user.id] = entries;
-
-            return i.reply({
-                content: `🎟️ Masz ${entries} wejść`,
-                ephemeral: true
-            });
-        }
-
         if (!i.isChatInputCommand()) return;
 
         await i.deferReply();
 
+        // SET ROLE
+        if (i.commandName === "set-role") {
+
+            const type = i.options.getString("event");
+            const role = i.options.getRole("rola");
+
+            roles[type] = role.id;
+
+            return i.editReply({
+                content: `✅ Ustawiono rolę dla ${type}`
+            });
+        }
+
         // EVENT
         if (i.commandName === "event") {
-            return i.editReply({
-                embeds: [buildEmbed(getEvent(getPolishTime().getHours()))]
-            });
+
+            const type = getEvent(getPolishTime().getHours());
+
+            if (type === "merchant") {
+                return i.editReply({
+                    embeds: [embedBoss(), embedHoney()]
+                });
+            }
+
+            if (type === "egg") {
+                return i.editReply({ embeds: [embedEgg()] });
+            }
+
+            return i.editReply({ embeds: [embedSpin()] });
         }
 
         // NEXT EVENTS
@@ -305,86 +316,35 @@ client.on('interactionCreate', async i => {
         // TEST EVENT
         if (i.commandName === "test-event") {
 
-            const now = getPolishTime();
-            const type = getEvent(now.getHours());
-            const variant = type === "merchant" ? getMerchantVariant() : null;
+            const type = getEvent(getPolishTime().getHours());
+            const role = roles[type];
 
             const channel = await client.channels.fetch(CHANNEL_ID);
 
-            await channel.send({
-                content: "@everyone",
-                embeds: [buildEmbed(type, variant)]
-            });
+            if (type === "merchant") {
+                await channel.send({
+                    content: `<@&${role}>`,
+                    embeds: [embedBoss(), embedHoney()]
+                });
+            } else if (type === "egg") {
+                await channel.send({
+                    content: `<@&${role}>`,
+                    embeds: [embedEgg()]
+                });
+            } else {
+                await channel.send({
+                    content: `<@&${role}>`,
+                    embeds: [embedSpin()]
+                });
+            }
 
-            return i.editReply({ content: "✅ Wysłano test event" });
-        }
-
-        // GIVEAWAY
-        if (i.commandName === "giveaway") {
-
-            const prize = i.options.getString("nagroda");
-            const time = parseTime(i.options.getString("czas"));
-
-            giveaway = {
-                active: true,
-                prize,
-                entries: {},
-                rolesBonus: giveaway.rolesBonus
-            };
-
-            const embed = new EmbedBuilder()
-                .setTitle("🎉 GIVEAWAY")
-                .setDescription(`🎁 **${prize}**\nKliknij przycisk, aby wziąć udział`)
-                .setColor(0x00ffcc);
-
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                    .setCustomId("join")
-                    .setLabel("Weź udział")
-                    .setStyle(ButtonStyle.Success)
-            );
-
-            const msg = await i.editReply({
-                embeds: [embed],
-                components: [row]
-            });
-
-            setTimeout(async () => {
-
-                const pool = [];
-
-                for (const [id, count] of Object.entries(giveaway.entries)) {
-                    for (let i = 0; i < count; i++) pool.push(id);
-                }
-
-                if (pool.length === 0) return;
-
-                const winner = pool[Math.floor(Math.random() * pool.length)];
-
-                await msg.reply(`🎉 Wygrał: <@${winner}> | ${prize}`);
-
-                giveaway.active = false;
-
-            }, time);
-        }
-
-        // BONUS ROLE
-        if (i.commandName === "giveaway-role") {
-
-            const role = i.options.getRole("rola");
-            const bonus = i.options.getInteger("bonus");
-
-            giveaway.rolesBonus[role.id] = bonus;
-
-            return i.editReply({
-                content: `✅ ${role.name} ma +${bonus} wejść`
-            });
+            return i.editReply({ content: "✅ Wysłano test" });
         }
 
         // REFRESH
         if (i.commandName === "refresh") {
             await registerCommands();
-            return i.editReply({ content: "✅ Komendy odświeżone" });
+            return i.editReply({ content: "✅ Odświeżono komendy" });
         }
 
     } catch (err) {
