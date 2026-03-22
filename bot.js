@@ -1,20 +1,22 @@
-require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
   SlashCommandBuilder,
   REST,
-  Routes
+  Routes,
+  ActionRowBuilder,
+  StringSelectMenuBuilder
 } = require("discord.js");
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
+// 🔥 USTAWIENIA
+const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
-const TOKEN = process.env.TOKEN;
 
 const CHANNEL_ID = "1484937784283369502";
 
@@ -23,207 +25,245 @@ const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
 
-
 // =======================
-// 🧠 SYSTEM CZASU (FIXED)
+// 🧠 CZAS (NAPRAWIONY)
 // =======================
 
-function getCETDate() {
+function getCET() {
   const now = new Date();
-  return new Date(now.getTime() + 60 * 60 * 1000); // +1h CET
+  return new Date(now.toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
 }
 
-function getEventType(hour) {
+function getEvent(hour) {
   if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
   if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
   if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
 }
 
-// 🔥 AKTUALNY EVENT (NAPRAWIONY)
 function getCurrentEvent() {
-  const now = getCETDate();
-  return getEventType(now.getHours());
+  const now = getCET();
+  return getEvent(now.getHours());
 }
 
-// 🔥 KOLEJNE EVENTY (NAPRAWIONE)
-function getNextEvents(count = 2) {
-  const now = getCETDate();
-  const results = [];
+function getNextEvents() {
+  const now = getCET();
+  const list = [];
 
-  let test = new Date(now);
+  for (let i = 1; i <= 24; i++) {
+    const future = new Date(now);
+    future.setHours(now.getHours() + i, 0, 0, 0);
 
-  for (let i = 0; i < 24; i++) {
-    test.setMinutes(0, 0, 0);
+    list.push({
+      type: getEvent(future.getHours()),
+      time: future
+    });
 
-    const type = getEventType(test.getHours());
-
-    if (test > now) {
-      results.push({
-        type,
-        time: new Date(test)
-      });
-    }
-
-    test.setHours(test.getHours() + 1);
-
-    if (results.length >= count) break;
+    if (list.length === 2) break;
   }
 
-  return results;
+  return list;
 }
 
-// 🔥 TIMESTAMP
-function toUnix(date) {
-  return Math.floor(date.getTime() / 1000);
+function unix(t) {
+  return Math.floor(t.getTime() / 1000);
 }
-
 
 // =======================
 // 🎨 EMBEDY
 // =======================
 
-function eventEmbed(type) {
-  if (type === "egg") {
-    return new EmbedBuilder()
-      .setColor("#f1c40f")
-      .setTitle("🥚 RNG EGG")
-      .setDescription(`**Otwieraj jajka i zdobywaj punkty Tieru!**\n\n• Lepsze pety = więcej punktów\n• Lepszy Tier = lepsze bonusy`)
-      .setThumbnail("https://i.imgur.com/8R8nX8M.png");
-  }
+function eggEmbed() {
+  return new EmbedBuilder()
+    .setColor("#f1c40f")
+    .setTitle("🥚 RNG EGG")
+    .setDescription(
+`**Otwieraj jajka i zdobywaj punkty Tieru!**
 
-  if (type === "merchant") {
-    return [
-      new EmbedBuilder()
-        .setColor("#f39c12")
-        .setTitle("🍯 HONEY MERCHANT")
-        .setDescription(`**Eventowy merchant — sprawdź ofertę!**\n\n• Za miód kupisz przedmioty\n• Supreme: **110%**\n\n⏳ Znika po 15 minutach`)
-        .setThumbnail("https://i.imgur.com/1XK8JZg.png"),
+• Lepsze pety = więcej punktów
+• Lepszy Tier = lepsze bonusy`
+    )
+    .setThumbnail("https://i.imgur.com/8R8nX8M.png");
+}
 
-      new EmbedBuilder()
-        .setColor("#e74c3c")
-        .setTitle("👹 BOSS MERCHANT")
-        .setDescription(`**Eventowy merchant na mapie Anniversary!**\n\n• Za tokeny z bossów kupisz przedmioty\n• Supreme: **125%**\n\n⏳ Znika po 15 minutach`)
-        .setThumbnail("https://i.imgur.com/3XQZ4Fh.png")
-    ];
-  }
+function honeyEmbed() {
+  return new EmbedBuilder()
+    .setColor("#f39c12")
+    .setTitle("🍯 HONEY MERCHANT")
+    .setDescription(
+`**Eventowy merchant — sprawdź ofertę!**
 
-  if (type === "spin") {
-    return new EmbedBuilder()
-      .setColor("#9b59b6")
-      .setTitle("🎡 DEV SPIN")
-      .setDescription(`**Kręć kołem i zdobywaj nagrody!**\n\n• Szansa na Supreme`)
-      .setThumbnail("https://i.imgur.com/FV9ZK0G.png");
-  }
+• Za miód kupisz przedmioty
+• Supreme: **110%**
+
+⏳ Znika po 15 minutach`
+    )
+    .setThumbnail("https://i.imgur.com/1XK8JZg.png");
+}
+
+function bossEmbed() {
+  return new EmbedBuilder()
+    .setColor("#e74c3c")
+    .setTitle("👹 BOSS MERCHANT")
+    .setDescription(
+`**Eventowy merchant na mapie Anniversary Event!**
+
+• Za tokeny z bossów kupisz przedmioty
+• Supreme: **125%**
+
+⏳ Znika po 15 minutach`
+    )
+    .setThumbnail("https://i.imgur.com/3XQZ4Fh.png");
+}
+
+function spinEmbed() {
+  return new EmbedBuilder()
+    .setColor("#9b59b6")
+    .setTitle("🎡 DEV SPIN")
+    .setDescription(
+`**Kręć kołem i zdobywaj nagrody!**
+
+• Szansa na Supreme`
+    )
+    .setThumbnail("https://i.imgur.com/FV9ZK0G.png");
 }
 
 // =======================
-// 📅 NEXT EVENTS EMBED
+// 📅 NEXT EVENTS
 // =======================
 
-function nextEventsEmbed() {
-  const next = getNextEvents(2);
+function nextEmbed() {
+  const next = getNextEvents();
 
   return new EmbedBuilder()
     .setColor("#2ecc71")
     .setTitle("📅 NASTĘPNE EVENTY")
     .setDescription(
-      next.map(e => {
-        return `**${e.type.toUpperCase()}**\n<t:${toUnix(e.time)}:R>\n<t:${toUnix(e.time)}:F>\n`;
-      }).join("\n")
+      next.map(e =>
+`**${e.type.toUpperCase()}**
+<t:${unix(e.time)}:R>
+<t:${unix(e.time)}:F>`
+      ).join("\n\n")
     );
 }
 
+// =======================
+// 🎮 PICKER
+// =======================
+
+function rolePicker() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("roles")
+      .setPlaceholder("Wybierz powiadomienia")
+      .addOptions([
+        { label: "RNG EGG", value: "egg" },
+        { label: "MERCHANT", value: "merchant" },
+        { label: "DEV SPIN", value: "spin" }
+      ])
+  );
+}
 
 // =======================
-// ⚡ KOMENDY
+// 📦 KOMENDY
 // =======================
 
 const commands = [
-  new SlashCommandBuilder()
-    .setName("event")
-    .setDescription("Aktualny event"),
-
-  new SlashCommandBuilder()
-    .setName("next-events")
-    .setDescription("Następne eventy"),
-
-  new SlashCommandBuilder()
-    .setName("test-ping")
-    .setDescription("Test eventu")
+  new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
+  new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy"),
+  new SlashCommandBuilder().setName("test-ping").setDescription("Test eventu"),
+  new SlashCommandBuilder().setName("get-role").setDescription("Picker ról"),
+  new SlashCommandBuilder().setName("set-dm").setDescription("DM powiadomienia")
 ];
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
-
 
 // =======================
 // 🚀 READY
 // =======================
 
 client.once("clientReady", async () => {
-  console.log("✅ BOT ONLINE");
+  console.log("BOT ONLINE");
 
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
     { body: commands }
   );
 
-  console.log("✅ Komendy załadowane");
+  console.log("Komendy gotowe");
 });
 
-
 // =======================
-// 🎮 INTERACTION
+// 🎮 INTERAKCJE
 // =======================
 
-client.on("interactionCreate", async (interaction) => {
-  if (!interaction.isChatInputCommand()) return;
+const dmSettings = new Map();
 
-  // EVENT
-  if (interaction.commandName === "event") {
-    const type = getCurrentEvent();
-    const embed = eventEmbed(type);
+client.on("interactionCreate", async (i) => {
+  if (i.isChatInputCommand()) {
 
-    if (Array.isArray(embed)) {
-      return interaction.reply({ embeds: embed });
-    }
+    if (i.commandName === "event") {
+      const e = getCurrentEvent();
 
-    return interaction.reply({ embeds: [embed] });
-  }
+      if (e === "egg") return i.reply({ embeds: [eggEmbed()] });
+      if (e === "spin") return i.reply({ embeds: [spinEmbed()] });
 
-  // NEXT EVENTS
-  if (interaction.commandName === "next-events") {
-    return interaction.reply({
-      embeds: [nextEventsEmbed()]
-    });
-  }
-
-  // TEST
-  if (interaction.commandName === "test-ping") {
-    const type = getCurrentEvent();
-    const channel = await client.channels.fetch(CHANNEL_ID);
-
-    if (type === "merchant") {
-      await channel.send(`<@&${ROLE_MERCHANT}>`);
-      const embeds = eventEmbed("merchant");
-      for (const e of embeds) {
-        await channel.send({ embeds: [e] });
+      if (e === "merchant") {
+        return i.reply({ embeds: [honeyEmbed(), bossEmbed()] });
       }
     }
 
-    if (type === "egg") {
-      await channel.send(`<@&${ROLE_EGG}>`);
-      await channel.send({ embeds: [eventEmbed("egg")] });
+    if (i.commandName === "next-events") {
+      return i.reply({ embeds: [nextEmbed()] });
     }
 
-    if (type === "spin") {
-      await channel.send(`<@&${ROLE_SPIN}>`);
-      await channel.send({ embeds: [eventEmbed("spin")] });
+    if (i.commandName === "test-ping") {
+      const e = getCurrentEvent();
+      const ch = await client.channels.fetch(CHANNEL_ID);
+
+      if (e === "egg") {
+        await ch.send(`<@&${ROLE_EGG}>`);
+        await ch.send({ embeds: [eggEmbed()] });
+      }
+
+      if (e === "spin") {
+        await ch.send(`<@&${ROLE_SPIN}>`);
+        await ch.send({ embeds: [spinEmbed()] });
+      }
+
+      if (e === "merchant") {
+        await ch.send(`<@&${ROLE_MERCHANT}>`);
+        await ch.send({ embeds: [honeyEmbed()] });
+        await ch.send({ embeds: [bossEmbed()] });
+      }
+
+      return i.reply({ content: "OK", ephemeral: true });
     }
 
-    return interaction.reply({ content: "✅ Test wysłany", ephemeral: true });
+    if (i.commandName === "get-role") {
+      return i.reply({
+        content: "Wybierz powiadomienia:",
+        components: [rolePicker()],
+        ephemeral: true
+      });
+    }
+
+    if (i.commandName === "set-dm") {
+      dmSettings.set(i.user.id, true);
+      return i.reply({ content: "DM włączone", ephemeral: true });
+    }
+
+  }
+
+  if (i.isStringSelectMenu()) {
+    const member = i.member;
+
+    if (i.values.includes("egg")) await member.roles.add(ROLE_EGG);
+    if (i.values.includes("merchant")) await member.roles.add(ROLE_MERCHANT);
+    if (i.values.includes("spin")) await member.roles.add(ROLE_SPIN);
+
+    return i.reply({ content: "Ustawiono role", ephemeral: true });
   }
 });
-
 
 // =======================
 // 🔐 LOGIN
