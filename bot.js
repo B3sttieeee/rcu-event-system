@@ -6,6 +6,9 @@ const {
   StringSelectMenuBuilder
 } = require("discord.js");
 
+const fs = require("fs");
+const config = JSON.parse(fs.readFileSync("./data.json", "utf8"));
+
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
@@ -18,32 +21,23 @@ const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
 
-const AUTHOR = "B3sttiee";
-const START_DATE = "2026-03-22";
-
-// ================= DM =================
-
-const dmUsers = {
-  egg: new Set(),
-  merchant: new Set(),
-  spin: new Set()
-};
-
-// ================= TIME FIX =================
+// ================= TIME =================
 
 function getNow() {
-  return new Date(); // 🔥 ZERO offset bug
+  return new Date();
 }
 
-// ================= EVENT SYSTEM =================
+// ================= EVENT SYSTEM (FIXED 100%) =================
 
 function getEventByHour(hour) {
-  if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
-  if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
-  if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
+  const mod = hour % 3;
+
+  if (mod === 0) return "egg";
+  if (mod === 1) return "merchant";
+  if (mod === 2) return "spin";
 }
 
-// ================= NEXT EVENTS FIX =================
+// ================= NEXT EVENTS =================
 
 function getNextEvents() {
   const now = getNow();
@@ -63,12 +57,12 @@ function getNextEvents() {
   return events;
 }
 
-// ================= EMBED STYLE =================
+// ================= EMBED BASE =================
 
 function baseEmbed(embed) {
   return embed
     .setFooter({
-      text: `Start: ${START_DATE} • Twórca: ${AUTHOR}`
+      text: `Start: ${config.startDate} • Twórca: ${config.author}`
     })
     .setTimestamp();
 }
@@ -85,11 +79,11 @@ function getEmbed(type) {
         .setDescription(
 `**➤ Otwieraj jajka i zdobywaj punkty!**
 
-➤ Im lepsze pety zdobędziesz → tym więcej punktów  
+➤ Im lepsze pety zdobędziesz → więcej punktów  
 ➤ Więcej punktów → wyższy tier  
-➤ Wyższy tier → lepsze nagrody końcowe  
+➤ Wyższy tier → lepsze nagrody  
 
-✨ **Graj aktywnie i zgarnij najlepsze bonusy!**`
+✨ **Graj aktywnie i zgarnij bonusy!**`
         )
         .setThumbnail("https://imgur.com/JqyeITl.png")
     );
@@ -107,7 +101,7 @@ function getEmbed(type) {
 ➤ Szansa na rzadkie itemy 💎  
 ➤ 🎯 Supreme (??%)  
 
-⚡ **Spróbuj swojego szczęścia!**`
+⚡ **Spróbuj szczęścia!**`
         )
         .setThumbnail("https://imgur.com/NJI7052.png")
     );
@@ -120,10 +114,10 @@ function getEmbed(type) {
           .setColor("#f39c12")
           .setTitle("🍯 HONEY MERCHANT")
           .setDescription(
-`**➤ Farm miód na Bee World!**
+`**➤ Zdobywaj miód na Bee World!**
 
 ➤ Zbieraj miód 🐝  
-➤ Wymieniaj na przedmioty  
+➤ Kupuj przedmioty  
 ➤ 🎯 Supreme (110%)  
 
 🔥 **Farm = lepsze nagrody!**`
@@ -136,10 +130,10 @@ function getEmbed(type) {
           .setColor("#e74c3c")
           .setTitle("💀 BOSS MERCHANT")
           .setDescription(
-`**➤ Pokonuj bossy i zdobywaj tokeny!**
+`**➤ Pokonuj bossy!**
 
-➤ Tokeny ⚔️  
-➤ Zakupy u merchanta  
+➤ Zdobywaj tokeny ⚔️  
+➤ Kupuj itemy  
 ➤ 🎯 Supreme (125%)  
 
 👑 **Top loot dla najlepszych!**`
@@ -171,14 +165,6 @@ async function sendEvent() {
   } else {
     await channel.send({ embeds: [embed] });
   }
-
-  // DM
-  for (const id of dmUsers[type]) {
-    try {
-      const user = await client.users.fetch(id);
-      await user.send(`🔔 Event ${type.toUpperCase()} wystartował!`);
-    } catch {}
-  }
 }
 
 // ================= REMINDER =================
@@ -187,7 +173,7 @@ async function sendReminder() {
   const channel = await client.channels.fetch(CHANNEL_ID);
   const now = getNow();
 
-  const nextHour = (now.getHours() + 1) % 24;
+  const nextHour = now.getHours() + 1;
   const type = getEventByHour(nextHour);
 
   const role =
@@ -198,32 +184,6 @@ async function sendReminder() {
   await channel.send(
     `⏳ ${role}\n━━━━━━━━━━━━━━━━━━━\n**Event ${type.toUpperCase()} za 5 minut!**`
   );
-}
-
-// ================= GIVEAWAY =================
-
-async function sendGiveaway(channel, prize, minutes) {
-  const end = Math.floor((Date.now() + minutes * 60000) / 1000);
-
-  const embed = new EmbedBuilder()
-    .setColor("#00ffcc")
-    .setTitle("🎉 GIVEAWAY")
-    .setDescription(`🎁 ${prize}\n⏳ <t:${end}:R>\nReaguj 🎉`)
-    .setFooter({ text: AUTHOR });
-
-  const msg = await channel.send({ embeds: [embed] });
-  await msg.react("🎉");
-
-  setTimeout(async () => {
-    const fetched = await channel.messages.fetch(msg.id);
-    const users = await fetched.reactions.cache.get("🎉").users.fetch();
-
-    const valid = users.filter(u => !u.bot).map(u => u.id);
-    if (!valid.length) return channel.send("❌ Brak uczestników");
-
-    const winner = valid[Math.floor(Math.random() * valid.length)];
-    channel.send(`🏆 Wygrywa <@${winner}> | ${prize}`);
-  }, minutes * 60000);
 }
 
 // ================= LOOP =================
@@ -279,35 +239,18 @@ client.on("interactionCreate", async (i) => {
           ])
       );
 
-      return i.reply({ content: "Wybierz role:", components: [row], ephemeral: true });
-    }
-
-    if (i.commandName === "set-dm") {
-      const type = i.options.getString("event");
-
-      if (dmUsers[type].has(i.user.id)) {
-        dmUsers[type].delete(i.user.id);
-        return i.reply({ content: "❌ DM wyłączone", ephemeral: true });
-      }
-
-      dmUsers[type].add(i.user.id);
-      return i.reply({ content: "✅ DM włączone", ephemeral: true });
-    }
-
-    if (i.commandName === "giveaway") {
-      const prize = i.options.getString("nagroda");
-      const time = i.options.getInteger("czas");
-
-      const channel = await client.channels.fetch(CHANNEL_ID);
-      await sendGiveaway(channel, prize, time);
-
-      return i.reply({ content: "✅ Giveaway start!", ephemeral: true });
+      return i.reply({
+        content: "Wybierz role:",
+        components: [row],
+        ephemeral: true
+      });
     }
   }
 
   if (i.isStringSelectMenu()) {
     if (i.customId === "roles") {
       const member = await i.guild.members.fetch(i.user.id);
+
       const roles = [ROLE_EGG, ROLE_MERCHANT, ROLE_SPIN];
 
       for (const r of roles) {
