@@ -15,12 +15,6 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-  console.log("❌ Brak TOKEN / CLIENT_ID / GUILD_ID w ENV!");
-  process.exit(1);
-}
-
-// ================= CLIENT =================
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
@@ -32,7 +26,7 @@ const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
 
-// ================= EVENT =================
+// ================= EVENT LOGIC =================
 
 function getEventByHour(hour) {
   if (hour % 3 === 0) return "egg";
@@ -40,20 +34,26 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= NEXT EVENTS =================
-
+// 🔥 FIXED NEXT EVENTS (NAJWAŻNIEJSZE)
 function getNextEvents() {
   const now = new Date();
+  const currentHour = now.getHours();
+
   const events = [];
 
   for (let i = 1; i <= 3; i++) {
-    const next = new Date(now);
+    const hour = (currentHour + i) % 24;
 
+    const next = new Date(now);
     next.setMinutes(0, 0, 0);
-    next.setHours(now.getHours() + i);
+    next.setHours(hour);
+
+    if (hour <= currentHour) {
+      next.setDate(next.getDate() + 1);
+    }
 
     events.push({
-      type: getEventByHour(next.getHours()),
+      type: getEventByHour(hour),
       timestamp: Math.floor(next.getTime() / 1000)
     });
   }
@@ -82,29 +82,47 @@ function getEmbed(type) {
 `**➤ Otwieraj jajka i zdobywaj punkty!**
 
 ➤ Im lepsze pety → więcej punktów  
-➤ Dużo punktów → wyższy tier  
-➤ Wyższy tier → lepsze bonusy  
+➤ Więcej punktów → wyższy tier  
+➤ Wyższy tier → lepsze nagrody  
 
-✨ Graj aktywnie i zdobywaj przewagę!`
+✨ Graj aktywnie!`
         )
+        .setThumbnail("https://imgur.com/JqyeITl.png")
+        .setImage("https://imgur.com/JqyeITl.png")
     );
   }
 
   if (type === "merchant") {
-    return baseEmbed(
-      new EmbedBuilder()
-        .setColor("#f39c12")
-        .setTitle("🛒 MERCHANT EVENT")
-        .setDescription(
-`**➤ Kupuj i zdobywaj itemy!**
+    return [
+      baseEmbed(
+        new EmbedBuilder()
+          .setColor("#f39c12")
+          .setTitle("🍯 HONEY MERCHANT")
+          .setDescription(
+`**➤ Zbieraj miód z pszczół!**
 
-➤ Honey + Boss Merchant  
-➤ Szansa na Supreme  
-➤ Rotacyjne przedmioty  
+➤ Bee World 🐝  
+➤ Kupuj itemy  
+➤ 🎯 Supreme (110%)`
+          )
+          .setThumbnail("https://imgur.com/zhLC0zn.png")
+          .setImage("https://imgur.com/zhLC0zn.png")
+      ),
+      baseEmbed(
+        new EmbedBuilder()
+          .setColor("#e74c3c")
+          .setTitle("💀 BOSS MERCHANT")
+          .setDescription(
+`**➤ Zabij bossy i zdobywaj tokeny!**
 
-🔥 Nie przegap najlepszych ofert!`
-        )
-    );
+➤ Tokeny ⚔️  
+➤ Kupuj itemy  
+➤ 🎯 Supreme (125%)`
+          )
+          .setThumbnail("https://imgur.com/yFvb6jY.png")
+          .setImage("https://imgur.com/yFvb6jY.png")
+      )
+    ];
   }
 
   if (type === "spin") {
@@ -113,14 +131,14 @@ function getEmbed(type) {
         .setColor("#9b59b6")
         .setTitle("🎡 DEV SPIN EVENT")
         .setDescription(
-`**➤ Zakręć kołem i wygraj!**
+`**➤ Zakręć kołem i wygraj nagrody!**
 
-➤ Losowe nagrody  
-➤ Szansa na rzadkie itemy  
-➤ Możliwy Supreme  
-
-🎯 Spróbuj swojego szczęścia!`
+➤ Losowe nagrody 🎁  
+➤ Rzadkie itemy 💎  
+➤ 🎯 Supreme`
         )
+        .setThumbnail("https://imgur.com/NJI7052.png")
+        .setImage("https://imgur.com/NJI7052.png")
     );
   }
 }
@@ -138,8 +156,17 @@ async function sendEvent() {
     type === "merchant" ? `<@&${ROLE_MERCHANT}>` :
     `<@&${ROLE_SPIN}>`;
 
-  await channel.send(`${role}\n🚀 EVENT WYSTARTOWAŁ`);
-  await channel.send({ embeds: [getEmbed(type)] });
+  await channel.send(`${role}\n━━━━━━━━━━━━━━━━━━━\n🚀 **EVENT WYSTARTOWAŁ!**`);
+
+  const embed = getEmbed(type);
+
+  if (Array.isArray(embed)) {
+    for (const e of embed) {
+      await channel.send({ embeds: [e] });
+    }
+  } else {
+    await channel.send({ embeds: [embed] });
+  }
 }
 
 // ================= COMMANDS =================
@@ -149,8 +176,6 @@ const commands = [
   new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
   new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy")
 ];
-
-// ================= REGISTER =================
 
 async function registerCommands() {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -223,7 +248,7 @@ client.on("interactionCreate", async (i) => {
 
       events.forEach(e => {
         embed.addFields({
-          name: e.type.toUpperCase(),
+          name: `➤ ${e.type.toUpperCase()}`,
           value: `<t:${e.timestamp}:R>\n<t:${e.timestamp}:F>`
         });
       });
@@ -252,7 +277,7 @@ client.on("interactionCreate", async (i) => {
 
       events.forEach(e => {
         embed.addFields({
-          name: e.type.toUpperCase(),
+          name: `➤ ${e.type.toUpperCase()}`,
           value: `<t:${e.timestamp}:R>\n<t:${e.timestamp}:F>`
         });
       });
@@ -271,10 +296,7 @@ client.on("interactionCreate", async (i) => {
 
 client.once("clientReady", async () => {
   console.log("✅ BOT ONLINE");
-
   await registerCommands();
-
-  console.log("🔥 GOTOWY");
 });
 
 client.login(TOKEN);
