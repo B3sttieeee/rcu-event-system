@@ -4,21 +4,19 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  REST,
+  Routes,
+  SlashCommandBuilder
 } = require("discord.js");
 
 const fs = require("fs");
 
-let config = { startDate: "2026-03-22", author: "B3sttiee" };
-try {
-  config = JSON.parse(fs.readFileSync("./data.json", "utf8"));
-} catch {}
-
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
-
 // ================= CONFIG =================
+
+const TOKEN = process.env.TOKEN;
+const CLIENT_ID = "TWÓJ_CLIENT_ID"; // 🔥 WPISZ
+const GUILD_ID = "TWÓJ_GUILD_ID";   // 🔥 WPISZ
 
 const CHANNEL_ID = "1484937784283369502";
 
@@ -26,13 +24,19 @@ const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
 
-// ================= TIME (FINAL FIX) =================
+const config = JSON.parse(fs.readFileSync("./data.json", "utf8"));
+
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
+
+// ================= TIME =================
 
 function getNow() {
-  return new Date(); // 🔥 żadnych offsetów
+  return new Date(); // 🔥 ZERO OFFSET
 }
 
-// ================= EVENT SYSTEM =================
+// ================= EVENT =================
 
 function getEventByHour(hour) {
   if (hour % 3 === 0) return "egg";
@@ -48,7 +52,6 @@ function getNextEvents() {
 
   for (let i = 1; i <= 3; i++) {
     const next = new Date(now);
-
     next.setMinutes(0, 0, 0);
     next.setHours(now.getHours() + i);
 
@@ -81,50 +84,30 @@ function getEmbed(type) {
         .setDescription(
 `**➤ Otwieraj jajka i zdobywaj punkty!**
 
-➤ Im lepsze pety → więcej punktów  
-➤ Dużo punktów → wyższy tier  
-➤ Wyższy tier → lepsze nagrody końcowe  
+➤ Lepsze pety → więcej punktów  
+➤ Więcej punktów → wyższy tier  
+➤ Lepszy tier → lepsze nagrody  
 
-✨ Graj aktywnie i zgarnij najlepsze bonusy!`
+✨ Farm i zgarnij bonusy!`
         )
-        .setThumbnail("https://imgur.com/JqyeITl.png")
     );
   }
 
   if (type === "merchant") {
-    return [
-      baseEmbed(
-        new EmbedBuilder()
-          .setColor("#f39c12")
-          .setTitle("🍯 HONEY MERCHANT")
-          .setDescription(
-`**➤ Zdobywaj miód na Bee World!**
+    return baseEmbed(
+      new EmbedBuilder()
+        .setColor("#f39c12")
+        .setTitle("🛒 MERCHANT EVENT")
+        .setDescription(
+`**➤ Kupuj i zdobywaj itemy!**
 
-➤ Zbieraj miód z pszczół 🐝  
-➤ Wymieniaj na przedmioty  
-➤ 🎯 Szansa na Supreme (110%)  
+➤ Honey + Boss Merchant  
+➤ Szansa na Supreme  
+➤ Najlepsze itemy w rotacji  
 
-🔥 Im więcej farmisz, tym lepsze nagrody!`
-          )
-          .setThumbnail("https://imgur.com/zhLC0zn.png")
-      ),
-
-      baseEmbed(
-        new EmbedBuilder()
-          .setColor("#e74c3c")
-          .setTitle("💀 BOSS MERCHANT")
-          .setDescription(
-`**➤ Pokonuj bossy i zdobywaj tokeny!**
-
-➤ Tokeny z bossów ⚔️  
-➤ Wymiana na itemy  
-➤ 🎯 Szansa na Supreme (125%)  
-
-👑 Najlepsze nagrody dla najlepszych graczy!`
-          )
-          .setThumbnail("https://imgur.com/yFvb6jY.png")
-      )
-    ];
+🔥 Sprawdzaj co godzinę!`
+        )
+    );
   }
 
   if (type === "spin") {
@@ -133,20 +116,19 @@ function getEmbed(type) {
         .setColor("#9b59b6")
         .setTitle("🎡 DEV SPIN EVENT")
         .setDescription(
-`**➤ Zakręć kołem i zdobądź nagrody!**
+`**➤ Zakręć kołem!**
 
-➤ Losowe nagrody 🎁  
-➤ Szansa na rzadkie itemy 💎  
-➤ 🎯 Mała szansa na Supreme  
+➤ Losowe nagrody  
+➤ Szansa na rzadkie itemy  
+➤ Supreme drop  
 
-⚡ Spróbuj swojego szczęścia!`
+🎯 Spróbuj szczęścia!`
         )
-        .setThumbnail("https://imgur.com/NJI7052.png")
     );
   }
 }
 
-// ================= SEND EVENT =================
+// ================= EVENT SEND =================
 
 async function sendEvent() {
   const channel = await client.channels.fetch(CHANNEL_ID);
@@ -159,32 +141,14 @@ async function sendEvent() {
     type === "merchant" ? `<@&${ROLE_MERCHANT}>` :
     `<@&${ROLE_SPIN}>`;
 
-  await channel.send(`${role}\n━━━━━━━━━━━━━━━━━━━\n🚀 **EVENT WYSTARTOWAŁ!**`);
-
-  const embed = getEmbed(type);
-
-  if (Array.isArray(embed)) {
-    for (const e of embed) await channel.send({ embeds: [e] });
-  } else {
-    await channel.send({ embeds: [embed] });
-  }
+  await channel.send(`${role}\n🚀 EVENT WYSTARTOWAŁ`);
+  await channel.send({ embeds: [getEmbed(type)] });
 }
 
-// ================= REMINDER =================
+// ================= PANEL =================
 
-async function sendReminder() {
-  const channel = await client.channels.fetch(CHANNEL_ID);
-  const next = getNextEvents()[0];
-
-  await channel.send(
-    `⏳ <@&${next.type === "egg" ? ROLE_EGG : next.type === "merchant" ? ROLE_MERCHANT : ROLE_SPIN}>\n━━━━━━━━━━━━━━━━━━━\n**Event ${next.type.toUpperCase()} za 5 minut!**`
-  );
-}
-
-// ================= PANEL COMMAND =================
-
-async function sendPanel(interaction) {
-  const row = new ActionRowBuilder().addComponents(
+function getPanel() {
+  return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("now")
       .setLabel("Aktualny Event")
@@ -196,16 +160,28 @@ async function sendPanel(interaction) {
       .setStyle(ButtonStyle.Success),
 
     new ButtonBuilder()
-      .setCustomId("force")
+      .setCustomId("send")
       .setLabel("Wyślij Event")
       .setStyle(ButtonStyle.Danger)
   );
+}
 
-  await interaction.reply({
-    content: "🎮 **PANEL EVENTÓW**",
-    components: [row],
-    ephemeral: true
-  });
+// ================= COMMAND REGISTER =================
+
+const commands = [
+  new SlashCommandBuilder().setName("panel").setDescription("Panel eventów"),
+  new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
+  new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy")
+];
+
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+async function registerCommands() {
+  await rest.put(
+    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+    { body: commands }
+  );
+  console.log("✅ Komendy zarejestrowane");
 }
 
 // ================= LOOP =================
@@ -214,59 +190,92 @@ setInterval(() => {
   const now = getNow();
 
   if (now.getMinutes() === 0) sendEvent();
-  if (now.getMinutes() === 55) sendReminder();
-
 }, 60000);
 
 // ================= INTERACTIONS =================
 
 client.on("interactionCreate", async (i) => {
 
-  // SLASH COMMAND PANEL
+  // ===== SLASH =====
+
   if (i.isChatInputCommand()) {
+
     if (i.commandName === "panel") {
-      return sendPanel(i);
+      return i.reply({
+        content: "🎮 PANEL EVENTÓW",
+        components: [getPanel()],
+        ephemeral: true
+      });
+    }
+
+    if (i.commandName === "event") {
+      return i.reply({
+        embeds: [getEmbed(getEventByHour(getNow().getHours()))]
+      });
+    }
+
+    if (i.commandName === "next-events") {
+      const events = getNextEvents();
+
+      const embed = baseEmbed(
+        new EmbedBuilder()
+          .setTitle("📅 NASTĘPNE EVENTY")
+          .setColor("#2ecc71")
+      );
+
+      events.forEach(e => {
+        embed.addFields({
+          name: e.type.toUpperCase(),
+          value: `<t:${e.timestamp}:R>\n<t:${e.timestamp}:F>`
+        });
+      });
+
+      return i.reply({ embeds: [embed] });
     }
   }
 
-  if (!i.isButton()) return;
+  // ===== BUTTONS =====
 
-  if (i.customId === "now") {
-    return i.reply({
-      embeds: [getEmbed(getEventByHour(getNow().getHours()))],
-      ephemeral: true
-    });
-  }
+  if (i.isButton()) {
 
-  if (i.customId === "next") {
-    const events = getNextEvents();
-
-    const embed = baseEmbed(
-      new EmbedBuilder()
-        .setColor("#2ecc71")
-        .setTitle("📅 NASTĘPNE EVENTY")
-    );
-
-    events.forEach(e => {
-      embed.addFields({
-        name: `➤ ${e.type.toUpperCase()}`,
-        value: `<t:${e.timestamp}:R>\n<t:${e.timestamp}:F>`
+    if (i.customId === "now") {
+      return i.reply({
+        embeds: [getEmbed(getEventByHour(getNow().getHours()))],
+        ephemeral: true
       });
-    });
+    }
 
-    return i.reply({ embeds: [embed], ephemeral: true });
-  }
+    if (i.customId === "next") {
+      const events = getNextEvents();
 
-  if (i.customId === "force") {
-    await sendEvent();
-    return i.reply({ content: "✅ Event wysłany", ephemeral: true });
+      const embed = baseEmbed(
+        new EmbedBuilder()
+          .setTitle("📅 NASTĘPNE EVENTY")
+          .setColor("#2ecc71")
+      );
+
+      events.forEach(e => {
+        embed.addFields({
+          name: e.type.toUpperCase(),
+          value: `<t:${e.timestamp}:R>\n<t:${e.timestamp}:F>`
+        });
+      });
+
+      return i.reply({ embeds: [embed], ephemeral: true });
+    }
+
+    if (i.customId === "send") {
+      await sendEvent();
+      return i.reply({ content: "✅ Event wysłany", ephemeral: true });
+    }
   }
 });
 
 // ================= READY =================
 
-client.once("clientReady", () => {
+client.once("clientReady", async () => {
   console.log("✅ BOT ONLINE");
+  await registerCommands(); // 🔥 TO CI BRAKOWAŁO
 });
 
-client.login(process.env.TOKEN);
+client.login(TOKEN);
