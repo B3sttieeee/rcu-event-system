@@ -90,7 +90,7 @@ function honeyEmbed() {
     .setColor("#f39c12")
     .setTitle("🍯 HONEY MERCHANT")
     .setDescription(
-`**Eventowy merchant — sprawdź ofertę!**
+`**Merchant na mapie Bee World — sprawdź ofertę!**
 
 • Za miód kupisz przedmioty
 • Szansa na Supreme: **110%**
