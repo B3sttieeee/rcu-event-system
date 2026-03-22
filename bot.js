@@ -82,7 +82,7 @@ function eggEmbed() {
 • Lepsze pety = więcej punktów
 • Lepszy Tier = lepsze bonusy`
     )
-    .setThumbnail("https://i.imgur.com/8R8nX8M.png");
+    .setThumbnail("https://imgur.com/JqyeITl.png");
 }
 
 function honeyEmbed() {
@@ -97,7 +97,7 @@ function honeyEmbed() {
 
 ⏳ Znika po 15 minutach`
     )
-    .setThumbnail("https://i.imgur.com/1XK8JZg.png");
+    .setThumbnail("https://imgur.com/zhLC0zn");
 }
 
 function bossEmbed() {
@@ -112,7 +112,7 @@ function bossEmbed() {
 
 ⏳ Znika po 15 minutach`
     )
-    .setThumbnail("https://i.imgur.com/3XQZ4Fh.png");
+    .setThumbnail("https://imgur.com/yFvb6jY.png");
 }
 
 function spinEmbed() {
@@ -124,7 +124,7 @@ function spinEmbed() {
 
 • Szansa na Supreme`
     )
-    .setThumbnail("https://i.imgur.com/FV9ZK0G.png");
+    .setThumbnail("https://imgur.com/NJI7052.png");
 }
 
 // =======================
