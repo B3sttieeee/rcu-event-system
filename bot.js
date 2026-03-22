@@ -29,15 +29,6 @@ const dmUsers = {
   spin: new Set()
 };
 
-// ================= OPISY =================
-
-const DESCRIPTIONS = {
-  egg: `✨ **Otwieraj jajka i zdobywaj nagrody!**`,
-  spin: `🎯 **Zakreć kołem i wygraj nagrody!**`,
-  honey: `🛒 **Merchant eventowy**`,
-  boss: `⚔️ **Boss merchant**`
-};
-
 // ================= TIME =================
 
 function getNowCET() {
@@ -52,7 +43,7 @@ function getEventByHour(hour) {
   if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
 }
 
-// ================= NEXT EVENTS (FIXED) =================
+// ================= NEXT EVENTS =================
 
 function getNextEvents() {
   const now = getNowCET();
@@ -75,47 +66,93 @@ function getNextEvents() {
   return events;
 }
 
-// ================= EMBED =================
+// ================= EMBED BASE =================
 
 function baseEmbed(embed) {
   return embed
-    .setFooter({ text: `Start: ${START_DATE} • ${AUTHOR}` })
+    .setFooter({ text: `Start: ${START_DATE} • Twórca: ${AUTHOR}` })
     .setTimestamp();
 }
 
+// ================= EMBEDS =================
+
 function getEmbed(type) {
 
+  // 🥚 RNG EGG
   if (type === "egg") {
     return baseEmbed(
       new EmbedBuilder()
         .setColor("#f1c40f")
-        .setTitle("🥚 RNG EGG")
-        .setDescription(DESCRIPTIONS.egg)
+        .setTitle("🥚 RNG EGG EVENT")
+        .setDescription(
+`**➤ Otwieraj jajka i zdobywaj punkty!**
+
+➤ Im lepsze pety zdobędziesz, tym więcej punktów otrzymasz  
+➤ Więcej punktów = wyższy tier  
+➤ Wyższy tier = lepsze nagrody na koniec eventu  
+
+✨ Graj aktywnie i zgarnij najlepsze bonusy!`
+        )
+        .setThumbnail("https://imgur.com/JqyeITl.png")
     );
   }
 
+  // 🎡 DEV SPIN
   if (type === "spin") {
     return baseEmbed(
       new EmbedBuilder()
         .setColor("#9b59b6")
-        .setTitle("🎡 DEV SPIN")
-        .setDescription(DESCRIPTIONS.spin)
+        .setTitle("🎡 DEV SPIN EVENT")
+        .setDescription(
+`**➤ Zakręć kołem i zdobądź nagrody!**
+
+➤ Losowe nagrody za każdy spin  
+➤ Szansa na rzadkie itemy  
+➤ 🎯 Mała szansa na Supreme (??%)  
+
+⚡ Spróbuj swojego szczęścia!`
+        )
+        .setThumbnail("https://imgur.com/NJI7052.png")
     );
   }
 
+  // 🛒 MERCHANT
   if (type === "merchant") {
     return [
+
+      // 🍯 HONEY
       baseEmbed(
         new EmbedBuilder()
           .setColor("#f39c12")
           .setTitle("🍯 HONEY MERCHANT")
-          .setDescription(DESCRIPTIONS.honey)
+          .setDescription(
+`**➤ Zdobywaj miód na Bee World!**
+
+➤ Zbieraj miód z pszczółek 🐝  
+➤ Wymieniaj miód na przedmioty u merchanta  
+➤ 🎯 Szansa na Supreme (110%)  
+
+🔥 Im więcej farmisz, tym lepsze nagrody!`
+          )
+          .setThumbnail("https://imgur.com/zhLC0zn.png")
       ),
+
+      // 💀 BOSS
       baseEmbed(
         new EmbedBuilder()
           .setColor("#e74c3c")
           .setTitle("💀 BOSS MERCHANT")
-          .setDescription(DESCRIPTIONS.boss)
+          .setDescription(
+`**➤ Zdobywaj tokeny z bossów!**
+
+➤ Pokonuj bossy ⚔️  
+➤ Zdobywaj tokeny  
+➤ Wymieniaj na przedmioty u merchanta  
+➤ 🎯 Szansa na Supreme (125%)  
+
+👑 Najlepsze nagrody dla najsilniejszych!`
+          )
+          .setThumbnail("https://imgur.com/yFvb6jY.png")
       )
     ];
   }
@@ -135,7 +172,9 @@ async function sendEvent() {
 
   const embed = getEmbed(type);
 
-  await channel.send({ content: role });
+  await channel.send({
+    content: `${role}\n━━━━━━━━━━━━━━━━━━━\n🚀 **EVENT WYSTARTOWAŁ!**`
+  });
 
   if (Array.isArray(embed)) {
     for (const e of embed) {
@@ -145,16 +184,16 @@ async function sendEvent() {
     await channel.send({ embeds: [embed] });
   }
 
-  // DM USERS
+  // DM
   for (const userId of dmUsers[type]) {
     try {
       const user = await client.users.fetch(userId);
-      await user.send(`🔔 Event **${type.toUpperCase()}** właśnie wystartował!`);
+      await user.send(`🔔 Event ${type.toUpperCase()} wystartował!`);
     } catch {}
   }
 }
 
-// ================= REMINDER (5 MIN BEFORE) =================
+// ================= REMINDER =================
 
 async function sendReminder() {
   const channel = await client.channels.fetch(CHANNEL_ID);
@@ -168,7 +207,9 @@ async function sendReminder() {
     type === "merchant" ? `<@&${ROLE_MERCHANT}>` :
     `<@&${ROLE_SPIN}>`;
 
-  await channel.send(`⏳ ${role} Event **${type.toUpperCase()}** za 5 minut! Przygotuj się!`);
+  await channel.send(
+    `⏳ ${role}\n━━━━━━━━━━━━━━━━━━━\n**Event ${type.toUpperCase()} startuje za 5 minut! Przygotuj się!**`
+  );
 }
 
 // ================= GIVEAWAY =================
@@ -214,7 +255,6 @@ client.on("interactionCreate", async (i) => {
 
   if (i.isChatInputCommand()) {
 
-    // NEXT EVENTS
     if (i.commandName === "next-events") {
       const events = getNextEvents();
 
@@ -226,7 +266,7 @@ client.on("interactionCreate", async (i) => {
 
       events.forEach(e => {
         embed.addFields({
-          name: e.type.toUpperCase(),
+          name: `➤ ${e.type.toUpperCase()}`,
           value: `<t:${e.timestamp}:R>\n<t:${e.timestamp}:F>`
         });
       });
@@ -234,37 +274,29 @@ client.on("interactionCreate", async (i) => {
       return i.reply({ embeds: [embed] });
     }
 
-    // SET DM ✅
     if (i.commandName === "set-dm") {
       const type = i.options.getString("event");
-
       dmUsers[type].add(i.user.id);
 
       return i.reply({
-        content: `✅ Będziesz dostawać DM dla ${type}`,
+        content: `✅ Ustawiono DM dla ${type}`,
         ephemeral: true
       });
     }
 
-    // GIVEAWAY ✅
     if (i.commandName === "giveaway") {
       const prize = i.options.getString("nagroda");
       const time = i.options.getInteger("czas");
 
       const channel = await client.channels.fetch(CHANNEL_ID);
-
       await sendGiveaway(channel, prize, time);
 
-      return i.reply({
-        content: "✅ Giveaway wystartował",
-        ephemeral: true
-      });
+      return i.reply({ content: "✅ Giveaway wystartował", ephemeral: true });
     }
 
-    // TEST EVENT
     if (i.commandName === "test-event") {
       await sendEvent();
-      return i.reply({ content: "✅ OK", ephemeral: true });
+      return i.reply({ content: "✅ Event wysłany", ephemeral: true });
     }
   }
 });
