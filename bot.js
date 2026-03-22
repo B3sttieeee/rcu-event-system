@@ -24,16 +24,17 @@ const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
 
-const FILE = './data.json';
-
 //////////////////////////////////////////////////
 // 📦 DATA
 //////////////////////////////////////////////////
 
+const FILE = './data.json';
+
 let data = {
 roles: { egg:null, merchant:null, spin:null },
 dm: {},
-giveaway: null
+giveaway: null,
+giveawayBonus: {} // 🔥 BONUS PRZED GIVEAWAY
 };
 
 function load(){
@@ -46,24 +47,27 @@ fs.writeFileSync(FILE, JSON.stringify(data,null,2));
 load();
 
 //////////////////////////////////////////////////
-// 🕒 TIME
+// 🕒 CZAS (FIXED)
 //////////////////////////////////////////////////
 
 function nowPL(){
 return new Date(new Date().toLocaleString("en-US",{timeZone:"Europe/Warsaw"}));
 }
 
-function getEvent(h){
-if([0,3,6,9,12,15,18,21].includes(h)) return "egg";
-if([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
-return "spin";
+function getEvent(hour){
+if([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
+if([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
+if([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
 }
 
 function nextEvent(offset){
-const d = new Date(nowPL().getTime() + offset*60*60*1000);
+const now = nowPL();
+const future = new Date(now);
+future.setHours(now.getHours()+offset,0,0,0);
+
 return {
-type: getEvent(d.getHours()),
-time: Math.floor(d.getTime()/1000)
+type: getEvent(future.getHours()),
+time: Math.floor(future.getTime()/1000)
 };
 }
 
@@ -82,25 +86,25 @@ spin:"https://imgur.com/LeXDgiJ.png"
 // 🎨 EMBEDY
 //////////////////////////////////////////////////
 
-const EGG = () => new EmbedBuilder()
+const EGG = ()=> new EmbedBuilder()
 .setTitle("🥚 **RNG EGG**")
 .setDescription("**Otwieraj jajka i zdobywaj Tier oraz nagrody!**")
 .setThumbnail(IMG.egg)
 .setColor(0x00ffcc);
 
-const BOSS = () => new EmbedBuilder()
+const BOSS = ()=> new EmbedBuilder()
 .setTitle("🐝 **BOSS MERCHANT**")
-.setDescription("**Eventowy merchant (Anniversary Event)**\n➡️ Sprawdź ofertę!")
+.setDescription("**Eventowy merchant (Anniversary Event)**\n➡️ Przejdź sprawdzić ofertę!")
 .setThumbnail(IMG.boss)
 .setColor(0xff0000);
 
-const HONEY = () => new EmbedBuilder()
+const HONEY = ()=> new EmbedBuilder()
 .setTitle("🍯 **HONEY MERCHANT**")
-.setDescription("**Eventowy merchant (Bee World)**\n➡️ Sprawdź ofertę!")
+.setDescription("**Eventowy merchant (Bee World)**\n➡️ Przejdź sprawdzić ofertę!")
 .setThumbnail(IMG.honey)
 .setColor(0xffcc00);
 
-const SPIN = () => new EmbedBuilder()
+const SPIN = ()=> new EmbedBuilder()
 .setTitle("🎰 **DEV SPIN**")
 .setDescription("**Kręć kołem i zdobywaj nagrody!**")
 .setThumbnail(IMG.spin)
@@ -111,10 +115,9 @@ const SPIN = () => new EmbedBuilder()
 //////////////////////////////////////////////////
 
 function gEmbed(){
-if(!data.giveaway) return;
 
-const users = Object.keys(data.giveaway.entries || {});
-const roles = Object.entries(data.giveaway.bonus || {})
+const users = Object.keys(data.giveaway?.entries || {});
+const roles = Object.entries(data.giveawayBonus || {})
 .map(([id,v])=>`<@&${id}> → x${v}`).join("\n") || "Brak";
 
 return new EmbedBuilder()
@@ -131,14 +134,14 @@ ${roles}`
 }
 
 //////////////////////////////////////////////////
-// 🚀 READY
+// 🚀 READY + CRON
 //////////////////////////////////////////////////
 
 client.once('clientReady', async()=>{
 
-console.log(`✅ ${client.user.tag}`);
+console.log("✅ BOT ONLINE");
 
-// ⏰ EVENTY
+// EVENTY
 cron.schedule('* * * * *', async()=>{
 
 const now = nowPL();
@@ -149,10 +152,10 @@ const m = now.getMinutes();
 if(m===55){
 const next = getEvent((h+1)%24);
 const role = data.roles[next];
-if(!role) return;
-
+if(role){
 const ch = await client.channels.fetch(CHANNEL_ID);
-ch.send(`⏰ Za 5 min start: <@&${role}>`);
+ch.send(`⏰ Za 5 minut: <@&${role}>`);
+}
 }
 
 // start
@@ -176,26 +179,6 @@ ch.send({content:`<@&${role}>`,embeds:[SPIN()]});
 
 });
 
-// ⏰ GIVEAWAY END
-setInterval(async()=>{
-if(!data.giveaway) return;
-
-if(Date.now()/1000 >= data.giveaway.end){
-
-const users = Object.keys(data.giveaway.entries);
-if(users.length===0) return;
-
-const winners = users.sort(()=>0.5-Math.random()).slice(0,data.giveaway.winners);
-
-const ch = await client.channels.fetch(data.giveaway.channel);
-
-ch.send(`🏆 Wygrani: ${winners.map(u=>`<@${u}>`).join(", ")}`);
-
-data.giveaway = null;
-save();
-}
-},5000);
-
 });
 
 //////////////////////////////////////////////////
@@ -204,6 +187,43 @@ save();
 
 client.on('interactionCreate', async i=>{
 
+// PANEL RÓL
+if(i.isStringSelectMenu()){
+if(i.customId==="roles"){
+const roleId = i.values[0];
+const has = i.member.roles.cache.has(roleId);
+
+if(has){
+await i.member.roles.remove(roleId);
+return i.reply({content:"❌ Usunięto rolę",ephemeral:true});
+}else{
+await i.member.roles.add(roleId);
+return i.reply({content:"✅ Dodano rolę",ephemeral:true});
+}
+}
+}
+
+// BUTTON GIVEAWAY
+if(i.isButton()){
+if(i.customId==="join"){
+if(!data.giveaway) return;
+
+let bonus = 1;
+
+for(const r of i.member.roles.cache.keys()){
+if(data.giveawayBonus[r]){
+bonus = data.giveawayBonus[r];
+}
+}
+
+data.giveaway.entries[i.user.id] = bonus;
+save();
+
+return i.reply({content:`🎉 Masz ${bonus} losów`,ephemeral:true});
+}
+}
+
+// COMMANDY
 if(i.isChatInputCommand()){
 
 // EVENT
@@ -231,19 +251,48 @@ embeds:[new EmbedBuilder()
 });
 }
 
-// GIVEAWAY START
-if(i.commandName==="giveaway"){
+// PANEL USER
+if(i.commandName==="get-role"){
+const menu = new StringSelectMenuBuilder()
+.setCustomId("roles")
+.setPlaceholder("Wybierz rolę")
+.addOptions([
+{label:"RNG EGG",value:data.roles.egg},
+{label:"MERCHANT",value:data.roles.merchant},
+{label:"SPIN",value:data.roles.spin}
+]);
+
+return i.reply({
+content:"🎛 Wybierz role",
+components:[new ActionRowBuilder().addComponents(menu)]
+});
+}
+
+// PANEL ADMIN
+if(i.commandName==="set-role-panel"){
+
 if(!i.member.permissions.has(PermissionsBitField.Flags.Administrator))
 return i.reply({content:"❌ Brak permisji",ephemeral:true});
+
+const type = i.options.getString("typ");
+const role = i.options.getRole("rola");
+
+data.roles[type] = role.id;
+save();
+
+return i.reply("✅ Ustawiono rolę");
+}
+
+// GIVEAWAY START
+if(i.commandName==="giveaway"){
 
 data.giveaway = {
 prize:i.options.getString("nagroda"),
 winners:i.options.getInteger("wygrani"),
 end: Math.floor(Date.now()/1000)+i.options.getInteger("czas")*60,
-channel:i.channel.id,
-entries:{},
-bonus:{}
+entries:{}
 };
+
 save();
 
 const btn = new ActionRowBuilder().addComponents(
@@ -254,76 +303,56 @@ return i.reply({embeds:[gEmbed()],components:[btn]});
 }
 
 // BONUS ROLE
-if(i.commandName==="giveaway-role"){
-if(!data.giveaway) return i.reply({content:"❌ Brak giveaway",ephemeral:true});
+if(i.commandName==="giveaway-bonus"){
 
-data.giveaway.bonus[i.options.getRole("rola").id] =
-i.options.getInteger("x");
+const role = i.options.getRole("rola");
+const multi = i.options.getInteger("x");
 
-save();
-return i.reply({content:"✅ Dodano bonus",ephemeral:true});
-}
-
-// REROLL
-if(i.commandName==="reroll"){
-if(!data.giveaway) return i.reply("❌ Brak");
-
-const users = Object.keys(data.giveaway.entries);
-const winner = users[Math.floor(Math.random()*users.length)];
-
-return i.reply(`🎉 Nowy wygrany: <@${winner}>`);
-}
-
-}
-
-// BUTTON
-if(i.isButton()){
-if(i.customId==="join"){
-
-if(!data.giveaway) return;
-
-let bonus = 1;
-
-for(const r of i.member.roles.cache.keys()){
-if(data.giveaway.bonus[r]){
-bonus = data.giveaway.bonus[r];
-}
-}
-
-data.giveaway.entries[i.user.id] = bonus;
+data.giveawayBonus[role.id] = multi;
 save();
 
-return i.reply({content:`✅ Masz ${bonus} losów`,ephemeral:true});
+return i.reply("✅ Dodano bonus");
 }
+
 }
 
 });
 
 //////////////////////////////////////////////////
-// 🚀 COMMAND REGISTER
+// 📜 REGISTER
 //////////////////////////////////////////////////
 
-async function reg(){
+async function register(){
 
 const cmds = [
 
 new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
 new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy"),
+new SlashCommandBuilder().setName("get-role").setDescription("Panel ról"),
+
+new SlashCommandBuilder()
+.setName("set-role-panel")
+.setDescription("Ustaw role eventów")
+.addStringOption(o=>o.setName("typ").setRequired(true)
+.addChoices(
+{name:"egg",value:"egg"},
+{name:"merchant",value:"merchant"},
+{name:"spin",value:"spin"}
+))
+.addRoleOption(o=>o.setName("rola").setRequired(true)),
 
 new SlashCommandBuilder()
 .setName("giveaway")
 .setDescription("Start giveaway")
-.addStringOption(o=>o.setName("nagroda").setDescription("Nagroda").setRequired(true))
-.addIntegerOption(o=>o.setName("czas").setDescription("Czas (min)").setRequired(true))
-.addIntegerOption(o=>o.setName("wygrani").setDescription("Ile osób").setRequired(true)),
+.addStringOption(o=>o.setName("nagroda").setRequired(true))
+.addIntegerOption(o=>o.setName("czas").setRequired(true))
+.addIntegerOption(o=>o.setName("wygrani").setRequired(true)),
 
 new SlashCommandBuilder()
-.setName("giveaway-role")
-.setDescription("Bonus roli")
-.addRoleOption(o=>o.setName("rola").setDescription("rola").setRequired(true))
-.addIntegerOption(o=>o.setName("x").setDescription("ile losów").setRequired(true)),
-
-new SlashCommandBuilder().setName("reroll").setDescription("Losuj ponownie")
+.setName("giveaway-bonus")
+.setDescription("Bonus ról")
+.addRoleOption(o=>o.setName("rola").setRequired(true))
+.addIntegerOption(o=>o.setName("x").setRequired(true))
 
 ].map(c=>c.toJSON());
 
@@ -334,9 +363,9 @@ Routes.applicationGuildCommands(CLIENT_ID,GUILD_ID),
 {body:cmds}
 );
 
-console.log("✅ Komendy załadowane");
+console.log("✅ Komendy OK");
 }
 
-reg();
+register();
 
 client.login(TOKEN);
