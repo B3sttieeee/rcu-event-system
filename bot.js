@@ -2,271 +2,285 @@ const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
+  ActionRowBuilder,
+  StringSelectMenuBuilder,
   SlashCommandBuilder,
   REST,
-  Routes,
-  ActionRowBuilder,
-  StringSelectMenuBuilder
-} = require("discord.js");
+  Routes
+} = require('discord.js');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// 🔥 USTAWIENIA
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 const CHANNEL_ID = "1484937784283369502";
 
-// ROLE
-const ROLE_EGG = "1476000993119568105";
-const ROLE_MERCHANT = "1476000993660502139";
-const ROLE_SPIN = "1484911421903999127";
+// ROLE ID
+const ROLES = {
+  egg: "1476000993119568105",
+  merchant: "1476000993660502139",
+  spin: "1484911421903999127"
+};
 
-// =======================
-// 🧠 CZAS (NAPRAWIONY)
-// =======================
+// DM ustawienia
+const userDM = new Map();
 
-function getCET() {
-  const now = new Date();
-  return new Date(now.toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
-}
 
-function getEvent(hour) {
+// ================= EVENT LOGIC =================
+
+function getEventByHour(hour) {
   if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
   if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
   if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
 }
 
 function getCurrentEvent() {
-  const now = getCET();
-  return getEvent(now.getHours());
+  const h = new Date().getUTCHours();
+  return getEventByHour(h);
 }
 
 function getNextEvents() {
-  const now = getCET();
-  const list = [];
+  const now = new Date();
+  const currentHour = now.getUTCHours();
 
-  for (let i = 1; i <= 24; i++) {
-    const future = new Date(now);
-    future.setHours(now.getHours() + i, 0, 0, 0);
+  let events = [];
 
-    list.push({
-      type: getEvent(future.getHours()),
-      time: future
+  for (let i = 1; i <= 3; i++) {
+    let hour = (currentHour + i) % 24;
+
+    let nextDate = new Date(now);
+    nextDate.setUTCHours(hour, 0, 0, 0);
+
+    if (hour <= currentHour) {
+      nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+    }
+
+    events.push({
+      type: getEventByHour(hour),
+      time: Math.floor(nextDate.getTime() / 1000)
     });
-
-    if (list.length === 2) break;
   }
 
-  return list;
+  return events;
 }
 
-function unix(t) {
-  return Math.floor(t.getTime() / 1000);
-}
 
-// =======================
-// 🎨 EMBEDY
-// =======================
+// ================= EMBEDY =================
 
-function eggEmbed() {
+function embedEgg() {
   return new EmbedBuilder()
-    .setColor("#f1c40f")
-    .setTitle("🥚 RNG EGG")
-    .setDescription(
-`**Otwieraj jajka i zdobywaj punkty Tieru!**
-
-• Lepsze pety = więcej punktów
-• Lepszy Tier = lepsze bonusy`
-    )
-    .setThumbnail("https://imgur.com/JqyeITl.png");
+    .setColor("Yellow")
+    .setTitle("🥚 **RNG EGG EVENT**")
+    .setDescription("**Otwieraj jajka i zdobywaj punkty Tieru!**\n\n• Lepsze pety = więcej punktów\n• Wyższy Tier = lepsze nagrody")
+    .setThumbnail("https://i.imgur.com/yourEgg.png");
 }
 
-function honeyEmbed() {
+function embedSpin() {
   return new EmbedBuilder()
-    .setColor("#f39c12")
-    .setTitle("🍯 HONEY MERCHANT")
-    .setDescription(
-`**Merchant na mapie Bee World — sprawdź ofertę!**
-
-• Za miód kupisz przedmioty
-• Szansa na Supreme: **110%**
-
-⏳ Znika po 15 minutach`
-    )
-    .setThumbnail("https://imgur.com/zhLC0zn.png");
+    .setColor("Purple")
+    .setTitle("🎡 **DEV SPIN EVENT**")
+    .setDescription("**Kręć kołem i zdobywaj nagrody!**")
+    .setThumbnail("https://i.imgur.com/yourSpin.png");
 }
 
-function bossEmbed() {
+function embedMerchant1() {
   return new EmbedBuilder()
-    .setColor("#e74c3c")
-    .setTitle("👹 BOSS MERCHANT")
-    .setDescription(
-`**Eventowy merchant na mapie Anniversary Event!**
-
-• Za tokeny z bossów kupisz przedmioty
-• Szansa na Supreme: **125%**
-
-⏳ Znika po 15 minutach`
-    )
-    .setThumbnail("https://imgur.com/yFvb6jY.png");
+    .setColor("Gold")
+    .setTitle("💰 **HONEY MERCHANT**")
+    .setDescription("Za miód kupisz przedmioty\n\n**Szansa Supreme: 110%**")
+    .setThumbnail("https://i.imgur.com/honey.png");
 }
 
-function spinEmbed() {
+function embedMerchant2() {
   return new EmbedBuilder()
-    .setColor("#9b59b6")
-    .setTitle("🎡 DEV SPIN")
-    .setDescription(
-`**Kręć kołem i zdobywaj nagrody!**
-
-• Szansa na Supreme`
-    )
-    .setThumbnail("https://imgur.com/NJI7052.png");
+    .setColor("Red")
+    .setTitle("🔥 **BOSS MERCHANT**")
+    .setDescription("Na mapie Anniversary Event\n\n**Szansa Supreme: 125%**")
+    .setThumbnail("https://i.imgur.com/boss.png")
+    .setFooter({ text: "⏳ Znika po 15 minutach" });
 }
 
-// =======================
-// 📅 NEXT EVENTS
-// =======================
 
-function nextEmbed() {
-  const next = getNextEvents();
+// ================= EVENT SEND =================
 
-  return new EmbedBuilder()
-    .setColor("#2ecc71")
-    .setTitle("📅 NASTĘPNE EVENTY")
-    .setDescription(
-      next.map(e =>
-`**${e.type.toUpperCase()}**
-<t:${unix(e.time)}:R>
-<t:${unix(e.time)}:F>`
-      ).join("\n\n")
-    );
+async function sendEvent() {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+  const event = getCurrentEvent();
+
+  if (event === "egg") {
+    await channel.send({
+      content: `<@&${ROLES.egg}>`,
+      embeds: [embedEgg()]
+    });
+  }
+
+  if (event === "spin") {
+    await channel.send({
+      content: `<@&${ROLES.spin}>`,
+      embeds: [embedSpin()]
+    });
+  }
+
+  if (event === "merchant") {
+    await channel.send({
+      content: `<@&${ROLES.merchant}>`,
+      embeds: [embedMerchant1(), embedMerchant2()]
+    });
+  }
 }
 
-// =======================
-// 🎮 PICKER
-// =======================
 
-function rolePicker() {
-  return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("roles")
-      .setPlaceholder("Wybierz powiadomienia")
-      .addOptions([
-        { label: "RNG EGG", value: "egg" },
-        { label: "MERCHANT", value: "merchant" },
-        { label: "DEV SPIN", value: "spin" }
-      ])
-  );
-}
+// ================= TIMER =================
 
-// =======================
-// 📦 KOMENDY
-// =======================
+setInterval(() => {
+  const now = new Date();
+
+  if (now.getUTCMinutes() === 0 && now.getUTCSeconds() === 0) {
+    sendEvent();
+  }
+
+  if (now.getUTCMinutes() === 55 && now.getUTCSeconds() === 0) {
+    const channel = client.channels.cache.get(CHANNEL_ID);
+    channel.send("⏰ **Event za 5 minut!**");
+  }
+
+}, 1000);
+
+
+// ================= COMMANDY =================
 
 const commands = [
-  new SlashCommandBuilder().setName("event").setDescription("Aktualny event"),
-  new SlashCommandBuilder().setName("next-events").setDescription("Następne eventy"),
-  new SlashCommandBuilder().setName("test-ping").setDescription("Test eventu"),
-  new SlashCommandBuilder().setName("get-role").setDescription("Picker ról"),
-  new SlashCommandBuilder().setName("set-dm").setDescription("DM powiadomienia")
-];
+  new SlashCommandBuilder()
+    .setName("event")
+    .setDescription("Aktualny event"),
+
+  new SlashCommandBuilder()
+    .setName("next-events")
+    .setDescription("Następne eventy"),
+
+  new SlashCommandBuilder()
+    .setName("test-ping")
+    .setDescription("Test aktualnego eventu"),
+
+  new SlashCommandBuilder()
+    .setName("get-role")
+    .setDescription("Panel wyboru ról"),
+
+  new SlashCommandBuilder()
+    .setName("set-dm")
+    .setDescription("Ustaw powiadomienia DM")
+].map(c => c.toJSON());
+
+
+// ================= REGISTER =================
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// =======================
-// 🚀 READY
-// =======================
-
-client.once("clientReady", async () => {
-  console.log("BOT ONLINE");
-
+(async () => {
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
     { body: commands }
   );
+})();
 
-  console.log("Komendy gotowe");
-});
 
-// =======================
-// 🎮 INTERAKCJE
-// =======================
-
-const dmSettings = new Map();
+// ================= INTERACTION =================
 
 client.on("interactionCreate", async (i) => {
+
   if (i.isChatInputCommand()) {
 
     if (i.commandName === "event") {
       const e = getCurrentEvent();
 
-      if (e === "egg") return i.reply({ embeds: [eggEmbed()] });
-      if (e === "spin") return i.reply({ embeds: [spinEmbed()] });
-
-      if (e === "merchant") {
-        return i.reply({ embeds: [honeyEmbed(), bossEmbed()] });
-      }
+      if (e === "egg") return i.reply({ embeds: [embedEgg()] });
+      if (e === "spin") return i.reply({ embeds: [embedSpin()] });
+      if (e === "merchant") return i.reply({ embeds: [embedMerchant1(), embedMerchant2()] });
     }
 
     if (i.commandName === "next-events") {
-      return i.reply({ embeds: [nextEmbed()] });
+      const next = getNextEvents();
+
+      const embed = new EmbedBuilder()
+        .setColor("Green")
+        .setTitle("📅 **NASTĘPNE EVENTY**")
+        .setDescription(
+          `**${next[0].type.toUpperCase()}**\n<t:${next[0].time}:R>\n<t:${next[0].time}:F>\n\n` +
+          `**${next[1].type.toUpperCase()}**\n<t:${next[1].time}:R>\n<t:${next[1].time}:F>`
+        );
+
+      i.reply({ embeds: [embed] });
     }
 
     if (i.commandName === "test-ping") {
-      const e = getCurrentEvent();
-      const ch = await client.channels.fetch(CHANNEL_ID);
-
-      if (e === "egg") {
-        await ch.send(`<@&${ROLE_EGG}>`);
-        await ch.send({ embeds: [eggEmbed()] });
-      }
-
-      if (e === "spin") {
-        await ch.send(`<@&${ROLE_SPIN}>`);
-        await ch.send({ embeds: [spinEmbed()] });
-      }
-
-      if (e === "merchant") {
-        await ch.send(`<@&${ROLE_MERCHANT}>`);
-        await ch.send({ embeds: [honeyEmbed()] });
-        await ch.send({ embeds: [bossEmbed()] });
-      }
-
-      return i.reply({ content: "OK", ephemeral: true });
+      sendEvent();
+      i.reply({ content: "✅ Wysłano test eventu", ephemeral: true });
     }
 
     if (i.commandName === "get-role") {
-      return i.reply({
-        content: "Wybierz powiadomienia:",
-        components: [rolePicker()],
-        ephemeral: true
-      });
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("roles")
+          .setPlaceholder("Wybierz role")
+          .addOptions([
+            { label: "RNG EGG", value: "egg" },
+            { label: "MERCHANT", value: "merchant" },
+            { label: "SPIN", value: "spin" }
+          ])
+      );
+
+      i.reply({ content: "🎭 Wybierz role:", components: [row], ephemeral: true });
     }
 
     if (i.commandName === "set-dm") {
-      dmSettings.set(i.user.id, true);
-      return i.reply({ content: "DM włączone", ephemeral: true });
-    }
+      const row = new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId("dm")
+          .setPlaceholder("Powiadomienia DM")
+          .addOptions([
+            { label: "RNG EGG", value: "egg" },
+            { label: "MERCHANT", value: "merchant" },
+            { label: "SPIN", value: "spin" }
+          ])
+      );
 
+      i.reply({ content: "📩 Wybierz DM:", components: [row], ephemeral: true });
+    }
   }
+
 
   if (i.isStringSelectMenu()) {
-    const member = i.member;
 
-    if (i.values.includes("egg")) await member.roles.add(ROLE_EGG);
-    if (i.values.includes("merchant")) await member.roles.add(ROLE_MERCHANT);
-    if (i.values.includes("spin")) await member.roles.add(ROLE_SPIN);
+    if (i.customId === "roles") {
+      const role = ROLES[i.values[0]];
+      const member = await i.guild.members.fetch(i.user.id);
 
-    return i.reply({ content: "Ustawiono role", ephemeral: true });
+      if (member.roles.cache.has(role)) {
+        await member.roles.remove(role);
+        return i.reply({ content: "❌ Usunięto rolę", ephemeral: true });
+      } else {
+        await member.roles.add(role);
+        return i.reply({ content: "✅ Dodano rolę", ephemeral: true });
+      }
+    }
+
+    if (i.customId === "dm") {
+      userDM.set(i.user.id, i.values[0]);
+      return i.reply({ content: "✅ Ustawiono DM", ephemeral: true });
+    }
   }
+
 });
 
-// =======================
-// 🔐 LOGIN
-// =======================
+
+// ================= READY =================
+
+client.once("clientReady", () => {
+  console.log("✅ BOT ONLINE");
+});
 
 client.login(TOKEN);
