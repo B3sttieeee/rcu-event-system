@@ -1,157 +1,178 @@
-process.env.TZ = "Europe/Warsaw";
+const {
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  StringSelectMenuBuilder,
+  REST,
+  Routes
+} = require("discord.js");
 
-const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes } = require("discord.js");
+const TOKEN = "TWÓJ_TOKEN";
+const CLIENT_ID = "TWÓJ_CLIENT_ID";
+const GUILD_ID = "TWÓJ_GUILD_ID";
+
+const CHANNEL_ID = "1484937784283369502";
+
+// ROLE
+const ROLE_EGG = "1476000993119568105";
+const ROLE_MERCHANT = "1476000993660502139";
+const ROLE_SPIN = "1484911421903999127";
+
+// IMG
+const IMAGES = {
+  egg: "https://imgur.com/pY2xNUL.png",
+  honey: "https://imgur.com/SsvlJ5a.png",
+  boss: "https://imgur.com/VU9KdMS.png",
+  spin: "https://imgur.com/LeXDgiJ.png"
+};
+
+// USER DM SETTINGS
+const userDM = new Map();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
-
-const CHANNEL_ID = "1484937784283369502";
-
-// ===== ROLE =====
-const ROLES = {
-  egg: "1476000993119568105",
-  merchant: "1476000993660502139",
-  spin: "1484911421903999127"
-};
-
-// ===== IMG =====
-const IMG = {
-  egg: "https://imgur.com/pY2xNUL.png",
-  boss: "https://imgur.com/VU9KdMS.png",
-  honey: "https://imgur.com/SsvlJ5a.png",
-  spin: "https://imgur.com/LeXDgiJ.png"
-};
-
-// ===== GODZINY =====
-const HOURS = {
-  egg: [0,3,6,9,12,15,18,21],
-  merchant: [1,4,7,10,13,16,19,22],
-  spin: [2,5,8,11,14,17,20,23]
-};
-
-// ===== EVENTY =====
-function getEventByHour(hour) {
-  if (HOURS.egg.includes(hour)) return "egg";
-  if (HOURS.merchant.includes(hour)) return "merchant";
-  if (HOURS.spin.includes(hour)) return "spin";
+// GODZINY
+function getEventType(hour) {
+  if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
+  if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
+  if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
 }
 
-function getCurrentEvent() {
-  return getEventByHour(new Date().getHours());
-}
-
-// ===== NEXT =====
 function getNextEvents() {
   const now = new Date();
-  const currentHour = now.getHours();
-  let list = [];
+  const events = [];
 
-  for (let i = 1; i <= 24; i++) {
-    let hour = (currentHour + i) % 24;
-    let type = getEventByHour(hour);
+  for (let i = 0; i < 24; i++) {
+    const d = new Date(now);
+    d.setHours(now.getHours() + i);
+    d.setMinutes(0, 0, 0);
 
-    if (type) {
-      let date = new Date();
-      date.setHours(hour, 0, 0, 0);
-
-      if (hour <= currentHour) {
-        date.setDate(date.getDate() + 1);
-      }
-
-      list.push({ type, time: date });
-
-      if (list.length === 2) break;
-    }
+    const type = getEventType(d.getHours());
+    if (d > now) events.push({ type, date: d });
+    if (events.length === 2) break;
   }
 
-  return list;
+  return events;
 }
 
-// ===== EMBEDY =====
-function buildEmbeds(type) {
-
-  if (type === "egg") {
-    return [
-      new EmbedBuilder()
-        .setColor("#FFD700")
-        .setTitle("🥚 RNG EGG")
-        .setDescription(
+// EMBEDY
+function embedEgg() {
+  return new EmbedBuilder()
+    .setColor("#f1c40f")
+    .setTitle("🥚 **RNG EGG**")
+    .setDescription(
 `**Otwieraj jajka i zdobywaj punkty Tieru!**
 
 • Lepsze pety = więcej punktów  
-• Lepszy Tier = lepsze nagrody`
-        )
-        .setThumbnail(IMG.egg)
-    ];
-  }
+• Lepszy Tier = lepsze bonusy`
+    )
+    .setThumbnail(IMAGES.egg);
+}
 
-  if (type === "merchant") {
-    return [
-      new EmbedBuilder()
-        .setColor("#FF0000")
-        .setTitle("🔴 BOSS MERCHANT")
-        .setDescription(
-`Eventowy merchant!
-
-• Za tokeny z bossów kupisz przedmioty  
-• Szansa Supreme: **125%**
-
-📍 Anniversary Event  
-⏱ 15 minut
-
-👉 Sprawdź ofertę!`
-        )
-        .setThumbnail(IMG.boss),
-
-      new EmbedBuilder()
-        .setColor("#FFA500")
-        .setTitle("🟡 HONEY MERCHANT")
-        .setDescription(
-`Eventowy merchant!
+function embedHoney() {
+  return new EmbedBuilder()
+    .setColor("#f39c12")
+    .setTitle("🍯 **HONEY MERCHANT**")
+    .setDescription(
+`**Eventowy merchant — sprawdź ofertę!**
 
 • Za miód kupisz przedmioty  
 • Szansa Supreme: **110%**
 
-⏱ 15 minut
+⏳ Znika po 15 minutach`
+    )
+    .setThumbnail(IMAGES.honey);
+}
 
-👉 Sprawdź ofertę!`
-        )
-        .setThumbnail(IMG.honey)
-    ];
+function embedBoss() {
+  return new EmbedBuilder()
+    .setColor("#e74c3c")
+    .setTitle("🔴 **BOSS MERCHANT**")
+    .setDescription(
+`**Eventowy merchant — Anniversary Event!**
+
+• Za żetony kupisz przedmioty  
+• Szansa Supreme: **125%**
+
+⏳ Znika po 15 minutach`
+    )
+    .setThumbnail(IMAGES.boss);
+}
+
+function embedSpin() {
+  return new EmbedBuilder()
+    .setColor("#9b59b6")
+    .setTitle("🎡 **DEV SPIN**")
+    .setDescription(
+`**Kręć kołem i zdobywaj nagrody!**
+
+• Szansa Supreme: **??%**`
+    )
+    .setThumbnail(IMAGES.spin);
+}
+
+// EVENT SEND
+async function sendEvent(type) {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+
+  if (type === "egg") {
+    await channel.send({ content: `<@&${ROLE_EGG}>`, embeds: [embedEgg()] });
+  }
+
+  if (type === "merchant") {
+    await channel.send({ content: `<@&${ROLE_MERCHANT}>` });
+    await channel.send({ embeds: [embedHoney()] });
+    await channel.send({ embeds: [embedBoss()] });
   }
 
   if (type === "spin") {
-    return [
-      new EmbedBuilder()
-        .setColor("#9B59B6")
-        .setTitle("🎡 DEV SPIN")
-        .setDescription(
-`Kręć kołem i zdobywaj nagrody!
-
-Szansa Supreme: ??%`
-        )
-        .setThumbnail(IMG.spin)
-    ];
+    await channel.send({ content: `<@&${ROLE_SPIN}>`, embeds: [embedSpin()] });
   }
 }
 
-// ===== COMMANDS =====
-const commands = [
-  { name: "event", description: "Aktualny event" },
-  { name: "next-events", description: "Następne eventy" },
-  { name: "test-ping", description: "Test eventu" }
-];
+// SCHEDULER
+setInterval(() => {
+  const now = new Date();
 
-const rest = new REST({ version: "10" }).setToken(TOKEN);
+  if (now.getMinutes() === 0 && now.getSeconds() === 0) {
+    const type = getEventType(now.getHours());
+    sendEvent(type);
+  }
+}, 1000);
 
-// ===== READY =====
-client.once("clientReady", async () => {
+// READY
+client.once("ready", async () => {
   console.log("✅ BOT ONLINE");
+
+  const commands = [
+    {
+      name: "event",
+      description: "Aktualny event"
+    },
+    {
+      name: "next-events",
+      description: "Następne eventy"
+    },
+    {
+      name: "test-ping",
+      description: "Test eventu"
+    },
+    {
+      name: "get-role",
+      description: "Wybierz role eventów"
+    },
+    {
+      name: "set-dm",
+      description: "Powiadomienia na DM"
+    }
+  ];
+
+  const rest = new REST({ version: "10" }).setToken(TOKEN);
 
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
@@ -159,71 +180,110 @@ client.once("clientReady", async () => {
   );
 
   console.log("✅ Komendy załadowane");
-
-  startScheduler();
 });
 
-// ===== INTERACTION =====
-client.on("interactionCreate", async i => {
-  if (!i.isChatInputCommand()) return;
+// INTERACTIONS
+client.on("interactionCreate", async (i) => {
 
-  if (i.commandName === "event") {
-    const embeds = buildEmbeds(getCurrentEvent());
-    return i.reply({ embeds });
+  if (i.isChatInputCommand()) {
+
+    // EVENT
+    if (i.commandName === "event") {
+      const type = getEventType(new Date().getHours());
+
+      if (type === "egg") return i.reply({ embeds: [embedEgg()] });
+      if (type === "merchant") return i.reply({ embeds: [embedHoney(), embedBoss()] });
+      if (type === "spin") return i.reply({ embeds: [embedSpin()] });
+    }
+
+    // NEXT EVENTS
+    if (i.commandName === "next-events") {
+      const events = getNextEvents();
+
+      const embed = new EmbedBuilder()
+        .setColor("#2ecc71")
+        .setTitle("📅 **NASTĘPNE EVENTY**")
+        .setDescription(events.map(e =>
+`**${e.type.toUpperCase()}**
+<t:${Math.floor(e.date.getTime()/1000)}:R>
+<t:${Math.floor(e.date.getTime()/1000)}:F>`
+        ).join("\n\n"));
+
+      return i.reply({ embeds: [embed] });
+    }
+
+    // TEST
+    if (i.commandName === "test-ping") {
+      const type = getEventType(new Date().getHours());
+      await sendEvent(type);
+      return i.reply({ content: "✅ Wysłano test", ephemeral: true });
+    }
+
+    // ROLE PICKER
+    if (i.commandName === "get-role") {
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId("roles")
+        .setPlaceholder("Wybierz eventy")
+        .setMinValues(1)
+        .setMaxValues(3)
+        .addOptions([
+          { label: "RNG EGG", value: ROLE_EGG },
+          { label: "MERCHANT", value: ROLE_MERCHANT },
+          { label: "DEV SPIN", value: ROLE_SPIN }
+        ]);
+
+      const row = new ActionRowBuilder().addComponents(menu);
+
+      return i.reply({
+        content: "🎭 **Wybierz role eventów:**",
+        components: [row],
+        ephemeral: true
+      });
+    }
+
+    // DM SETTINGS
+    if (i.commandName === "set-dm") {
+      const menu = new StringSelectMenuBuilder()
+        .setCustomId("dm")
+        .setPlaceholder("Powiadomienia DM")
+        .addOptions([
+          { label: "RNG EGG", value: "egg" },
+          { label: "MERCHANT", value: "merchant" },
+          { label: "DEV SPIN", value: "spin" }
+        ]);
+
+      const row = new ActionRowBuilder().addComponents(menu);
+
+      return i.reply({
+        content: "📩 **Wybierz powiadomienia na DM:**",
+        components: [row],
+        ephemeral: true
+      });
+    }
+
   }
 
-  if (i.commandName === "next-events") {
-    const next = getNextEvents();
+  // ROLE SELECT
+  if (i.isStringSelectMenu()) {
 
-    const embed = new EmbedBuilder()
-      .setColor("#00FFFF")
-      .setTitle("📅 NASTĘPNE EVENTY")
-      .setDescription(
-        next.map(e =>
-          `**${e.type.toUpperCase()}** → <t:${Math.floor(e.time/1000)}:R>`
-        ).join("\n")
-      );
-
-    return i.reply({ embeds: [embed] });
-  }
-
-  if (i.commandName === "test-ping") {
-    const type = getCurrentEvent();
-    return i.reply(`<@&${ROLES[type]}> TEST (${type})`);
-  }
-});
-
-// ===== SCHEDULER =====
-function startScheduler() {
-  setInterval(async () => {
-    const now = new Date();
-    const channel = await client.channels.fetch(CHANNEL_ID).catch(() => null);
-    if (!channel) return;
-
-    const h = now.getHours();
-    const m = now.getMinutes();
-
-    const type = getEventByHour(h);
-
-    // START EVENT
-    if (m === 0 && type) {
-      const embeds = buildEmbeds(type);
-
-      // 🔥 1 ping, potem embedy
-      await channel.send(`<@&${ROLES[type]}>`);
-
-      for (const e of embeds) {
-        await channel.send({ embeds: [e] });
+    if (i.customId === "roles") {
+      for (const role of [ROLE_EGG, ROLE_MERCHANT, ROLE_SPIN]) {
+        await i.member.roles.remove(role).catch(() => {});
       }
+
+      for (const role of i.values) {
+        await i.member.roles.add(role).catch(() => {});
+      }
+
+      return i.reply({ content: "✅ Role ustawione", ephemeral: true });
     }
 
-    // REMINDER
-    if (m === 55) {
-      const next = getNextEvents()[0];
-      await channel.send(`⏰ Za 5 minut: **${next.type.toUpperCase()}**`);
+    if (i.customId === "dm") {
+      userDM.set(i.user.id, i.values);
+      return i.reply({ content: "✅ Ustawiono DM", ephemeral: true });
     }
+  }
 
-  }, 60000);
-}
+});
 
 client.login(TOKEN);
