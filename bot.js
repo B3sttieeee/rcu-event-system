@@ -76,7 +76,7 @@ function buildEmbed(type, variant=null) {
             )
             .setThumbnail(IMAGES.egg)
             .setColor(0x00ffcc)
-            .setFooter({ text: "Event trwa 15 minut" })
+            .setFooter({ text: "Event trwa 30 minut" })
             .setTimestamp();
     }
 
