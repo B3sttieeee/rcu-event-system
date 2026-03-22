@@ -30,6 +30,18 @@ const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
 
+// ================= DB =================
+
+const DB_PATH = "./data.json";
+
+function loadDB() {
+  return JSON.parse(fs.readFileSync(DB_PATH));
+}
+
+function saveDB(data) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+}
+
 // ================= TIME =================
 
 function getTime() {
@@ -52,15 +64,21 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= EMBED BASE =================
+// ================= ROLE =================
+
+function getRole(type) {
+  if (type === "egg") return `<@&${ROLE_EGG}>`;
+  if (type === "merchant") return `<@&${ROLE_MERCHANT}>`;
+  return `<@&${ROLE_SPIN}>`;
+}
+
+// ================= EMBEDS =================
 
 function base(embed) {
   return embed
     .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
     .setTimestamp();
 }
-
-// ================= EMBEDS =================
 
 function getEmbed(type) {
 
@@ -130,31 +148,40 @@ function getEmbed(type) {
   }
 }
 
-// ================= NEXT EVENTS =================
+// ================= DM =================
 
-function getNextEvents() {
+async function sendDM(type) {
+  const db = loadDB();
+
+  for (const userId in db.dm) {
+    if (!db.dm[userId].includes(type)) continue;
+
+    try {
+      const user = await client.users.fetch(userId);
+      await user.send(`🔔 Event ${type.toUpperCase()} wystartował!`);
+    } catch {}
+  }
+}
+
+// ================= EVENT =================
+
+async function sendEvent() {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+
   const now = getTime();
-  const currentHour = now.getHours();
+  const type = getEventByHour(now.getHours());
 
-  const list = [];
+  await channel.send(`${getRole(type)} 🚀 **EVENT WYSTARTOWAŁ!**`);
 
-  for (let i = 1; i <= 3; i++) {
-    const hour = (currentHour + i) % 24;
+  const embed = getEmbed(type);
 
-    const date = new Date(now);
-    date.setHours(hour, 0, 0, 0);
-
-    if (hour <= currentHour) {
-      date.setDate(date.getDate() + 1);
-    }
-
-    list.push({
-      type: getEventByHour(hour),
-      timestamp: Math.floor(date.getTime() / 1000)
-    });
+  if (Array.isArray(embed)) {
+    for (const e of embed) await channel.send({ embeds: [e] });
+  } else {
+    await channel.send({ embeds: [embed] });
   }
 
-  return list;
+  await sendDM(type);
 }
 
 // ================= PANEL =================
@@ -171,11 +198,31 @@ function getPanel() {
         .setCustomId("next")
         .setLabel("Następne Eventy")
         .setStyle(ButtonStyle.Success)
+    ),
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("roles")
+        .setPlaceholder("🎭 Wybierz role")
+        .addOptions([
+          { label: "RNG EGG", value: ROLE_EGG },
+          { label: "MERCHANT", value: ROLE_MERCHANT },
+          { label: "SPIN", value: ROLE_SPIN }
+        ])
+    ),
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("dm")
+        .setPlaceholder("📩 Powiadomienia DM")
+        .addOptions([
+          { label: "EGG", value: "egg" },
+          { label: "MERCHANT", value: "merchant" },
+          { label: "SPIN", value: "spin" }
+        ])
     )
   ];
 }
 
-// ================= COMMANDS =================
+// ================= COMMAND =================
 
 const commands = [
   new SlashCommandBuilder().setName("panel").setDescription("Panel eventów")
@@ -204,8 +251,6 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
-  // ===== BUTTONS =====
-
   if (i.isButton()) {
 
     if (i.customId === "current") {
@@ -217,7 +262,22 @@ client.on("interactionCreate", async (i) => {
 
     if (i.customId === "next") {
 
-      const events = getNextEvents();
+      const events = [];
+      const now = getTime();
+      const hour = now.getHours();
+
+      for (let i2 = 1; i2 <= 3; i2++) {
+        const h = (hour + i2) % 24;
+
+        const d = new Date(now);
+        d.setHours(h, 0, 0, 0);
+        if (h <= hour) d.setDate(d.getDate() + 1);
+
+        events.push({
+          type: getEventByHour(h),
+          timestamp: Math.floor(d.getTime() / 1000)
+        });
+      }
 
       const embed = base(
         new EmbedBuilder()
@@ -233,6 +293,42 @@ client.on("interactionCreate", async (i) => {
       });
 
       return i.reply({ embeds: [embed], ephemeral: true });
+    }
+  }
+
+  // ===== ROLE PICKER =====
+  if (i.isStringSelectMenu()) {
+
+    if (i.customId === "roles") {
+      const role = i.values[0];
+      const member = await i.guild.members.fetch(i.user.id);
+
+      if (member.roles.cache.has(role)) {
+        await member.roles.remove(role);
+        return i.reply({ content: "❌ Usunięto rolę", ephemeral: true });
+      } else {
+        await member.roles.add(role);
+        return i.reply({ content: "✅ Dodano rolę", ephemeral: true });
+      }
+    }
+
+    // ===== DM PICKER =====
+    if (i.customId === "dm") {
+
+      const db = loadDB();
+      if (!db.dm[i.user.id]) db.dm[i.user.id] = [];
+
+      const val = i.values[0];
+
+      if (db.dm[i.user.id].includes(val)) {
+        db.dm[i.user.id] = db.dm[i.user.id].filter(x => x !== val);
+        saveDB(db);
+        return i.reply({ content: "❌ Wyłączono powiadomienia DM", ephemeral: true });
+      } else {
+        db.dm[i.user.id].push(val);
+        saveDB(db);
+        return i.reply({ content: "✅ Włączono powiadomienia DM", ephemeral: true });
+      }
     }
   }
 });
