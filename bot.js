@@ -64,6 +64,34 @@ function getEventByHour(hour) {
   return "spin";
 }
 
+// ================= COUNTDOWN =================
+
+function getNextEventData() {
+  const now = getTime();
+  const currentHour = now.getHours();
+
+  let nextHour = (currentHour + 1) % 24;
+
+  const nextDate = new Date(now);
+  nextDate.setHours(nextHour, 0, 0, 0);
+
+  if (nextHour <= currentHour) {
+    nextDate.setDate(nextDate.getDate() + 1);
+  }
+
+  const diff = nextDate - now;
+
+  const minutes = Math.floor(diff / 60000);
+  const seconds = Math.floor((diff % 60000) / 1000);
+
+  return {
+    type: getEventByHour(nextHour),
+    minutes,
+    seconds,
+    timestamp: Math.floor(nextDate.getTime() / 1000)
+  };
+}
+
 // ================= ROLE =================
 
 function getRole(type) {
@@ -72,116 +100,26 @@ function getRole(type) {
   return `<@&${ROLE_SPIN}>`;
 }
 
-// ================= EMBEDS =================
+// ================= EMBED =================
 
-function base(embed) {
-  return embed
-    .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
-    .setTimestamp();
-}
-
-function getEmbed(type) {
-
-  if (type === "egg") {
-    return base(
-      new EmbedBuilder()
-        .setColor("#FFD700")
-        .setTitle("🥚 RNG EGG EVENT")
-        .setDescription(
-`**🎯 Otwieraj jajka i zdobywaj punkty!**
-
-➤ 🐾 Lepsze pety → więcej punktów  
-➤ 📈 Więcej punktów → wyższy tier  
-➤ 💎 Wyższy tier → lepsze nagrody  
-
-🔥 **Im więcej grasz, tym więcej zyskujesz!**`
-        )
-        .setThumbnail("https://imgur.com/JqyeITl.png")
-    );
-  }
-
-  if (type === "merchant") {
-    return [
-      base(
-        new EmbedBuilder()
-          .setColor("#FFA500")
-          .setTitle("🍯 HONEY MERCHANT")
-          .setDescription(
-`**🐝 Zdobywaj miód i wymieniaj na nagrody!**
-
-➤ 🌍 Bee World  
-➤ 🛒 Oferty eventowe  
-➤ 💎 Szansa na Supreme (110%)`
-          )
-          .setThumbnail("https://imgur.com/zhLC0zn.png")
-      ),
-      base(
-        new EmbedBuilder()
-          .setColor("#FF0000")
-          .setTitle("💀 BOSS MERCHANT")
-          .setDescription(
-`**⚔️ Pokonuj bossy i zdobywaj Tokeny Bossa!**
-
-➤ 🪙 Tokeny Bossa  
-➤ 🛒 Sklep eventowy  
-➤ 💎 Szansa na Supreme (125%)`
-          )
-          .setThumbnail("https://imgur.com/yFvb6jY.png")
-      )
-    ];
-  }
-
-  if (type === "spin") {
-    return base(
-      new EmbedBuilder()
-        .setColor("#8A2BE2")
-        .setTitle("🎡 DEV SPIN EVENT")
-        .setDescription(
-`**🎯 Zakręć kołem i wygraj nagrody!**
-
-➤ 🎁 Losowe nagrody  
-➤ 💎 Rzadkie dropy  
-➤ ✨ Szansa na Supreme`
-        )
-        .setThumbnail("https://imgur.com/NJI7052.png")
-    );
-  }
-}
-
-// ================= DM =================
-
-async function sendDM(type) {
-  const db = loadDB();
-
-  for (const userId in db.dm) {
-    if (!db.dm[userId].includes(type)) continue;
-
-    try {
-      const user = await client.users.fetch(userId);
-      await user.send(`🔔 Event ${type.toUpperCase()} wystartował!`);
-    } catch {}
-  }
-}
-
-// ================= EVENT =================
-
-async function sendEvent() {
-  const channel = await client.channels.fetch(CHANNEL_ID);
-
+function buildPanelEmbed() {
   const now = getTime();
-  const type = getEventByHour(now.getHours());
+  const current = getEventByHour(now.getHours());
+  const next = getNextEventData();
 
-  await channel.send(`${getRole(type)} 🚀 **EVENT WYSTARTOWAŁ!**`);
+  return new EmbedBuilder()
+    .setColor("#5865F2")
+    .setTitle("🎮 PANEL EVENTÓW")
+    .setDescription(
+`🟢 **Aktualny Event:** ${current.toUpperCase()}
 
-  const embed = getEmbed(type);
+🔜 **Następny Event:** ${next.type.toUpperCase()}
+⏱️ **Start za:** ${next.minutes}m ${next.seconds}s
 
-  if (Array.isArray(embed)) {
-    for (const e of embed) await channel.send({ embeds: [e] });
-  } else {
-    await channel.send({ embeds: [embed] });
-  }
-
-  await sendDM(type);
+📅 <t:${next.timestamp}:F>`
+    )
+    .setFooter({ text: "Twórca: B3sttiee" })
+    .setTimestamp();
 }
 
 // ================= PANEL =================
@@ -190,19 +128,16 @@ function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("current")
-        .setLabel("Aktualny Event")
-        .setStyle(ButtonStyle.Primary),
-
-      new ButtonBuilder()
-        .setCustomId("next")
-        .setLabel("Następne Eventy")
-        .setStyle(ButtonStyle.Success)
+        .setCustomId("refresh")
+        .setLabel("🔄 Odśwież")
+        .setStyle(ButtonStyle.Primary)
     ),
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("roles")
         .setPlaceholder("🎭 Wybierz role")
+        .setMinValues(1)
+        .setMaxValues(3)
         .addOptions([
           { label: "RNG EGG", value: ROLE_EGG },
           { label: "MERCHANT", value: ROLE_MERCHANT },
@@ -213,6 +148,8 @@ function getPanel() {
       new StringSelectMenuBuilder()
         .setCustomId("dm")
         .setPlaceholder("📩 Powiadomienia DM")
+        .setMinValues(1)
+        .setMaxValues(3)
         .addOptions([
           { label: "EGG", value: "egg" },
           { label: "MERCHANT", value: "merchant" },
@@ -221,6 +158,50 @@ function getPanel() {
     )
   ];
 }
+
+// ================= DM =================
+
+async function sendDM(type) {
+  const db = loadDB();
+
+  for (const id in db.dm) {
+    if (!db.dm[id].includes(type)) continue;
+
+    try {
+      const user = await client.users.fetch(id);
+      await user.send(`🔔 EVENT ${type.toUpperCase()} WYSTARTOWAŁ!`);
+    } catch {}
+  }
+}
+
+// ================= EVENT =================
+
+let lastHour = null;
+
+async function sendEvent() {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+
+  const now = getTime();
+  const hour = now.getHours();
+
+  if (lastHour === hour) return;
+  lastHour = hour;
+
+  const type = getEventByHour(hour);
+
+  await channel.send(`${getRole(type)} 🚀 **EVENT WYSTARTOWAŁ!**`);
+
+  await sendDM(type);
+}
+
+// ================= LOOP =================
+
+setInterval(() => {
+  const now = getTime();
+
+  if (now.getMinutes() === 0) sendEvent();
+
+}, 1000);
 
 // ================= COMMAND =================
 
@@ -239,104 +220,79 @@ async function registerCommands() {
 
 // ================= INTERACTIONS =================
 
+let panelMessage = null;
+
 client.on("interactionCreate", async (i) => {
 
   if (i.isChatInputCommand()) {
     if (i.commandName === "panel") {
-      return i.reply({
-        content: "🎮 **PANEL EVENTÓW**",
+
+      const msg = await i.reply({
+        embeds: [buildPanelEmbed()],
         components: getPanel(),
-        ephemeral: true
+        fetchReply: true
       });
+
+      panelMessage = msg;
     }
   }
 
   if (i.isButton()) {
-
-    if (i.customId === "current") {
-      return i.reply({
-        embeds: [getEmbed(getEventByHour(getTime().getHours()))],
-        ephemeral: true
+    if (i.customId === "refresh") {
+      return i.update({
+        embeds: [buildPanelEmbed()],
+        components: getPanel()
       });
-    }
-
-    if (i.customId === "next") {
-
-      const events = [];
-      const now = getTime();
-      const hour = now.getHours();
-
-      for (let i2 = 1; i2 <= 3; i2++) {
-        const h = (hour + i2) % 24;
-
-        const d = new Date(now);
-        d.setHours(h, 0, 0, 0);
-        if (h <= hour) d.setDate(d.getDate() + 1);
-
-        events.push({
-          type: getEventByHour(h),
-          timestamp: Math.floor(d.getTime() / 1000)
-        });
-      }
-
-      const embed = base(
-        new EmbedBuilder()
-          .setColor("#2ecc71")
-          .setTitle("📅 NASTĘPNE EVENTY")
-      );
-
-      events.forEach(e => {
-        embed.addFields({
-          name: `➤ ${e.type.toUpperCase()}`,
-          value: `<t:${e.timestamp}:R>\n<t:${e.timestamp}:F>`
-        });
-      });
-
-      return i.reply({ embeds: [embed], ephemeral: true });
     }
   }
 
-  // ===== ROLE PICKER =====
   if (i.isStringSelectMenu()) {
 
+    // ROLE
     if (i.customId === "roles") {
-      const role = i.values[0];
       const member = await i.guild.members.fetch(i.user.id);
 
-      if (member.roles.cache.has(role)) {
-        await member.roles.remove(role);
-        return i.reply({ content: "❌ Usunięto rolę", ephemeral: true });
-      } else {
-        await member.roles.add(role);
-        return i.reply({ content: "✅ Dodano rolę", ephemeral: true });
+      for (const role of i.values) {
+        if (member.roles.cache.has(role)) {
+          await member.roles.remove(role);
+        } else {
+          await member.roles.add(role);
+        }
       }
+
+      return i.reply({ content: "✅ Zaktualizowano role", ephemeral: true });
     }
 
-    // ===== DM PICKER =====
+    // DM
     if (i.customId === "dm") {
 
       const db = loadDB();
-      if (!db.dm[i.user.id]) db.dm[i.user.id] = [];
+      db.dm[i.user.id] = i.values;
 
-      const val = i.values[0];
+      saveDB(db);
 
-      if (db.dm[i.user.id].includes(val)) {
-        db.dm[i.user.id] = db.dm[i.user.id].filter(x => x !== val);
-        saveDB(db);
-        return i.reply({ content: "❌ Wyłączono powiadomienia DM", ephemeral: true });
-      } else {
-        db.dm[i.user.id].push(val);
-        saveDB(db);
-        return i.reply({ content: "✅ Włączono powiadomienia DM", ephemeral: true });
-      }
+      return i.reply({ content: "📩 Zapisano ustawienia DM", ephemeral: true });
     }
   }
 });
 
+// ================= AUTO PANEL UPDATE =================
+
+setInterval(async () => {
+  if (!panelMessage) return;
+
+  try {
+    await panelMessage.edit({
+      embeds: [buildPanelEmbed()],
+      components: getPanel()
+    });
+  } catch {}
+}, 10000);
+
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 BOT ONLINE");
+  console.log("🔥 GOD MODE BOT ONLINE");
   await registerCommands();
 });
 
