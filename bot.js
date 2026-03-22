@@ -1,17 +1,20 @@
+require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
+  SlashCommandBuilder,
   REST,
   Routes
 } = require("discord.js");
 
-// ===== CONFIG =====
-const TOKEN = process.env.TOKEN;
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds]
+});
+
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
+const TOKEN = process.env.TOKEN;
 
 const CHANNEL_ID = "1484937784283369502";
 
@@ -20,287 +23,210 @@ const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
 const ROLE_SPIN = "1484911421903999127";
 
-// IMAGES
-const IMG = {
-  egg: "https://imgur.com/pY2xNUL.png",
-  honey: "https://imgur.com/SsvlJ5a.png",
-  boss: "https://imgur.com/VU9KdMS.png",
-  spin: "https://imgur.com/LeXDgiJ.png"
-};
 
-// ===== CLIENT =====
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
-});
+// =======================
+// 🧠 SYSTEM CZASU (FIXED)
+// =======================
 
-// ===== USER DM SETTINGS =====
-const userDM = new Map();
-
-// ===== EVENT SYSTEM =====
-function getEventType(h) {
-  if ([0,3,6,9,12,15,18,21].includes(h)) return "egg";
-  if ([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
-  if ([2,5,8,11,14,17,20,23].includes(h)) return "spin";
+function getCETDate() {
+  const now = new Date();
+  return new Date(now.getTime() + 60 * 60 * 1000); // +1h CET
 }
 
-// ===== GET NEXT EVENTS (FIXED TIME) =====
-function getNextEvents() {
-  const now = new Date();
-  const list = [];
+function getEventType(hour) {
+  if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
+  if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
+  if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
+}
 
-  for (let i = 1; i <= 24; i++) {
-    const d = new Date(now);
-    d.setHours(now.getHours() + i);
-    d.setMinutes(0, 0, 0);
+// 🔥 AKTUALNY EVENT (NAPRAWIONY)
+function getCurrentEvent() {
+  const now = getCETDate();
+  return getEventType(now.getHours());
+}
 
-    list.push({
-      type: getEventType(d.getHours()),
-      date: d
-    });
+// 🔥 KOLEJNE EVENTY (NAPRAWIONE)
+function getNextEvents(count = 2) {
+  const now = getCETDate();
+  const results = [];
 
-    if (list.length === 2) break;
+  let test = new Date(now);
+
+  for (let i = 0; i < 24; i++) {
+    test.setMinutes(0, 0, 0);
+
+    const type = getEventType(test.getHours());
+
+    if (test > now) {
+      results.push({
+        type,
+        time: new Date(test)
+      });
+    }
+
+    test.setHours(test.getHours() + 1);
+
+    if (results.length >= count) break;
   }
 
-  return list;
+  return results;
 }
 
-// ===== EMBEDS =====
-function eggEmbed() {
-  return new EmbedBuilder()
-    .setColor("#f1c40f")
-    .setTitle("🥚 **RNG EGG EVENT**")
-    .setDescription(
-`**Otwieraj jajka i zdobywaj punkty Tieru!**
-
-• Lepsze pety = więcej punktów  
-• Lepszy Tier = lepsze bonusy`
-    )
-    .setThumbnail(IMG.egg);
+// 🔥 TIMESTAMP
+function toUnix(date) {
+  return Math.floor(date.getTime() / 1000);
 }
 
-function honeyEmbed() {
-  return new EmbedBuilder()
-    .setColor("#f39c12")
-    .setTitle("🍯 **HONEY MERCHANT**")
-    .setDescription(
-`**Eventowy merchant — sprawdź ofertę!**
 
-• Za miód kupisz przedmioty  
-• Szansa Supreme: **110%**
+// =======================
+// 🎨 EMBEDY
+// =======================
 
-⏳ Znika po 15 minutach`
-    )
-    .setThumbnail(IMG.honey);
-}
-
-function bossEmbed() {
-  return new EmbedBuilder()
-    .setColor("#e74c3c")
-    .setTitle("🔴 **BOSS MERCHANT**")
-    .setDescription(
-`**Eventowy merchant — Anniversary Event!**
-
-• Za żetony kupisz przedmioty  
-• Szansa Supreme: **125%**
-
-⏳ Znika po 15 minutach`
-    )
-    .setThumbnail(IMG.boss);
-}
-
-function spinEmbed() {
-  return new EmbedBuilder()
-    .setColor("#9b59b6")
-    .setTitle("🎡 **DEV SPIN EVENT**")
-    .setDescription(
-`**Kręć kołem i zdobywaj nagrody!**
-
-• Szansa Supreme: **??%**`
-    )
-    .setThumbnail(IMG.spin);
-}
-
-// ===== SEND EVENT =====
-async function sendEvent(type) {
-  const channel = await client.channels.fetch(CHANNEL_ID);
-
+function eventEmbed(type) {
   if (type === "egg") {
-    await channel.send({
-      content: `<@&${ROLE_EGG}>`,
-      embeds: [eggEmbed()]
-    });
+    return new EmbedBuilder()
+      .setColor("#f1c40f")
+      .setTitle("🥚 RNG EGG")
+      .setDescription(`**Otwieraj jajka i zdobywaj punkty Tieru!**\n\n• Lepsze pety = więcej punktów\n• Lepszy Tier = lepsze bonusy`)
+      .setThumbnail("https://i.imgur.com/8R8nX8M.png");
   }
 
   if (type === "merchant") {
-    await channel.send({ content: `<@&${ROLE_MERCHANT}>` });
-    await channel.send({ embeds: [honeyEmbed()] });
-    await channel.send({ embeds: [bossEmbed()] });
+    return [
+      new EmbedBuilder()
+        .setColor("#f39c12")
+        .setTitle("🍯 HONEY MERCHANT")
+        .setDescription(`**Eventowy merchant — sprawdź ofertę!**\n\n• Za miód kupisz przedmioty\n• Supreme: **110%**\n\n⏳ Znika po 15 minutach`)
+        .setThumbnail("https://i.imgur.com/1XK8JZg.png"),
+
+      new EmbedBuilder()
+        .setColor("#e74c3c")
+        .setTitle("👹 BOSS MERCHANT")
+        .setDescription(`**Eventowy merchant na mapie Anniversary!**\n\n• Za tokeny z bossów kupisz przedmioty\n• Supreme: **125%**\n\n⏳ Znika po 15 minutach`)
+        .setThumbnail("https://i.imgur.com/3XQZ4Fh.png")
+    ];
   }
 
   if (type === "spin") {
-    await channel.send({
-      content: `<@&${ROLE_SPIN}>`,
-      embeds: [spinEmbed()]
-    });
-  }
-
-  sendDM(type);
-}
-
-// ===== DM NOTIFICATIONS =====
-async function sendDM(type) {
-  for (const [userId, prefs] of userDM.entries()) {
-    if (!prefs.includes(type)) continue;
-
-    try {
-      const user = await client.users.fetch(userId);
-
-      if (type === "egg") await user.send({ embeds: [eggEmbed()] });
-      if (type === "merchant") await user.send({ embeds: [honeyEmbed(), bossEmbed()] });
-      if (type === "spin") await user.send({ embeds: [spinEmbed()] });
-
-    } catch {}
+    return new EmbedBuilder()
+      .setColor("#9b59b6")
+      .setTitle("🎡 DEV SPIN")
+      .setDescription(`**Kręć kołem i zdobywaj nagrody!**\n\n• Szansa na Supreme`)
+      .setThumbnail("https://i.imgur.com/FV9ZK0G.png");
   }
 }
 
-// ===== REMINDER 5 MIN =====
-setInterval(async () => {
-  const now = new Date();
+// =======================
+// 📅 NEXT EVENTS EMBED
+// =======================
 
-  if (now.getMinutes() === 55) {
-    const next = getEventType((now.getHours() + 1) % 24);
-    const channel = await client.channels.fetch(CHANNEL_ID);
+function nextEventsEmbed() {
+  const next = getNextEvents(2);
 
-    await channel.send(`⏰ Za 5 minut event: **${next.toUpperCase()}**`);
-  }
-}, 60000);
+  return new EmbedBuilder()
+    .setColor("#2ecc71")
+    .setTitle("📅 NASTĘPNE EVENTY")
+    .setDescription(
+      next.map(e => {
+        return `**${e.type.toUpperCase()}**\n<t:${toUnix(e.time)}:R>\n<t:${toUnix(e.time)}:F>\n`;
+      }).join("\n")
+    );
+}
 
-// ===== MAIN EVENT LOOP =====
-setInterval(() => {
-  const now = new Date();
 
-  if (now.getMinutes() === 0 && now.getSeconds() === 0) {
-    const type = getEventType(now.getHours());
-    sendEvent(type);
-  }
-}, 1000);
+// =======================
+// ⚡ KOMENDY
+// =======================
 
-// ===== READY =====
-client.once("ready", async () => {
+const commands = [
+  new SlashCommandBuilder()
+    .setName("event")
+    .setDescription("Aktualny event"),
+
+  new SlashCommandBuilder()
+    .setName("next-events")
+    .setDescription("Następne eventy"),
+
+  new SlashCommandBuilder()
+    .setName("test-ping")
+    .setDescription("Test eventu")
+];
+
+const rest = new REST({ version: "10" }).setToken(TOKEN);
+
+
+// =======================
+// 🚀 READY
+// =======================
+
+client.once("clientReady", async () => {
   console.log("✅ BOT ONLINE");
-
-  const commands = [
-    { name: "event", description: "Aktualny event" },
-    { name: "next-events", description: "Następne eventy" },
-    { name: "test-ping", description: "Test eventu" },
-    { name: "get-role", description: "Wybierz role" },
-    { name: "set-dm", description: "Powiadomienia DM" }
-  ];
-
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
 
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
     { body: commands }
   );
 
-  console.log("✅ Komendy gotowe");
+  console.log("✅ Komendy załadowane");
 });
 
-// ===== COMMANDS =====
-client.on("interactionCreate", async (i) => {
 
-  if (i.isChatInputCommand()) {
+// =======================
+// 🎮 INTERACTION
+// =======================
 
-    const now = new Date();
-    const type = getEventType(now.getHours());
+client.on("interactionCreate", async (interaction) => {
+  if (!interaction.isChatInputCommand()) return;
 
-    if (i.commandName === "event") {
-      if (type === "egg") return i.reply({ embeds: [eggEmbed()] });
-      if (type === "merchant") return i.reply({ embeds: [honeyEmbed(), bossEmbed()] });
-      if (type === "spin") return i.reply({ embeds: [spinEmbed()] });
+  // EVENT
+  if (interaction.commandName === "event") {
+    const type = getCurrentEvent();
+    const embed = eventEmbed(type);
+
+    if (Array.isArray(embed)) {
+      return interaction.reply({ embeds: embed });
     }
 
-    if (i.commandName === "next-events") {
-      const ev = getNextEvents();
-
-      return i.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor("#2ecc71")
-            .setTitle("📅 **NASTĘPNE EVENTY**")
-            .setDescription(
-              ev.map(e =>
-`**${e.type.toUpperCase()}**
-<t:${Math.floor(e.date.getTime()/1000)}:R>
-<t:${Math.floor(e.date.getTime()/1000)}:F>`
-              ).join("\n\n")
-            )
-        ]
-      });
-    }
-
-    if (i.commandName === "test-ping") {
-      await sendEvent(type);
-      return i.reply({ content: "✅ Test wysłany", ephemeral: true });
-    }
-
-    if (i.commandName === "get-role") {
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId("roles")
-        .setPlaceholder("Wybierz eventy")
-        .setMinValues(1)
-        .setMaxValues(3)
-        .addOptions([
-          { label: "RNG EGG", value: ROLE_EGG },
-          { label: "MERCHANT", value: ROLE_MERCHANT },
-          { label: "DEV SPIN", value: ROLE_SPIN }
-        ]);
-
-      return i.reply({
-        components: [new ActionRowBuilder().addComponents(menu)],
-        ephemeral: true
-      });
-    }
-
-    if (i.commandName === "set-dm") {
-      const menu = new StringSelectMenuBuilder()
-        .setCustomId("dm")
-        .setPlaceholder("Powiadomienia DM")
-        .addOptions([
-          { label: "RNG EGG", value: "egg" },
-          { label: "MERCHANT", value: "merchant" },
-          { label: "DEV SPIN", value: "spin" }
-        ]);
-
-      return i.reply({
-        components: [new ActionRowBuilder().addComponents(menu)],
-        ephemeral: true
-      });
-    }
-
+    return interaction.reply({ embeds: [embed] });
   }
 
-  if (i.isStringSelectMenu()) {
-
-    if (i.customId === "roles") {
-      for (const role of [ROLE_EGG, ROLE_MERCHANT, ROLE_SPIN]) {
-        await i.member.roles.remove(role).catch(() => {});
-      }
-
-      for (const role of i.values) {
-        await i.member.roles.add(role).catch(() => {});
-      }
-
-      return i.reply({ content: "✅ Role ustawione", ephemeral: true });
-    }
-
-    if (i.customId === "dm") {
-      userDM.set(i.user.id, i.values);
-      return i.reply({ content: "✅ DM ustawione", ephemeral: true });
-    }
+  // NEXT EVENTS
+  if (interaction.commandName === "next-events") {
+    return interaction.reply({
+      embeds: [nextEventsEmbed()]
+    });
   }
 
+  // TEST
+  if (interaction.commandName === "test-ping") {
+    const type = getCurrentEvent();
+    const channel = await client.channels.fetch(CHANNEL_ID);
+
+    if (type === "merchant") {
+      await channel.send(`<@&${ROLE_MERCHANT}>`);
+      const embeds = eventEmbed("merchant");
+      for (const e of embeds) {
+        await channel.send({ embeds: [e] });
+      }
+    }
+
+    if (type === "egg") {
+      await channel.send(`<@&${ROLE_EGG}>`);
+      await channel.send({ embeds: [eventEmbed("egg")] });
+    }
+
+    if (type === "spin") {
+      await channel.send(`<@&${ROLE_SPIN}>`);
+      await channel.send({ embeds: [eventEmbed("spin")] });
+    }
+
+    return interaction.reply({ content: "✅ Test wysłany", ephemeral: true });
+  }
 });
+
+
+// =======================
+// 🔐 LOGIN
+// =======================
 
 client.login(TOKEN);
