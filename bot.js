@@ -23,7 +23,7 @@ const CLIENT_ID = '1484904976563044444';
 const GUILD_ID = '1475521240058953830';
 const CHANNEL_ID = '1484937784283369502';
 
-// ROLE ID (STAŁE)
+// ROLE ID
 const ROLES = {
     egg: "1476000993119568105",
     merchant: "1476000993660502139",
@@ -44,26 +44,61 @@ function save() {
     fs.writeFileSync('./data.json', JSON.stringify(data, null, 2));
 }
 
-// EVENT SYSTEM
-function getEvent(h) {
-    if ([0,3,6,9,12,15,18,21].includes(h)) return "egg";
-    if ([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
-    if ([2,5,8,11,14,17,20,23].includes(h)) return "spin";
+// 🔥 CZAS POLSKI
+function getNow() {
+    return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+}
+
+// EVENT LOGIKA (NAPRAWIONA)
+function getEvent(hour) {
+    if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
+    if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
+    if ([2,5,8,11,14,17,20,23].includes(hour)) return "spin";
+}
+
+// 🔥 NAJBLIŻSZE EVENTY (NAPRAWIONE)
+function getNextEvents() {
+
+    const now = getNow();
+    let events = [];
+
+    for (let i = 0; i < 24; i++) {
+        const date = new Date(now);
+        date.setMinutes(0,0,0);
+        date.setHours(i);
+
+        if (date <= now) date.setDate(date.getDate()+1);
+
+        events.push({
+            type: getEvent(i),
+            time: date.getTime()
+        });
+    }
+
+    events.sort((a,b)=>a.time-b.time);
+
+    return events.slice(0,2);
 }
 
 // EMBEDY
 function getEmbed(type) {
+
     if (type === "egg") {
         return new EmbedBuilder()
             .setTitle("🥚 **RNG EGG**")
-            .setDescription("**Otwieraj jajka i zdobywaj punkty do Tieru!**\n\nLepsze pety = więcej punktów\nLepszy Tier = lepsze bonusy")
+            .setDescription(
+`**Otwieraj jajka i zdobywaj punkty Tieru!**
+
+• Lepsze pety = więcej punktów  
+• Lepszy Tier = lepsze nagrody`
+            )
             .setThumbnail(IMAGES.egg)
             .setColor(0xffcc00);
     }
 
     if (type === "merchant") {
         return new EmbedBuilder()
-            .setTitle("🐝 **MERCHANTY**")
+            .setTitle("🐝 **MERCHANT EVENT**")
             .setDescription(
 `**🟡 Honey Merchant**
 Za miód kupisz przedmioty  
@@ -73,7 +108,7 @@ Szansa Supreme: **110%**
 Na mapie Anniversary Event  
 Szansa Supreme: **125%**
 
-⏳ Znikają po 15 minutach!`
+⏳ Znika po 15 minutach`
             )
             .setThumbnail(IMAGES.honey)
             .setColor(0xff9900);
@@ -82,7 +117,11 @@ Szansa Supreme: **125%**
     if (type === "spin") {
         return new EmbedBuilder()
             .setTitle("🎰 **DEV SPIN**")
-            .setDescription("**Kręć kołem i zdobywaj nagrody!**\nSzansa Supreme: ??%")
+            .setDescription(
+`**Kręć kołem i zdobywaj nagrody!**
+
+Szansa Supreme: **??%**`
+            )
             .setThumbnail(IMAGES.spin)
             .setColor(0x00ccff);
     }
@@ -90,19 +129,20 @@ Szansa Supreme: **125%**
 
 // READY
 client.once('clientReady', async () => {
+
     console.log("✅ BOT ONLINE");
 
     const commands = [
         new SlashCommandBuilder().setName('event').setDescription('Aktualny event'),
         new SlashCommandBuilder().setName('next-events').setDescription('Następne eventy'),
         new SlashCommandBuilder().setName('get-role').setDescription('Panel ról'),
-        new SlashCommandBuilder().setName('set-dm').setDescription('DM powiadomienia'),
+        new SlashCommandBuilder().setName('set-dm').setDescription('Powiadomienia DM'),
 
         new SlashCommandBuilder()
             .setName('giveaway')
             .setDescription('Start giveaway')
             .addStringOption(o=>o.setName('nagroda').setDescription('Nagroda').setRequired(true))
-            .addStringOption(o=>o.setName('czas').setDescription('np 1h / 30m').setRequired(true)),
+            .addStringOption(o=>o.setName('czas').setDescription('np 1h / 30m').setRequired(true))
 
     ].map(c=>c.toJSON());
 
@@ -114,19 +154,19 @@ client.once('clientReady', async () => {
     // CRON
     cron.schedule('* * * * *', async () => {
 
-        const now = new Date();
+        const now = getNow();
         const h = now.getHours();
         const m = now.getMinutes();
 
         const type = getEvent(h);
 
-        // 5 MIN PRZED
+        // 🔔 5 MIN PRZED
         if (m === 55) {
             const channel = await client.channels.fetch(CHANNEL_ID);
-            channel.send(`⏰ Za 5 minut event: **${type.toUpperCase()}** <@&${ROLES[type]}>`);
+            channel.send(`⏰ Za 5 minut: **${type.toUpperCase()}** <@&${ROLES[type]}>`);
         }
 
-        // START
+        // 🚀 START
         if (m === 0) {
             const channel = await client.channels.fetch(CHANNEL_ID);
 
@@ -155,32 +195,38 @@ client.on('interactionCreate', async i => {
 
     if (i.isChatInputCommand()) {
 
-        const now = new Date();
+        const now = getNow();
         const h = now.getHours();
 
+        // EVENT
         if (i.commandName === 'event') {
-            const type = getEvent(h);
-            return i.reply({ embeds: [getEmbed(type)] });
+            return i.reply({ embeds: [getEmbed(getEvent(h))] });
         }
 
+        // NEXT EVENTS
         if (i.commandName === 'next-events') {
-            const next1 = (h+1)%24;
-            const next2 = (h+2)%24;
 
-            const t1 = Math.floor(Date.now()/1000)+3600;
-            const t2 = Math.floor(Date.now()/1000)+7200;
+            const next = getNextEvents();
 
             return i.reply({
-                embeds: [new EmbedBuilder()
-                    .setTitle("📅 **NASTĘPNE EVENTY**")
-                    .setDescription(
-`**🕒 Za 1h:** ${getEvent(next1)} <t:${t1}:R>
-**🕒 Za 2h:** ${getEvent(next2)} <t:${t2}:R>`
-                    )
-                    .setColor(0x00ffcc)]
+                embeds: [
+                    new EmbedBuilder()
+                        .setTitle("📅 **NASTĘPNE EVENTY**")
+                        .setDescription(
+`🔥 **${next[0].type.toUpperCase()}**
+🕒 <t:${Math.floor(next[0].time/1000)}:F>
+⏳ <t:${Math.floor(next[0].time/1000)}:R>
+
+🔥 **${next[1].type.toUpperCase()}**
+🕒 <t:${Math.floor(next[1].time/1000)}:F>
+⏳ <t:${Math.floor(next[1].time/1000)}:R>`
+                        )
+                        .setColor(0x00ffcc)
+                ]
             });
         }
 
+        // ROLE PANEL
         if (i.commandName === 'get-role') {
 
             const menu = new StringSelectMenuBuilder()
@@ -200,6 +246,7 @@ client.on('interactionCreate', async i => {
             });
         }
 
+        // DM PICKER
         if (i.commandName === 'set-dm') {
 
             const menu = new StringSelectMenuBuilder()
@@ -219,6 +266,7 @@ client.on('interactionCreate', async i => {
             });
         }
 
+        // GIVEAWAY
         if (i.commandName === 'giveaway') {
 
             const prize = i.options.getString('nagroda');
@@ -235,7 +283,12 @@ client.on('interactionCreate', async i => {
 
             const embed = new EmbedBuilder()
                 .setTitle(`🎁 ${prize}`)
-                .setDescription(`Kliknij 🎉 aby wziąć udział!\n\n⏳ Koniec: <t:${Math.floor(end/1000)}:R>\n👥 Uczestnicy: 0`)
+                .setDescription(
+`Kliknij 🎉 aby wziąć udział!
+
+⏳ Koniec: <t:${Math.floor(end/1000)}:R>
+👥 Uczestnicy: 0`
+                )
                 .setColor(0x00ff99);
 
             const row = new ActionRowBuilder().addComponents(
@@ -251,35 +304,41 @@ client.on('interactionCreate', async i => {
                 const winner = users[Math.floor(Math.random()*users.length)];
                 msg.channel.send(`🏆 Wygrał: <@${winner}>`);
             }, ms);
-
         }
 
     }
 
+    // ROLE SELECT
     if (i.isStringSelectMenu()) {
 
         if (i.customId === 'roles') {
+
             for (const type of ["egg","merchant","spin"]) {
                 const role = ROLES[type];
+
                 if (i.values.includes(type)) {
                     await i.member.roles.add(role).catch(()=>{});
                 } else {
                     await i.member.roles.remove(role).catch(()=>{});
                 }
             }
-            return i.update({ content: "✅ Zaktualizowano role", components: [] });
+
+            return i.update({ content: "✅ Role ustawione", components: [] });
         }
 
         if (i.customId === 'dm') {
             data.dm[i.user.id] = i.values;
             save();
-            return i.update({ content: "✅ Zapisano DM", components: [] });
+            return i.update({ content: "✅ DM zapisane", components: [] });
         }
 
     }
 
+    // GIVEAWAY BUTTON
     if (i.isButton()) {
+
         if (i.customId.startsWith("join_")) {
+
             const id = i.customId.split("_")[1];
 
             if (!data.giveaways[id]) return;
