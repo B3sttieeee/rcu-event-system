@@ -1,37 +1,13 @@
-// Discord Giveaway Bot using discord.js v14
-// IMPORTANT: Railway FIX
-// Make sure you also have package.json in repo root:
-/*
-{
-  "name": "giveaway-bot",
-  "version": "1.0.0",
-  "main": "bot.js",
-  "scripts": {
-    "start": "node bot.js"
-  },
-  "dependencies": {
-    "discord.js": "^14.14.1",
-    "ms": "^2.1.3",
-    "dotenv": "^16.0.0"
-  }
-}
-*/
+const {
+  Client,
+  GatewayIntentBits,
+  EmbedBuilder,
+  PermissionsBitField,
+  REST,
+  Routes,
+  SlashCommandBuilder
+} = require('discord.js');
 
-// Also add .env file locally (Railway -> Variables):
-// TOKEN=your_bot_token_here
-
-// If Railway still fails, set START COMMAND to:
-// npm start
-
-// =========================
-// Features:
-// - /giveaway-create
-// - /giveaway-role (extra entries)
-// - countdown timer
-// - role requirement
-// - winner channel creation
-
-const { Client, GatewayIntentBits, EmbedBuilder, PermissionsBitField } = require('discord.js');
 const ms = require('ms');
 require('dotenv').config();
 
@@ -39,17 +15,50 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
 });
 
-// In-memory storage (replace with DB for production)
+// pamięć (możesz później zmienić na DB)
 const giveaways = new Map();
 const roleEntries = new Map();
 
-client.once('ready', () => {
-  console.log(`Logged in as ${client.user.tag}`);
+client.once('ready', async () => {
+  console.log(`✅ Zalogowano jako ${client.user.tag}`);
+
+  // REJESTRACJA KOMEND
+  const commands = [
+    new SlashCommandBuilder()
+      .setName('giveaway-create')
+      .setDescription('Stwórz giveaway')
+      .addStringOption(o => o.setName('time').setDescription('np 1m, 1h').setRequired(true))
+      .addStringOption(o => o.setName('reward').setDescription('Nagroda').setRequired(true))
+      .addIntegerOption(o => o.setName('winners').setDescription('Ilość zwycięzców').setRequired(true))
+      .addStringOption(o => o.setName('image').setDescription('Link do obrazka'))
+      .addRoleOption(o => o.setName('role').setDescription('Wymagana rola')),
+
+    new SlashCommandBuilder()
+      .setName('giveaway-role')
+      .setDescription('Ustaw dodatkowe wejścia dla roli')
+      .addRoleOption(o => o.setName('role').setDescription('Rola').setRequired(true))
+      .addIntegerOption(o => o.setName('entries').setDescription('Ile dodatkowych wejść').setRequired(true))
+  ].map(c => c.toJSON());
+
+  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
+  try {
+    console.log('⏳ Rejestruję komendy...');
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands }
+    );
+    console.log('✅ Komendy gotowe!');
+  } catch (err) {
+    console.error(err);
+  }
 });
 
+// OBSŁUGA KOMEND
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
+  // CREATE GIVEAWAY
   if (interaction.commandName === 'giveaway-create') {
     const time = interaction.options.getString('time');
     const reward = interaction.options.getString('reward');
@@ -58,13 +67,31 @@ client.on('interactionCreate', async interaction => {
     const requiredRole = interaction.options.getRole('role');
 
     const duration = ms(time);
-    if (!duration) return interaction.reply({ content: 'Invalid time!', ephemeral: true });
+    if (!duration) {
+      return interaction.reply({ content: '❌ Zły czas!', ephemeral: true });
+    }
 
     const endTime = Date.now() + duration;
 
+    // pokazanie ról z bonusami
+    let rolesBonusText = 'Brak';
+    if (roleEntries.size > 0) {
+      rolesBonusText = '';
+      roleEntries.forEach((val, key) => {
+        rolesBonusText += `<@&${key}> → +${val} wejść\n`;
+      });
+    }
+
     const embed = new EmbedBuilder()
       .setTitle('🎉 GIVEAWAY 🎉')
-      .setDescription(`Reward: **${reward}**\nWinners: **${winnersCount}**\nEnds: <t:${Math.floor(endTime / 1000)}:R>\nRequired Role: ${requiredRole ? requiredRole : 'None'}\n\nClick 🎉 to enter!`)
+      .setDescription(
+        `🎁 Nagroda: **${reward}**\n` +
+        `🏆 Zwycięzcy: **${winnersCount}**\n` +
+        `⏳ Koniec: <t:${Math.floor(endTime / 1000)}:R>\n` +
+        `🔒 Wymagana rola: ${requiredRole ? requiredRole : 'Brak'}\n\n` +
+        `🎟 Bonusowe wejścia:\n${rolesBonusText}\n\n` +
+        `Kliknij 🎉 aby wziąć udział!`
+      )
       .setImage(image || null)
       .setColor('Random');
 
@@ -79,21 +106,26 @@ client.on('interactionCreate', async interaction => {
       channelId: interaction.channel.id
     });
 
-    interaction.reply({ content: 'Giveaway created!', ephemeral: true });
+    interaction.reply({ content: '✅ Giveaway utworzony!', ephemeral: true });
 
     setTimeout(() => endGiveaway(msg), duration);
   }
 
+  // ROLE BONUS
   if (interaction.commandName === 'giveaway-role') {
     const role = interaction.options.getRole('role');
     const entries = interaction.options.getInteger('entries');
 
     roleEntries.set(role.id, entries);
 
-    interaction.reply({ content: `Role ${role.name} now gives ${entries} extra entries!`, ephemeral: true });
+    interaction.reply({
+      content: `✅ ${role} ma teraz +${entries} wejść`,
+      ephemeral: true
+    });
   }
 });
 
+// LOSOWANIE
 async function endGiveaway(message) {
   const giveaway = giveaways.get(message.id);
   if (!giveaway) return;
@@ -101,18 +133,20 @@ async function endGiveaway(message) {
   const channel = await client.channels.fetch(giveaway.channelId);
   const msg = await channel.messages.fetch(message.id);
 
-  const reactions = msg.reactions.cache.get('🎉');
-  if (!reactions) return channel.send('No participants.');
+  const reaction = msg.reactions.cache.get('🎉');
+  if (!reaction) return channel.send('❌ Brak uczestników');
 
-  const users = await reactions.users.fetch();
-  const validUsers = users.filter(u => !u.bot);
+  const users = await reaction.users.fetch();
+  const valid = users.filter(u => !u.bot);
 
   let entries = [];
 
-  for (const user of validUsers.values()) {
+  for (const user of valid.values()) {
     const member = await channel.guild.members.fetch(user.id);
 
-    if (giveaway.requiredRole && !member.roles.cache.has(giveaway.requiredRole.id)) continue;
+    // sprawdzanie roli wymaganej
+    if (giveaway.requiredRole &&
+        !member.roles.cache.has(giveaway.requiredRole.id)) continue;
 
     let extra = 1;
 
@@ -127,17 +161,19 @@ async function endGiveaway(message) {
     }
   }
 
-  if (entries.length === 0) return channel.send('No valid entries.');
+  if (entries.length === 0) {
+    return channel.send('❌ Nikt nie spełnił wymagań');
+  }
 
   const winners = [];
 
   for (let i = 0; i < giveaway.winnersCount; i++) {
-    const winnerId = entries[Math.floor(Math.random() * entries.length)];
-    winners.push(`<@${winnerId}>`);
+    const id = entries[Math.floor(Math.random() * entries.length)];
+    winners.push(`<@${id}>`);
   }
 
-  // Create winner channel
-  const winnerChannel = await channel.guild.channels.create({
+  // kanał zwycięzców
+  const winChannel = await channel.guild.channels.create({
     name: 'giveaway-winners',
     permissionOverwrites: [
       {
@@ -147,15 +183,10 @@ async function endGiveaway(message) {
     ]
   });
 
-  await winnerChannel.send(`🎉 Winners: ${winners.join(', ')}\nReward: ${giveaway.reward}`);
-
-  channel.send(`🎉 Giveaway ended! Winners: ${winners.join(', ')}`);
+  await winChannel.send(`🎉 Zwycięzcy: ${winners.join(', ')}\nNagroda: ${giveaway.reward}`);
+  channel.send(`🎉 Giveaway zakończony! ${winners.join(', ')}`);
 
   giveaways.delete(message.id);
 }
 
 client.login(process.env.TOKEN);
-
-// SLASH COMMANDS SETUP (run separately if needed)
-// /giveaway-create time:string reward:string winners:number image:string role:role
-// /giveaway-role role:role entries:number
