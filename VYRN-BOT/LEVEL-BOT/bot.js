@@ -24,7 +24,7 @@ const client = new Client({
   ]
 });
 
-// ================= DB =================
+// ================= DATABASE =================
 const DB_PATH = "./data.json";
 
 if (!fs.existsSync(DB_PATH)) {
@@ -43,7 +43,6 @@ function saveDB(data) {
 }
 
 // ================= TIME =================
-
 function getDayKey() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -61,7 +60,6 @@ function getMonthKey() {
 }
 
 // ================= XP =================
-
 const cooldown = new Map();
 
 function neededXP(level) {
@@ -84,8 +82,7 @@ function addXP(userId) {
   saveDB(db);
 }
 
-// ================= MESSAGES =================
-
+// ================= MESSAGE TRACK =================
 function trackMessage(userId) {
   const db = loadDB();
 
@@ -110,8 +107,7 @@ function trackMessage(userId) {
   saveDB(db);
 }
 
-// ================= MESSAGE EVENT =================
-
+// ================= EVENT =================
 client.on("messageCreate", (msg) => {
   if (msg.author.bot) return;
   if (msg.content.length < 3) return;
@@ -130,34 +126,24 @@ client.on("messageCreate", (msg) => {
 });
 
 // ================= COMMANDS =================
-
 const commands = [
 
   new SlashCommandBuilder()
     .setName("rank")
-    .setDescription("Twój poziom"),
+    .setDescription("Twój poziom (PRO UI)"),
 
   new SlashCommandBuilder()
     .setName("top")
-    .setDescription("Topka poziomów"),
+    .setDescription("Ranking graczy"),
 
   new SlashCommandBuilder()
     .setName("messages")
     .setDescription("Statystyki wiadomości")
     .addUserOption(o => o.setName("user").setDescription("Użytkownik"))
-    .addStringOption(o =>
-      o.setName("type")
-        .setDescription("Zakres")
-        .addChoices(
-          { name: "daily", value: "daily" },
-          { name: "weekly", value: "weekly" },
-          { name: "monthly", value: "monthly" }
-        )
-    )
+
 ];
 
 // ================= REGISTER =================
-
 async function registerCommands() {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -168,75 +154,78 @@ async function registerCommands() {
 }
 
 // ================= INTERACTIONS =================
-
 client.on("interactionCreate", async (i) => {
   if (!i.isChatInputCommand()) return;
 
   const db = loadDB();
 
-  // ===== RANK =====
+  // ================= RANK =================
   if (i.commandName === "rank") {
 
     const data = db.xp[i.user.id] || { xp: 0, level: 0 };
     const needed = neededXP(data.level);
     const percent = data.xp / needed;
 
-    const canvas = createCanvas(800, 250);
+    const canvas = createCanvas(900, 280);
     const ctx = canvas.getContext("2d");
 
-    // TŁO
-    ctx.fillStyle = "#0f172a";
+    // GRADIENT
+    const grad = ctx.createLinearGradient(0, 0, 900, 300);
+    grad.addColorStop(0, "#0f172a");
+    grad.addColorStop(1, "#1e293b");
+
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // FALE
-    ctx.fillStyle = "#1e293b";
-    ctx.beginPath();
-    ctx.moveTo(0, 180);
-    ctx.quadraticCurveTo(200, 100, 400, 180);
-    ctx.quadraticCurveTo(600, 260, 800, 180);
-    ctx.fill();
-
     // PANEL
-    ctx.fillStyle = "#111827";
-    ctx.fillRect(30, 30, 740, 190);
+    ctx.fillStyle = "#0b1220";
+    ctx.fillRect(20, 20, 860, 240);
 
     // AVATAR
     const avatar = await loadImage(i.user.displayAvatarURL({ extension: "png" }));
-    ctx.drawImage(avatar, 50, 60, 120, 120);
+    ctx.drawImage(avatar, 50, 80, 120, 120);
 
     // NICK
     ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 30px sans-serif";
-    ctx.fillText(i.user.username, 200, 90);
+    ctx.font = "bold 34px sans-serif";
+    ctx.fillText(i.user.username, 200, 100);
 
-    // PROGRESS BG
-    ctx.fillStyle = "#374151";
-    ctx.fillRect(200, 140, 350, 20);
-
-    // PROGRESS
-    ctx.fillStyle = "#22c55e";
-    ctx.fillRect(200, 140, 350 * percent, 20);
-
-    // %
-    ctx.fillStyle = "#fff";
-    ctx.font = "16px sans-serif";
-    ctx.fillText(`${Math.floor(percent * 100)}%`, 560, 155);
-
-    // BOX
+    // XP BAR BG
     ctx.fillStyle = "#1f2937";
-    ctx.fillRect(600, 50, 140, 50);
-    ctx.fillRect(600, 120, 140, 50);
+    ctx.fillRect(200, 160, 400, 22);
+
+    // XP BAR
+    ctx.shadowColor = "#22c55e";
+    ctx.shadowBlur = 20;
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(200, 160, 400 * percent, 22);
+    ctx.shadowBlur = 0;
+
+    // TEXT
+    ctx.fillStyle = "#9ca3af";
+    ctx.font = "18px sans-serif";
+    ctx.fillText(`${data.xp} / ${needed} XP`, 200, 140);
 
     ctx.fillStyle = "#fff";
-    ctx.fillText(`LVL ${data.level}`, 630, 80);
-    ctx.fillText(`${data.xp}/${needed}`, 610, 150);
+    ctx.fillText(`${Math.floor(percent * 100)}%`, 620, 178);
+
+    // LEVEL BOX
+    ctx.fillStyle = "#111827";
+    ctx.fillRect(700, 60, 150, 70);
+
+    ctx.fillStyle = "#9ca3af";
+    ctx.fillText("LEVEL", 735, 85);
+
+    ctx.font = "bold 30px sans-serif";
+    ctx.fillStyle = "#fff";
+    ctx.fillText(`${data.level}`, 760, 115);
 
     return i.reply({
       files: [{ attachment: canvas.toBuffer(), name: "rank.png" }]
     });
   }
 
-  // ===== TOP =====
+  // ================= TOP =================
   if (i.commandName === "top") {
 
     const sorted = Object.entries(db.xp)
@@ -245,26 +234,33 @@ client.on("interactionCreate", async (i) => {
 
     const embed = new EmbedBuilder()
       .setColor("#22c55e")
-      .setTitle("🏆 TOP POZIOMÓW")
-      .setDescription("━━━━━━━━━━━━━━━");
+      .setTitle("🏆 Ranking Serwera")
+      .setDescription("━━━━━━━━━━━━━━━━━━");
 
-    for (let i2 = 0; i2 < sorted.length; i2++) {
-      const user = await client.users.fetch(sorted[i2][0]);
+    for (let x = 0; x < sorted.length; x++) {
+      const user = await client.users.fetch(sorted[x][0]);
+
+      const medal =
+        x === 0 ? "🥇" :
+        x === 1 ? "🥈" :
+        x === 2 ? "🥉" : "🔹";
+
       embed.addFields({
-        name: `#${i2 + 1} ${user.username}`,
-        value: `✨ Poziom: ${sorted[i2][1].level}`,
+        name: `${medal} ${user.username}`,
+        value: `✨ Poziom: **${sorted[x][1].level}**`,
         inline: false
       });
     }
 
+    embed.setFooter({ text: "by B3sttiee" });
+
     return i.reply({ embeds: [embed] });
   }
 
-  // ===== MESSAGES =====
+  // ================= MESSAGES =================
   if (i.commandName === "messages") {
 
     const user = i.options.getUser("user") || i.user;
-    const type = i.options.getString("type") || "daily";
 
     const data = db.messages[user.id] || {};
 
@@ -274,16 +270,32 @@ client.on("interactionCreate", async (i) => {
 
     const embed = new EmbedBuilder()
       .setColor("#3b82f6")
-      .setTitle(`💬 ${user.username} — Messages`)
+      .setTitle(`💬 ${user.username}`)
       .setThumbnail(user.displayAvatarURL())
-      .setDescription("━━━━━━━━━━━━━━━")
+      .setDescription("📊 **Statystyki wiadomości**\n━━━━━━━━━━━━━━━━━━")
       .addFields(
-        { name: "📅 Today", value: `${data.daily?.[day] || 0}`, inline: true },
-        { name: "📆 Weekly", value: `${data.weekly?.[week] || 0}`, inline: true },
-        { name: "🗓️ Monthly", value: `${data.monthly?.[month] || 0}`, inline: true },
-        { name: "📊 Total", value: `${data.total || 0}`, inline: false }
+        {
+          name: "📅 Dziś",
+          value: `\`${data.daily?.[day] || 0}\``,
+          inline: true
+        },
+        {
+          name: "📆 Tydzień",
+          value: `\`${data.weekly?.[week] || 0}\``,
+          inline: true
+        },
+        {
+          name: "🗓️ Miesiąc",
+          value: `\`${data.monthly?.[month] || 0}\``,
+          inline: true
+        },
+        {
+          name: "📦 Łącznie",
+          value: `\`${data.total || 0}\``,
+          inline: false
+        }
       )
-      .setFooter({ text: "by B3sttiee" });
+      .setFooter({ text: "System statystyk • by B3sttiee" });
 
     return i.reply({ embeds: [embed] });
   }
@@ -291,9 +303,8 @@ client.on("interactionCreate", async (i) => {
 });
 
 // ================= READY =================
-
 client.once("clientReady", async () => {
-  console.log("🔥 BOT PRO DZIAŁA");
+  console.log("🔥 BOT PREMIUM DZIAŁA");
   await registerCommands();
 });
 
