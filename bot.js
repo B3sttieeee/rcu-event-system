@@ -2,14 +2,9 @@ const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder,
   REST,
   Routes,
-  SlashCommandBuilder,
-  ChannelType
+  SlashCommandBuilder
 } = require("discord.js");
 
 const fs = require("fs");
@@ -19,17 +14,30 @@ const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
+// ================= CLIENT =================
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds]
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.MessageContent
+  ]
 });
 
 // ================= CONFIG =================
 
-let CHANNEL_ID = "1484937784283369502";
+const LEVEL_CHANNEL = "1475999590716018719";
 
-const ROLE_EGG = "1476000993119568105";
-const ROLE_MERCHANT = "1476000993660502139";
-const ROLE_SPIN = "1484911421903999127";
+const ROLES = {
+  1: "1476000458987278397",
+  15: "1476000995501670534",
+  30: "1476000459595448442",
+  45: "1476000991206707221",
+  60: "1476000991823532032",
+  75: "1476000992351879229"
+};
+
+const BOOST_ROLE = "1476000398107217980"; // 2.5x XP
 
 // ================= DB =================
 
@@ -43,119 +51,135 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= TIME =================
+// ================= XP SYSTEM =================
 
-function getNowPL() {
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
-  );
+const cooldown = new Map();
+
+function neededXP(level) {
+  return 100 + level * 75; // trudniejsze levele
 }
 
-// ================= EVENTS =================
+function addXP(userId, member) {
+  const db = loadDB();
 
-const EVENTS = {
-  egg: [0,3,6,9,12,15,18,21],
-  merchant: [1,4,7,10,13,16,19,22],
-  spin: [2,5,8,11,14,17,20,23]
-};
+  if (!db.xp[userId]) {
+    db.xp[userId] = { xp: 0, level: 0 };
+  }
 
-function getEventByHour(hour) {
-  if (EVENTS.egg.includes(hour)) return "egg";
-  if (EVENTS.merchant.includes(hour)) return "merchant";
-  return "spin";
-}
+  let gain = Math.floor(Math.random() * 10) + 10;
 
-// ================= NEXT EVENT =================
+  // multiplier
+  if (member.roles.cache.has(BOOST_ROLE)) {
+    gain = Math.floor(gain * 2.5);
+  }
 
-function getNextEvent() {
-  const now = getNowPL();
-  const hour = now.getHours();
-  const nextHour = (hour + 1) % 24;
+  db.xp[userId].xp += gain;
 
-  const nextDate = new Date(now);
-  nextDate.setHours(nextHour, 0, 0, 0);
+  let leveled = false;
 
-  if (nextHour <= hour) nextDate.setDate(nextDate.getDate() + 1);
+  while (db.xp[userId].xp >= neededXP(db.xp[userId].level)) {
+    db.xp[userId].xp -= neededXP(db.xp[userId].level);
+    db.xp[userId].level++;
+    leveled = true;
+  }
+
+  saveDB(db);
 
   return {
-    type: getEventByHour(nextHour),
-    timestamp: Math.floor(nextDate.getTime() / 1000)
+    leveled,
+    level: db.xp[userId].level,
+    xp: db.xp[userId].xp
   };
 }
 
-// ================= PANEL EMBED =================
+// ================= LEVEL UP =================
 
-function panelEmbed() {
-  const now = getNowPL();
-  const current = getEventByHour(now.getHours());
-  const next = getNextEvent();
+async function levelUp(member, level) {
+  const channel = await client.channels.fetch(LEVEL_CHANNEL);
 
-  return new EmbedBuilder()
-    .setColor("#5865F2")
-    .setTitle("🎮 PANEL EVENTÓW")
+  const embed = new EmbedBuilder()
+    .setColor("#FFD700")
+    .setTitle(`${member.user.username} leveled up!`)
     .setDescription(
-`🟢 **Aktualny Event:** \`${current.toUpperCase()}\`
-
-🔜 **Następny Event:** \`${next.type.toUpperCase()}\`
-📅 <t:${next.timestamp}:F>`
+`**CONGRATS**
+You are now level **${level}**!!`
     )
-    .setFooter({ text: "Twórca: B3sttiee" })
-    .setTimestamp();
+    .setThumbnail(member.user.displayAvatarURL())
+    .setFooter({ text: "VYRN — Vengeance Yearns Ruthless Night" });
+
+  channel.send({ embeds: [embed] });
+
+  if (ROLES[level]) {
+    try {
+      await member.roles.add(ROLES[level]);
+    } catch {}
+  }
 }
 
-// ================= PANEL =================
+// ================= MESSAGE XP =================
 
-function getPanel() {
-  return [
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("current")
-        .setLabel("🟢 Aktualny")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId("next")
-        .setLabel("🔜 Następny")
-        .setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId("refresh")
-        .setLabel("🔄 Odśwież")
-        .setStyle(ButtonStyle.Secondary)
-    ),
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId("roles")
-        .setPlaceholder("🎭 Role eventów")
-        .addOptions([
-          { label: "RNG EGG", value: ROLE_EGG },
-          { label: "MERCHANT", value: ROLE_MERCHANT },
-          { label: "SPIN", value: ROLE_SPIN }
-        ])
-    ),
-    new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId("dm")
-        .setPlaceholder("📩 Powiadomienia DM")
-        .addOptions([
-          { label: "EGG", value: "egg" },
-          { label: "MERCHANT", value: "merchant" },
-          { label: "SPIN", value: "spin" }
-        ])
-    )
-  ];
-}
+client.on("messageCreate", async (msg) => {
+  if (msg.author.bot) return;
 
-// ================= COMMAND =================
+  const now = Date.now();
+
+  if (cooldown.has(msg.author.id)) {
+    if (now - cooldown.get(msg.author.id) < 30000) return;
+  }
+
+  cooldown.set(msg.author.id, now);
+
+  const result = addXP(msg.author.id, msg.member);
+
+  if (result.leveled) {
+    levelUp(msg.member, result.level);
+  }
+});
+
+// ================= VOICE XP =================
+
+setInterval(() => {
+  const db = loadDB();
+
+  client.guilds.cache.forEach(guild => {
+    guild.members.cache.forEach(member => {
+      if (!member.voice.channel) return;
+
+      if (!db.xp[member.id]) {
+        db.xp[member.id] = { xp: 0, level: 0 };
+      }
+
+      let gain = 5;
+
+      if (member.roles.cache.has(BOOST_ROLE)) {
+        gain *= 2.5;
+      }
+
+      db.xp[member.id].xp += gain;
+
+      if (db.xp[member.id].xp >= neededXP(db.xp[member.id].level)) {
+        db.xp[member.id].xp = 0;
+        db.xp[member.id].level++;
+
+        levelUp(member, db.xp[member.id].level);
+      }
+    });
+  });
+
+  saveDB(db);
+
+}, 60000); // co minute
+
+// ================= COMMANDS =================
 
 const commands = [
   new SlashCommandBuilder()
-    .setName("panel")
-    .setDescription("Wyślij panel eventów")
-    .addChannelOption(opt =>
-      opt.setName("kanał")
-        .setDescription("Wybierz kanał")
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(true)
-    )
+    .setName("rank")
+    .setDescription("Twój poziom"),
+
+  new SlashCommandBuilder()
+    .setName("top")
+    .setDescription("Topka")
 ];
 
 async function registerCommands() {
@@ -167,89 +191,56 @@ async function registerCommands() {
   );
 }
 
-// ================= INTERACTIONS =================
+// ================= RANK =================
 
 client.on("interactionCreate", async (i) => {
+  if (!i.isChatInputCommand()) return;
 
-  // ===== KOMENDA =====
-  if (i.isChatInputCommand()) {
-    if (i.commandName === "panel") {
+  const db = loadDB();
 
-      const channel = i.options.getChannel("kanał");
+  if (i.commandName === "rank") {
 
-      await channel.send({
-        embeds: [panelEmbed()],
-        components: getPanel()
-      });
+    const user = i.user;
+    const data = db.xp[user.id] || { xp: 0, level: 0 };
 
-      return i.reply({
-        content: "✅ Panel wysłany!",
-        ephemeral: true
-      });
-    }
+    const embed = new EmbedBuilder()
+      .setColor("#5865F2")
+      .setTitle(`${user.username}`)
+      .setDescription(
+`**LEVEL:** ${data.level}
+**XP:** ${data.xp}/${neededXP(data.level)}`
+      )
+      .setThumbnail(user.displayAvatarURL());
+
+    i.reply({ embeds: [embed] });
   }
 
-  // ===== BUTTON =====
-  if (i.isButton()) {
+  if (i.commandName === "top") {
 
-    if (i.customId === "refresh") {
-      return i.update({
-        embeds: [panelEmbed()],
-        components: getPanel()
-      });
+    const sorted = Object.entries(db.xp)
+      .sort((a, b) => b[1].level - a[1].level)
+      .slice(0, 10);
+
+    let desc = "";
+
+    for (let i2 = 0; i2 < sorted.length; i2++) {
+      const user = await client.users.fetch(sorted[i2][0]);
+      desc += `**${i2 + 1}. ${user.username}** — lvl ${sorted[i2][1].level}\n`;
     }
 
-    if (i.customId === "current") {
-      const now = getNowPL();
-      const current = getEventByHour(now.getHours());
+    const embed = new EmbedBuilder()
+      .setColor("#FFD700")
+      .setTitle("🏆 TOP GRACZY")
+      .setDescription(desc || "Brak danych");
 
-      return i.reply({
-        content: `🟢 Aktualny Event: **${current.toUpperCase()}**`,
-        ephemeral: true
-      });
-    }
-
-    if (i.customId === "next") {
-      const next = getNextEvent();
-
-      return i.reply({
-        content: `🔜 Następny Event: **${next.type.toUpperCase()}**\n<t:${next.timestamp}:R>`,
-        ephemeral: true
-      });
-    }
-  }
-
-  // ===== SELECT =====
-  if (i.isStringSelectMenu()) {
-
-    if (i.customId === "roles") {
-      const member = await i.guild.members.fetch(i.user.id);
-
-      for (const role of i.values) {
-        if (member.roles.cache.has(role)) {
-          await member.roles.remove(role);
-        } else {
-          await member.roles.add(role);
-        }
-      }
-
-      return i.reply({ content: "✅ Role zaktualizowane", ephemeral: true });
-    }
-
-    if (i.customId === "dm") {
-      const db = loadDB();
-      db.dm[i.user.id] = i.values;
-      saveDB(db);
-
-      return i.reply({ content: "📩 DM zapisane", ephemeral: true });
-    }
+    i.reply({ embeds: [embed] });
   }
 });
 
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 BOT 100% GOTOWY");
+  console.log("🔥 LEVEL SYSTEM READY");
   await registerCommands();
 });
 
