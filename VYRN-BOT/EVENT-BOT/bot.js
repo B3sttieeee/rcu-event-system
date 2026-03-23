@@ -1,4 +1,3 @@
-// ================= IMPORTS =================
 const {
   Client,
   GatewayIntentBits,
@@ -11,12 +10,10 @@ const {
 
 const fs = require("fs");
 
-// ================= ENV =================
 const TOKEN = process.env.TOKEN;
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// ================= CONFIG =================
 const CHANNEL_ID = "1484937784283369502";
 
 const ROLES = {
@@ -25,7 +22,6 @@ const ROLES = {
   spin: "1484911421903999127"
 };
 
-// ================= DB =================
 const DB_PATH = "./data.json";
 
 function loadDB() {
@@ -36,12 +32,12 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= TIME =================
 function getNowPL() {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+  return new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
+  );
 }
 
-// ================= EVENTS =================
 const EVENTS = {
   egg: [0,3,6,9,12,15,18,21],
   merchant: [1,4,7,10,13,16,19,22],
@@ -73,7 +69,6 @@ function getNextEvent() {
   };
 }
 
-// ================= COUNTDOWN =================
 function getCountdown(ts) {
   const now = Math.floor(Date.now() / 1000);
   const diff = ts - now;
@@ -94,8 +89,8 @@ function panelEmbed() {
     .setTitle("✨ EVENT PANEL")
     .setDescription("Automated event system")
     .addFields(
-      { name: "🟢 Current Event", value: `\`${current.toUpperCase()}\``, inline: true },
-      { name: "⏭️ Next Event", value: `\`${next.type.toUpperCase()}\`\n${getCountdown(next.timestamp)}`, inline: true }
+      { name: "🟢 Current", value: `\`${current.toUpperCase()}\``, inline: true },
+      { name: "⏭️ Next", value: `\`${next.type.toUpperCase()}\`\n${getCountdown(next.timestamp)}`, inline: true }
     )
     .setFooter({ text: "By B3sttiee" })
     .setTimestamp();
@@ -112,7 +107,7 @@ function getPanel() {
   ];
 }
 
-// ================= SELECT MENUS =================
+// ================= MENUS =================
 function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -149,15 +144,79 @@ async function startPanel() {
   panelMessage = messages.find(m => m.author.id === client.user.id);
 
   if (!panelMessage) {
-    panelMessage = await channel.send({ embeds: [panelEmbed()], components: getPanel() });
+    panelMessage = await channel.send({
+      embeds: [panelEmbed()],
+      components: getPanel()
+    });
   }
 
   setInterval(async () => {
     try {
-      await panelMessage.edit({ embeds: [panelEmbed()], components: getPanel() });
+      await panelMessage.edit({
+        embeds: [panelEmbed()],
+        components: getPanel()
+      });
     } catch {}
   }, 10000);
 }
+
+// ================= PING SYSTEM =================
+let lastNotify = "";
+let lastPingMessage = null;
+
+async function sendPing(channel, content) {
+  if (lastPingMessage) {
+    try { await lastPingMessage.delete(); } catch {}
+  }
+
+  lastPingMessage = await channel.send(content);
+  return lastPingMessage;
+}
+
+setInterval(async () => {
+  const now = getNowPL();
+  const min = now.getMinutes();
+  const hour = now.getHours();
+
+  const channel = await client.channels.fetch(CHANNEL_ID);
+
+  const current = getCurrentEvent();
+  const next = getNextEvent();
+
+  // 5 MIN BEFORE
+  if (min === 55 && lastNotify !== `${hour}-5`) {
+    lastNotify = `${hour}-5`;
+
+    lastPingMessage = await sendPing(
+      channel,
+      `⏳ <@&${ROLES[next.type]}> Event **${next.toUpperCase()}** za 5 minut!`
+    );
+  }
+
+  // START
+  if (min === 0 && lastNotify !== `${hour}-start`) {
+    lastNotify = `${hour}-start`;
+
+    if (lastPingMessage) {
+      try { await lastPingMessage.delete(); } catch {}
+    }
+
+    lastPingMessage = await sendPing(
+      channel,
+      `🚀 <@&${ROLES[current]}> Event **${current.toUpperCase()}** START!`
+    );
+
+    setTimeout(async () => {
+      if (lastPingMessage) {
+        try {
+          await lastPingMessage.delete();
+          lastPingMessage = null;
+        } catch {}
+      }
+    }, 15 * 60 * 1000);
+  }
+
+}, 10000);
 
 // ================= INTERACTIONS =================
 client.on("interactionCreate", async (i) => {
@@ -171,11 +230,19 @@ client.on("interactionCreate", async (i) => {
     }
 
     if (i.customId === "pick_roles") {
-      return i.reply({ content: "🎭 Choose your event roles:", components: [rolesMenu()], ephemeral: true });
+      return i.reply({
+        content: "🎭 Choose your roles:",
+        components: [rolesMenu()],
+        ephemeral: true
+      });
     }
 
     if (i.customId === "pick_dm") {
-      return i.reply({ content: "📩 Choose DM notifications:", components: [dmMenu()], ephemeral: true });
+      return i.reply({
+        content: "📩 Choose DM notifications:",
+        components: [dmMenu()],
+        ephemeral: true
+      });
     }
   }
 
@@ -198,7 +265,7 @@ client.on("interactionCreate", async (i) => {
       db.dm[i.user.id] = i.values;
       saveDB(db);
 
-      return i.reply({ content: "✅ DM preferences saved", ephemeral: true });
+      return i.reply({ content: "✅ DM settings saved", ephemeral: true });
     }
   }
 });
