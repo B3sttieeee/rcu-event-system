@@ -60,26 +60,18 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= CURRENT EVENT FIX =================
 function getCurrentEvent() {
-  const now = getNowPL();
-  return getEventByHour(now.getHours());
+  return getEventByHour(getNowPL().getHours());
 }
 
-// ================= NEXT EVENT =================
 function getNextEvent() {
   const now = getNowPL();
-  let nextHour = now.getHours();
-
-  // znajdź następną pełną godzinę eventu
-  nextHour = (nextHour + 1) % 24;
+  let nextHour = (now.getHours() + 1) % 24;
 
   const nextDate = new Date(now);
   nextDate.setHours(nextHour, 0, 0, 0);
 
-  if (nextHour <= now.getHours()) {
-    nextDate.setDate(nextDate.getDate() + 1);
-  }
+  if (nextHour <= now.getHours()) nextDate.setDate(nextDate.getDate() + 1);
 
   return {
     type: getEventByHour(nextHour),
@@ -88,20 +80,44 @@ function getNextEvent() {
   };
 }
 
-// ================= EMBED =================
+// ================= COUNTDOWN =================
+function getCountdown(ts) {
+  const now = Math.floor(Date.now() / 1000);
+  const diff = ts - now;
+
+  const m = Math.floor((diff % 3600) / 60);
+  const s = diff % 60;
+
+  return `${m}m ${s}s`;
+}
+
+// ================= EMBED DESIGN =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
   return new EmbedBuilder()
-    .setColor("#5865F2")
-    .setTitle("🎮 PANEL EVENTÓW")
+    .setColor(current === "egg" ? "#00ff99" : current === "merchant" ? "#ffaa00" : "#aa00ff")
+    .setTitle("✨ EVENT PANEL")
+    .setDescription("Automatyczny system eventów")
     .addFields(
-      { name: "🟢 Aktualny", value: `**${current.toUpperCase()}**`, inline: true },
-      { name: "🔜 Następny", value: `**${next.type.toUpperCase()}**`, inline: true },
-      { name: "📅 Start", value: `<t:${next.timestamp}:F>` }
+      {
+        name: "🟢 Aktualny Event",
+        value: `\`${current.toUpperCase()}\``,
+        inline: true
+      },
+      {
+        name: "🔜 Następny Event",
+        value: `\`${next.type.toUpperCase()}\``,
+        inline: true
+      },
+      {
+        name: "⏳ Start za",
+        value: getCountdown(next.timestamp),
+        inline: false
+      }
     )
-    .setFooter({ text: "Auto aktualizacja co 60s" })
+    .setFooter({ text: "Auto refresh co 10s • PRO SYSTEM" })
     .setTimestamp();
 }
 
@@ -120,9 +136,80 @@ function getPanel() {
           { label: "MERCHANT", value: ROLES.merchant },
           { label: "SPIN", value: ROLES.spin }
         ])
+    ),
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId("dm")
+        .setPlaceholder("📩 Powiadomienia DM")
+        .addOptions([
+          { label: "EGG", value: "egg" },
+          { label: "MERCHANT", value: "merchant" },
+          { label: "SPIN", value: "spin" }
+        ])
     )
   ];
 }
+
+// ================= AUTO PANEL =================
+let panelMessage;
+
+async function startAutoPanel() {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+
+  panelMessage = await channel.send({ embeds: [panelEmbed()], components: getPanel() });
+
+  setInterval(async () => {
+    if (!panelMessage) return;
+
+    await panelMessage.edit({ embeds: [panelEmbed()], components: getPanel() });
+  }, 10000);
+}
+
+// ================= NOTIFICATIONS =================
+let lastNotify = "";
+
+setInterval(async () => {
+  const now = getNowPL();
+  const min = now.getMinutes();
+  const hour = now.getHours();
+
+  const channel = await client.channels.fetch(CHANNEL_ID);
+  const db = loadDB();
+
+  const current = getCurrentEvent();
+  const next = getNextEvent();
+
+  // 5 min before
+  if (min === 55 && lastNotify !== `${hour}-5`) {
+    lastNotify = `${hour}-5`;
+
+    await channel.send(`⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** za 5 minut!`);
+
+    // DM
+    for (const userId in db.dm) {
+      if (db.dm[userId].includes(next.type)) {
+        const user = await client.users.fetch(userId);
+        user.send(`⏳ Event ${next.type.toUpperCase()} za 5 minut!`);
+      }
+    }
+  }
+
+  // START
+  if (min === 0 && lastNotify !== `${hour}-start`) {
+    lastNotify = `${hour}-start`;
+
+    await channel.send(`🚀 <@&${ROLES[current]}> Event **${current.toUpperCase()}** START!`);
+
+    // DM
+    for (const userId in db.dm) {
+      if (db.dm[userId].includes(current)) {
+        const user = await client.users.fetch(userId);
+        user.send(`🚀 Event ${current.toUpperCase()} właśnie wystartował!`);
+      }
+    }
+  }
+
+}, 10000);
 
 // ================= COMMAND =================
 const commands = [
@@ -142,71 +229,13 @@ async function registerCommands() {
   await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
 }
 
-// ================= AUTO PANEL REFRESH =================
-let panelMessage;
-
-async function startAutoPanel() {
-  const channel = await client.channels.fetch(CHANNEL_ID);
-
-  panelMessage = await channel.send({
-    embeds: [panelEmbed()],
-    components: getPanel()
-  });
-
-  setInterval(async () => {
-    if (!panelMessage) return;
-
-    await panelMessage.edit({
-      embeds: [panelEmbed()],
-      components: getPanel()
-    });
-  }, 60000);
-}
-
-// ================= EVENT NOTIFICATIONS =================
-let lastNotified = null;
-
-setInterval(async () => {
-  const now = getNowPL();
-  const minutes = now.getMinutes();
-  const hour = now.getHours();
-
-  const channel = await client.channels.fetch(CHANNEL_ID);
-
-  const currentEvent = getEventByHour(hour);
-  const nextEvent = getNextEvent();
-
-  // 5 minut przed
-  if (minutes === 55 && lastNotified !== `${hour}-5`) {
-    lastNotified = `${hour}-5`;
-
-    await channel.send({
-      content: `<@&${ROLES[nextEvent.type]}> ⏳ Event **${nextEvent.type.toUpperCase()}** za 5 minut!`
-    });
-  }
-
-  // start eventu
-  if (minutes === 0 && lastNotified !== `${hour}-start`) {
-    lastNotified = `${hour}-start`;
-
-    await channel.send({
-      content: `🚀 <@&${ROLES[currentEvent]}> Event **${currentEvent.toUpperCase()}** właśnie wystartował!`
-    });
-  }
-
-}, 30000);
-
 // ================= INTERACTIONS =================
 client.on("interactionCreate", async (i) => {
 
   if (i.isChatInputCommand()) {
     const channel = i.options.getChannel("kanał");
 
-    await channel.send({
-      embeds: [panelEmbed()],
-      components: getPanel()
-    });
-
+    await channel.send({ embeds: [panelEmbed()], components: getPanel() });
     return i.reply({ content: "✅ Panel wysłany", ephemeral: true });
   }
 
@@ -214,21 +243,32 @@ client.on("interactionCreate", async (i) => {
     return i.update({ embeds: [panelEmbed()], components: getPanel() });
   }
 
-  if (i.isStringSelectMenu() && i.customId === "roles") {
-    const member = await i.guild.members.fetch(i.user.id);
+  if (i.isStringSelectMenu()) {
 
-    for (const role of i.values) {
-      if (member.roles.cache.has(role)) await member.roles.remove(role);
-      else await member.roles.add(role);
+    if (i.customId === "roles") {
+      const member = await i.guild.members.fetch(i.user.id);
+
+      for (const role of i.values) {
+        if (member.roles.cache.has(role)) await member.roles.remove(role);
+        else await member.roles.add(role);
+      }
+
+      return i.reply({ content: "✅ Role zaktualizowane", ephemeral: true });
     }
 
-    return i.reply({ content: "✅ Role zaktualizowane", ephemeral: true });
+    if (i.customId === "dm") {
+      const db = loadDB();
+      db.dm[i.user.id] = i.values;
+      saveDB(db);
+
+      return i.reply({ content: "📩 DM zapisane", ephemeral: true });
+    }
   }
 });
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 BOT GOTOWY");
+  console.log("🔥 BOT PRO READY");
   await registerCommands();
   await startAutoPanel();
 });
