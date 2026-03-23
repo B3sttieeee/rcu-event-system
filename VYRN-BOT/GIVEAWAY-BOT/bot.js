@@ -83,37 +83,43 @@ client.once('clientReady', async () => {
   restore();
 });
 
-// ===== PREMIUM EMBED =====
+// ===== PREMIUM EMBED (CLEAN) =====
 function buildEmbed(data) {
   let bonus = 'Brak';
   if (roleEntries.size > 0) {
     bonus = [...roleEntries.entries()]
-      .map(([id, val]) => `🎟 <@&${id}> **+${val}**`)
+      .map(([id, val]) => `<@&${id}> +${val}`)
       .join('\n');
   }
 
   return new EmbedBuilder()
-    .setTitle('🎉 GIVEAWAY 🎉')
+    .setColor('#5865F2')
+    .setTitle(`🎉 ${data.reward}`)
     .setDescription(
-      `╭ 🎁 **Nagroda**\n` +
-      `╰ ➤ **${data.reward}**\n\n` +
-      `╭ 👥 **Uczestnicy**\n` +
-      `╰ ➤ **${data.participants.length}** osób\n\n` +
-      `╭ ⏳ **Koniec**\n` +
-      `╰ ➤ <t:${Math.floor(data.endTime / 1000)}:R>`
+      `**Dołącz do giveaway!**\n\n` +
+      `👥 **${data.participants.length}** uczestników\n` +
+      `🏆 **${data.winners}** zwycięzców\n` +
+      `⏳ Koniec: <t:${Math.floor(data.endTime / 1000)}:R>\n`
     )
     .addFields(
-      { name: '🏆 Winners', value: `\`${data.winners}\``, inline: true },
-      { name: '🔒 Rola', value: data.requiredRole ? `<@&${data.requiredRole}>` : '`Brak`', inline: true },
-      { name: '🎟 Bonus', value: bonus }
+      {
+        name: '🎟 Bonusowe szanse',
+        value: bonus,
+        inline: true
+      },
+      {
+        name: '🔒 Wymagana rola',
+        value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak',
+        inline: true
+      }
     )
-    .setColor('#ff2f6d')
-    .setFooter({ text: 'Kliknij przycisk aby wziąć udział' });
+    .setFooter({
+      text: 'Kliknij Join aby wziąć udział'
+    });
 }
 
-// ===== INTERACTION =====
+// ===== INTERACTIONS =====
 client.on('interactionCreate', async interaction => {
-
   try {
 
     if (interaction.isChatInputCommand()) {
@@ -143,8 +149,8 @@ client.on('interactionCreate', async interaction => {
         const embed = buildEmbed(data);
 
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('join').setLabel('🎉 Join').setStyle(ButtonStyle.Success),
-          new ButtonBuilder().setCustomId('leave').setLabel('❌ Leave').setStyle(ButtonStyle.Danger)
+          new ButtonBuilder().setCustomId('join').setLabel('Join').setStyle(ButtonStyle.Success),
+          new ButtonBuilder().setCustomId('leave').setLabel('Leave').setStyle(ButtonStyle.Secondary)
         );
 
         const msg = await interaction.channel.send({ embeds: [embed], components: [row] });
@@ -161,13 +167,12 @@ client.on('interactionCreate', async interaction => {
           interaction.options.getRole('role').id,
           interaction.options.getInteger('entries')
         );
-
-        interaction.reply({ content: '✅ Ustawiono', ephemeral: true });
+        interaction.reply({ content: '✅ Ustawiono bonus', ephemeral: true });
       }
 
       if (interaction.commandName === 'giveaway-end') {
         end(interaction.options.getString('id'));
-        interaction.reply({ content: '⏹ End', ephemeral: true });
+        interaction.reply({ content: '⏹ Zakończono', ephemeral: true });
       }
 
       if (interaction.commandName === 'giveaway-reroll') {
@@ -180,16 +185,16 @@ client.on('interactionCreate', async interaction => {
       if (!data) return;
 
       if (data.ended) {
-        return interaction.reply({ content: '❌ Zakończony', ephemeral: true });
+        return interaction.reply({ content: '❌ Giveaway zakończony', ephemeral: true });
       }
 
       if (data.requiredRole && !interaction.member.roles.cache.has(data.requiredRole)) {
-        return interaction.reply({ content: '❌ Brak roli', ephemeral: true });
+        return interaction.reply({ content: '❌ Brak wymaganej roli', ephemeral: true });
       }
 
       if (interaction.customId === 'join') {
         if (data.participants.includes(interaction.user.id)) {
-          return interaction.reply({ content: '❌ Już jesteś', ephemeral: true });
+          return interaction.reply({ content: '❌ Już bierzesz udział', ephemeral: true });
         }
 
         data.participants.push(interaction.user.id);
@@ -206,7 +211,7 @@ client.on('interactionCreate', async interaction => {
 
         interaction.message.edit({ embeds: [buildEmbed(data)] });
 
-        interaction.reply({ content: '❌ Opuściłeś', ephemeral: true });
+        interaction.reply({ content: '❌ Opuściłeś giveaway', ephemeral: true });
       }
     }
 
@@ -257,7 +262,6 @@ async function reroll(id, interaction) {
   if (!data) return;
 
   const winner = data.participants[Math.floor(Math.random() * data.participants.length)];
-
   interaction.channel.send(`🔄 New winner: <@${winner}>`);
 }
 
