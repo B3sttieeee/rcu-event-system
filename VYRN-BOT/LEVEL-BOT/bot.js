@@ -1,19 +1,22 @@
 const {
   Client,
   GatewayIntentBits,
-  REST,
-  Routes,
-  SlashCommandBuilder,
   EmbedBuilder
 } = require("discord.js");
 
-const { createCanvas, loadImage } = require("canvas");
 const fs = require("fs");
 
 // CONFIG
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
+
+// ROLE PROGI (TWOJE ID)
+const ROLE_REWARDS = [
+  { level: 15, role: "1476000995501670534" },
+  { level: 30, role: "1476000459595448442" },
+  { level: 45, role: "1476000991206707221" },
+  { level: 60, role: "1476000991823532032" },
+  { level: 75, role: "1476000992351879229" }
+];
 
 const client = new Client({
   intents: [
@@ -23,7 +26,7 @@ const client = new Client({
   ]
 });
 
-// ===== DATABASE =====
+// ===== DB =====
 const DB_PATH = "./data.json";
 
 function loadDB() {
@@ -34,7 +37,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== XP SYSTEM =====
+// ===== XP =====
 const cooldown = new Map();
 
 function neededXP(level) {
@@ -46,7 +49,7 @@ function addXP(userId) {
 
   if (!db.xp[userId]) db.xp[userId] = { xp: 0, level: 0 };
 
-  let gain = Math.floor(Math.random() * 15) + 10;
+  let gain = Math.floor(Math.random() * 10) + 15;
   db.xp[userId].xp += gain;
 
   while (db.xp[userId].xp >= neededXP(db.xp[userId].level)) {
@@ -79,8 +82,10 @@ function trackMessage(userId) {
 }
 
 // ===== MESSAGE EVENT =====
-client.on("messageCreate", (msg) => {
+client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
+
+  const db = loadDB();
 
   trackMessage(msg.author.id);
 
@@ -92,142 +97,81 @@ client.on("messageCreate", (msg) => {
 
   cooldown.set(msg.author.id, now);
   addXP(msg.author.id);
-});
 
-// ===== COMMANDS =====
-const commands = [
-  new SlashCommandBuilder().setName("rank").setDescription("Twój poziom"),
-  new SlashCommandBuilder().setName("top").setDescription("Top poziomów"),
-  new SlashCommandBuilder()
-    .setName("messages")
-    .setDescription("Statystyki wiadomości")
-    .addUserOption(o => o.setName("user").setDescription("Użytkownik"))
-];
+  // ===== PREFIX COMMANDS =====
+  if (!msg.content.startsWith(".")) return;
 
-// ===== REGISTER =====
-async function registerCommands() {
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
-
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
-}
-
-// ===== INTERACTIONS =====
-client.on("interactionCreate", async (i) => {
-  if (!i.isChatInputCommand()) return;
-
-  const db = loadDB();
+  const args = msg.content.slice(1).split(" ");
+  const cmd = args[0];
 
   // ===== RANK =====
-  if (i.commandName === "rank") {
+  if (cmd === "rank") {
 
-    const data = db.xp[i.user.id] || { xp: 0, level: 0 };
+    const data = db.xp[msg.author.id] || { xp: 0, level: 0 };
     const needed = neededXP(data.level);
-    const percent = data.xp / needed;
+    const percent = Math.floor((data.xp / needed) * 100);
 
-    const canvas = createCanvas(1000, 300);
-    const ctx = canvas.getContext("2d");
+    const member = msg.member;
 
-    // BG
-    const gradient = ctx.createLinearGradient(0, 0, 1000, 300);
-    gradient.addColorStop(0, "#020617");
-    gradient.addColorStop(1, "#0f172a");
+    const nextRole = ROLE_REWARDS.find(r => r.level > data.level);
+    const nextInfo = nextRole
+      ? `Next role in **${nextRole.level - data.level} levels**`
+      : "Max level reached";
 
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, 1000, 300);
+    const embed = new EmbedBuilder()
+      .setAuthor({
+        name: `${msg.author.username} • Level Stats`,
+        iconURL: msg.author.displayAvatarURL()
+      })
+      .setColor(member.displayHexColor === "#000000" ? "#22c55e" : member.displayHexColor)
+      .setThumbnail(msg.author.displayAvatarURL())
+      .addFields(
+        { name: "🏆 Level", value: `**${data.level}**`, inline: true },
+        { name: "📊 XP", value: `**${data.xp}/${needed} (${percent}%)**`, inline: true },
+        { name: "🎯 Progress", value: "▰▰▰▰▰▰▱▱▱▱", inline: false },
+        { name: "🚀 Next Reward", value: nextInfo, inline: false }
+      )
+      .setFooter({ text: "by B3sttiee" });
 
-    // PANEL
-    ctx.fillStyle = "#0b1220";
-    ctx.roundRect(20, 20, 960, 260, 25);
-    ctx.fill();
-
-    // AVATAR
-    const avatar = await loadImage(i.user.displayAvatarURL({ extension: "png" }));
-
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(120, 150, 70, 0, Math.PI * 2);
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(avatar, 50, 80, 140, 140);
-    ctx.restore();
-
-    // NAME
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 36px sans-serif";
-    ctx.fillText(i.user.username, 230, 110);
-
-    // XP TEXT
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "20px sans-serif";
-    ctx.fillText(`${data.xp} / ${needed} XP`, 230, 150);
-
-    // BAR BG
-    ctx.fillStyle = "#1e293b";
-    ctx.roundRect(230, 180, 500, 30, 20);
-    ctx.fill();
-
-    // BAR
-    const barGradient = ctx.createLinearGradient(230, 0, 730, 0);
-    barGradient.addColorStop(0, "#22c55e");
-    barGradient.addColorStop(1, "#4ade80");
-
-    ctx.fillStyle = barGradient;
-    ctx.roundRect(230, 180, 500 * percent, 30, 20);
-    ctx.fill();
-
-    // %
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 18px sans-serif";
-    ctx.fillText(`${Math.floor(percent * 100)}%`, 750, 200);
-
-    // LEVEL BOX
-    ctx.fillStyle = "#020617";
-    ctx.roundRect(800, 80, 140, 100, 20);
-    ctx.fill();
-
-    ctx.fillStyle = "#94a3b8";
-    ctx.font = "18px sans-serif";
-    ctx.fillText("LEVEL", 835, 110);
-
-    ctx.fillStyle = "#22c55e";
-    ctx.font = "bold 36px sans-serif";
-    ctx.fillText(data.level, 845, 150);
-
-    return i.reply({
-      files: [{ attachment: canvas.toBuffer(), name: "rank.png" }]
-    });
+    msg.reply({ embeds: [embed] });
   }
 
   // ===== TOP =====
-  if (i.commandName === "top") {
+  if (cmd === "top") {
 
-    const sorted = Object.entries(db.xp)
-      .sort((a, b) => b[1].level - a[1].level)
-      .slice(0, 10);
+    const users = msg.guild.members.cache;
+
+    let ranking = [];
+
+    users.forEach(u => {
+      if (u.user.bot) return;
+
+      const data = db.xp[u.id] || { level: 0 };
+      ranking.push({ id: u.id, level: data.level });
+    });
+
+    ranking.sort((a, b) => b.level - a.level);
 
     let desc = "";
 
-    for (let i2 = 0; i2 < sorted.length; i2++) {
-      const user = await client.users.fetch(sorted[i2][0]);
-      desc += `**#${i2 + 1}** ${user.username} — LVL ${sorted[i2][1].level}\n`;
-    }
+    ranking.slice(0, 10).forEach((u, i) => {
+      const user = msg.guild.members.cache.get(u.id);
+      desc += `**#${i + 1}** ${user.user.username} — LVL ${u.level}\n`;
+    });
 
     const embed = new EmbedBuilder()
-      .setTitle("🏆 TOP POZIOMÓW")
-      .setDescription(desc || "Brak danych")
+      .setTitle("🏆 TOP LEVELS")
+      .setDescription(desc || "No data")
       .setColor("#22c55e")
       .setFooter({ text: "by B3sttiee" });
 
-    return i.reply({ embeds: [embed] });
+    msg.reply({ embeds: [embed] });
   }
 
   // ===== MESSAGES =====
-  if (i.commandName === "messages") {
+  if (cmd === "messages") {
 
-    const user = i.options.getUser("user") || i.user;
+    const user = msg.mentions.users.first() || msg.author;
     const data = db.messages[user.id] || {
       total: 0,
       daily: 0,
@@ -236,24 +180,26 @@ client.on("interactionCreate", async (i) => {
     };
 
     const embed = new EmbedBuilder()
-      .setTitle(`💬 ${user.username}`)
+      .setAuthor({
+        name: `${user.username} • Messages`,
+        iconURL: user.displayAvatarURL()
+      })
       .setColor("#3b82f6")
       .addFields(
-        { name: "📅 Dziś", value: `${data.daily}`, inline: true },
-        { name: "📆 Tydzień", value: `${data.weekly}`, inline: true },
-        { name: "🗓️ Miesiąc", value: `${data.monthly}`, inline: true },
-        { name: "📊 Łącznie", value: `${data.total}`, inline: false }
+        { name: "📅 Today", value: `${data.daily}`, inline: true },
+        { name: "📆 Weekly", value: `${data.weekly}`, inline: true },
+        { name: "🗓️ Monthly", value: `${data.monthly}`, inline: true },
+        { name: "📊 Total", value: `${data.total}`, inline: false }
       )
       .setFooter({ text: "by B3sttiee" });
 
-    return i.reply({ embeds: [embed] });
+    msg.reply({ embeds: [embed] });
   }
 });
 
 // ===== READY =====
-client.once("clientReady", async () => {
-  console.log("🔥 BOT ONLINE");
-  await registerCommands();
+client.once("ready", () => {
+  console.log("🔥 BOT ONLINE (EMBED VERSION)");
 });
 
 client.login(TOKEN);
