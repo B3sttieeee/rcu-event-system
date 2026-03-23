@@ -6,18 +6,13 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  REST,
-  Routes,
-  SlashCommandBuilder,
-  ChannelType
+  StringSelectMenuBuilder
 } = require("discord.js");
 
 const fs = require("fs");
 
 // ================= ENV =================
 const TOKEN = process.env.TOKEN;
-const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID;
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
@@ -97,38 +92,57 @@ function panelEmbed() {
   return new EmbedBuilder()
     .setColor("#5865F2")
     .setTitle("✨ EVENT PANEL")
-    .setDescription("Automatyczny system eventów")
+    .setDescription("Automated event system")
     .addFields(
-      { name: "🟢 Aktualny", value: `\`${current.toUpperCase()}\``, inline: true },
-      { name: "⏭️ Następny", value: `\`${next.type.toUpperCase()}\`\n${getCountdown(next.timestamp)}`, inline: true }
+      { name: "🟢 Current Event", value: `\`${current.toUpperCase()}\``, inline: true },
+      { name: "⏭️ Next Event", value: `\`${next.type.toUpperCase()}\`\n${getCountdown(next.timestamp)}`, inline: true }
     )
     .setFooter({ text: "By B3sttiee" })
     .setTimestamp();
 }
 
-// ================= PANEL BUTTONS =================
+// ================= PANEL =================
 function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Odśwież").setStyle(ButtonStyle.Secondary)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("role_egg").setLabel("🥚 EGG").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("role_merchant").setLabel("🛒 MERCHANT").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("role_spin").setLabel("🎰 SPIN").setStyle(ButtonStyle.Danger)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("dm_egg").setLabel("📩 EGG DM").setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId("dm_merchant").setLabel("📩 MERCHANT DM").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId("dm_spin").setLabel("📩 SPIN DM").setStyle(ButtonStyle.Danger)
+      new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Refresh").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("pick_roles").setLabel("🎭 Pick Roles").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("pick_dm").setLabel("📩 Pick DM Notifications").setStyle(ButtonStyle.Secondary)
     )
   ];
 }
 
-// ================= SINGLE PANEL =================
+// ================= SELECT MENUS =================
+function rolesMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("roles_menu")
+      .setPlaceholder("Select event roles")
+      .addOptions([
+        { label: "Egg Event", value: "egg" },
+        { label: "Merchant Event", value: "merchant" },
+        { label: "Spin Event", value: "spin" }
+      ])
+  );
+}
+
+function dmMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("dm_menu")
+      .setPlaceholder("Select DM notifications")
+      .addOptions([
+        { label: "Egg", value: "egg" },
+        { label: "Merchant", value: "merchant" },
+        { label: "Spin", value: "spin" }
+      ])
+  );
+}
+
+// ================= PANEL SYSTEM =================
 let panelMessage;
 
-async function startAutoPanel() {
+async function startPanel() {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
   const messages = await channel.messages.fetch({ limit: 10 });
@@ -142,58 +156,57 @@ async function startAutoPanel() {
     try {
       await panelMessage.edit({ embeds: [panelEmbed()], components: getPanel() });
     } catch {}
-  }, 1000);
+  }, 10000);
 }
 
 // ================= INTERACTIONS =================
 client.on("interactionCreate", async (i) => {
 
+  const db = loadDB();
+
   if (i.isButton()) {
-
-    const member = await i.guild.members.fetch(i.user.id);
-    const db = loadDB();
-
-    // ROLE SYSTEM
-    if (i.customId.startsWith("role_")) {
-      const type = i.customId.split("_")[1];
-      const role = ROLES[type];
-
-      if (member.roles.cache.has(role)) {
-        await member.roles.remove(role);
-        return i.reply({ content: `❌ Usunięto rolę ${type}`, ephemeral: true });
-      } else {
-        await member.roles.add(role);
-        return i.reply({ content: `✅ Dodano rolę ${type}`, ephemeral: true });
-      }
-    }
-
-    // DM SYSTEM
-    if (i.customId.startsWith("dm_")) {
-      const type = i.customId.split("_")[1];
-
-      if (!db.dm[i.user.id]) db.dm[i.user.id] = [];
-
-      if (db.dm[i.user.id].includes(type)) {
-        db.dm[i.user.id] = db.dm[i.user.id].filter(e => e !== type);
-        saveDB(db);
-        return i.reply({ content: `❌ Wyłączono DM ${type}`, ephemeral: true });
-      } else {
-        db.dm[i.user.id].push(type);
-        saveDB(db);
-        return i.reply({ content: `✅ Włączono DM ${type}`, ephemeral: true });
-      }
-    }
 
     if (i.customId === "refresh") {
       return i.update({ embeds: [panelEmbed()], components: getPanel() });
+    }
+
+    if (i.customId === "pick_roles") {
+      return i.reply({ content: "🎭 Choose your event roles:", components: [rolesMenu()], ephemeral: true });
+    }
+
+    if (i.customId === "pick_dm") {
+      return i.reply({ content: "📩 Choose DM notifications:", components: [dmMenu()], ephemeral: true });
+    }
+  }
+
+  if (i.isStringSelectMenu()) {
+
+    if (i.customId === "roles_menu") {
+      const member = await i.guild.members.fetch(i.user.id);
+
+      for (const val of i.values) {
+        const role = ROLES[val];
+
+        if (member.roles.cache.has(role)) await member.roles.remove(role);
+        else await member.roles.add(role);
+      }
+
+      return i.reply({ content: "✅ Roles updated", ephemeral: true });
+    }
+
+    if (i.customId === "dm_menu") {
+      db.dm[i.user.id] = i.values;
+      saveDB(db);
+
+      return i.reply({ content: "✅ DM preferences saved", ephemeral: true });
     }
   }
 });
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 FINAL VERSION READY");
-  await startAutoPanel();
+  console.log("🔥 BOT FINAL READY");
+  await startPanel();
 });
 
 client.login(TOKEN);
