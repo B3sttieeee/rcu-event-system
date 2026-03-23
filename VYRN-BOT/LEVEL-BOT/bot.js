@@ -2,6 +2,9 @@ const {
   Client,
   GatewayIntentBits,
   EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
   REST,
   Routes,
   SlashCommandBuilder
@@ -16,7 +19,9 @@ const GUILD_ID = process.env.GUILD_ID;
 
 const LEVEL_CHANNEL = "1475999590716018719";
 
-// ===== ROLE REWARDS =====
+const BOOST_ROLE = "1476000398107217980";
+const BOOST_MULTIPLIER = 1.75;
+
 const LEVEL_ROLES = {
   1: "1476000458987278397",
   15: "1476000995501670534",
@@ -25,10 +30,6 @@ const LEVEL_ROLES = {
   60: "1476000991823532032",
   75: "1476000992351879229"
 };
-
-// BOOST
-const BOOST_ROLE = "1476000398107217980";
-const BOOST_MULTIPLIER = 1.75;
 
 // ===== CLIENT =====
 const client = new Client({
@@ -54,18 +55,17 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== XP SYSTEM =====
+// ===== XP =====
 function neededXP(level) {
-  return 50 + (level * 25);
+  return 50 + level * 25;
 }
 
 function getMultiplier(member) {
-  if (member.roles.cache.has(BOOST_ROLE)) return BOOST_MULTIPLIER;
-  return 1;
+  return member.roles.cache.has(BOOST_ROLE) ? BOOST_MULTIPLIER : 1;
 }
 
 // ===== LEVEL UP =====
-async function sendLevelUp(member, level) {
+async function levelUp(member, level) {
   const channel = member.guild.channels.cache.get(LEVEL_CHANNEL);
   if (!channel) return;
 
@@ -73,64 +73,41 @@ async function sendLevelUp(member, level) {
 
   const embed = new EmbedBuilder()
     .setColor("#facc15")
-    .setTitle("LEVEL UP!")
+    .setAuthor({
+      name: `${member.user.username} leveled up!`,
+      iconURL: member.user.displayAvatarURL()
+    })
+    .setThumbnail(member.user.displayAvatarURL())
     .setDescription(`🏆 **New Level:** ${level}`)
-    .setThumbnail(member.user.displayAvatarURL());
+    .setFooter({ text: "VYRN • by B3sttiee" });
 
   channel.send({ embeds: [embed] });
 }
 
-// ===== ROLE REWARD =====
-async function checkRoleReward(member, level) {
-  if (!LEVEL_ROLES[level]) return;
-
-  const role = member.guild.roles.cache.get(LEVEL_ROLES[level]);
-  if (!role) return;
-
-  await member.roles.add(role).catch(() => {});
-}
-
-// ===== ADD XP =====
+// ===== XP ADD =====
 function addXP(member) {
   const db = loadDB();
 
   if (!db.xp[member.id]) db.xp[member.id] = { xp: 0, level: 0 };
 
-  let xp = Math.floor(5 * getMultiplier(member));
-
-  db.xp[member.id].xp += xp;
+  let gained = Math.floor(5 * getMultiplier(member));
+  db.xp[member.id].xp += gained;
 
   while (db.xp[member.id].xp >= neededXP(db.xp[member.id].level)) {
     db.xp[member.id].xp -= neededXP(db.xp[member.id].level);
     db.xp[member.id].level++;
 
-    sendLevelUp(member, db.xp[member.id].level);
-    checkRoleReward(member, db.xp[member.id].level);
+    levelUp(member, db.xp[member.id].level);
+
+    const roleId = LEVEL_ROLES[db.xp[member.id].level];
+    if (roleId) {
+      const role = member.guild.roles.cache.get(roleId);
+      if (role) member.roles.add(role).catch(() => {});
+    }
   }
 
   saveDB(db);
 }
-
-// ===== RESET DAILY/WEEKLY =====
-setInterval(() => {
-  const db = loadDB();
-
-  Object.keys(db.messages).forEach(id => {
-    db.messages[id].daily = 0;
-  });
-
-  saveDB(db);
-}, 86400000); // daily
-
-setInterval(() => {
-  const db = loadDB();
-
-  Object.keys(db.messages).forEach(id => {
-    db.messages[id].weekly = 0;
-  });
-
-  saveDB(db);
-}, 604800000); // weekly
 
 // ===== MESSAGE EVENT =====
 client.on("messageCreate", (msg) => {
@@ -139,102 +116,108 @@ client.on("messageCreate", (msg) => {
   const db = loadDB();
 
   if (!db.messages[msg.author.id]) {
-    db.messages[msg.author.id] = {
-      total: 0,
-      daily: 0,
-      weekly: 0,
-      monthly: 0
-    };
+    db.messages[msg.author.id] = { total: 0, daily: 0, weekly: 0 };
   }
 
   db.messages[msg.author.id].total++;
   db.messages[msg.author.id].daily++;
   db.messages[msg.author.id].weekly++;
-  db.messages[msg.author.id].monthly++;
 
   saveDB(db);
 
   addXP(msg.member);
 
   if (!msg.content.startsWith(".")) return;
-
   const cmd = msg.content.slice(1).split(" ")[0];
 
-  handleCommands(msg, cmd);
+  if (cmd === "rank") return msg.reply({ embeds: [rankEmbed(msg.member)] });
+  if (cmd === "top") return sendLeaderboard(msg, "total");
+  if (cmd === "topdaily") return sendLeaderboard(msg, "daily");
+  if (cmd === "topweekly") return sendLeaderboard(msg, "weekly");
 });
 
-// ===== EMBEDS =====
+// ===== RANK EMBED =====
 function rankEmbed(member) {
   const db = loadDB();
   const data = db.xp[member.id] || { xp: 0, level: 0 };
 
+  const needed = neededXP(data.level);
+  const percent = Math.floor((data.xp / needed) * 100);
+
   return new EmbedBuilder()
-    .setColor("#22c55e")
+    .setColor(member.displayHexColor || "#22c55e")
     .setAuthor({
       name: `${member.user.username} • Stats`,
       iconURL: member.user.displayAvatarURL()
     })
+    .setThumbnail(member.user.displayAvatarURL())
     .setDescription(
       `🏆 **Level:** ${data.level}\n\n` +
-      `📊 **XP:** ${data.xp}/${neededXP(data.level)}\n\n` +
+      `📊 **XP:** ${data.xp}/${needed} (${percent}%)\n\n` +
       `⚡ **Multiplier:** x${getMultiplier(member)}`
     );
 }
 
-function leaderboardEmbed(type, guild) {
+// ===== PAGINATION =====
+async function sendLeaderboard(msg, type) {
   const db = loadDB();
 
   let data;
 
-  if (type === "daily") {
-    data = Object.entries(db.messages)
-      .sort((a, b) => b[1].daily - a[1].daily);
-  } else if (type === "weekly") {
-    data = Object.entries(db.messages)
-      .sort((a, b) => b[1].weekly - a[1].weekly);
+  if (type === "total") {
+    data = Object.entries(db.xp).sort((a, b) => b[1].level - a[1].level);
   } else {
-    data = Object.entries(db.xp)
-      .sort((a, b) => b[1].level - a[1].level);
+    data = Object.entries(db.messages).sort((a, b) => b[1][type] - a[1][type]);
   }
 
-  const top = data.slice(0, 10);
+  let page = 0;
+  const perPage = 10;
 
-  let desc = top.map((u, i) => {
-    return `**#${i + 1}** <@${u[0]}> • ${
-      type === "total" ? "Level " + u[1].level : u[1][type]
-    }`;
-  }).join("\n");
+  const generateEmbed = () => {
+    const slice = data.slice(page * perPage, (page + 1) * perPage);
 
-  return new EmbedBuilder()
-    .setTitle(`🏆 Leaderboard (${type})`)
-    .setColor("#3b82f6")
-    .setDescription(desc || "No data");
-}
+    let desc = slice.map((u, i) => {
+      return `**#${page * perPage + i + 1}** <@${u[0]}> • ${
+        type === "total" ? "LVL " + (u[1].level || 0) : u[1][type] || 0
+      }`;
+    }).join("\n");
 
-// ===== COMMANDS =====
-function handleCommands(msg, cmd) {
+    return new EmbedBuilder()
+      .setTitle(`🏆 Leaderboard (${type})`)
+      .setColor("#3b82f6")
+      .setDescription(desc || "No data")
+      .setFooter({ text: `Page ${page + 1}` });
+  };
 
-  if (cmd === "rank" || cmd === "r") {
-    return msg.reply({ embeds: [rankEmbed(msg.member)] });
-  }
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId("prev").setLabel("⬅️").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("next").setLabel("➡️").setStyle(ButtonStyle.Secondary)
+  );
 
-  if (cmd === "top") {
-    return msg.reply({ embeds: [leaderboardEmbed("total", msg.guild)] });
-  }
+  const message = await msg.reply({
+    embeds: [generateEmbed()],
+    components: [row]
+  });
 
-  if (cmd === "topdaily") {
-    return msg.reply({ embeds: [leaderboardEmbed("daily", msg.guild)] });
-  }
+  const collector = message.createMessageComponentCollector({ time: 60000 });
 
-  if (cmd === "topweekly") {
-    return msg.reply({ embeds: [leaderboardEmbed("weekly", msg.guild)] });
-  }
+  collector.on("collect", async (i) => {
+    if (i.user.id !== msg.author.id) return;
+
+    if (i.customId === "prev") page = Math.max(page - 1, 0);
+    if (i.customId === "next") page++;
+
+    await i.update({
+      embeds: [generateEmbed()],
+      components: [row]
+    });
+  });
 }
 
 // ===== SLASH =====
 const commands = [
-  new SlashCommandBuilder().setName("rank").setDescription("Check rank"),
-  new SlashCommandBuilder().setName("top").setDescription("Leaderboard total"),
+  new SlashCommandBuilder().setName("rank").setDescription("Rank"),
+  new SlashCommandBuilder().setName("top").setDescription("Leaderboard"),
   new SlashCommandBuilder().setName("topdaily").setDescription("Daily leaderboard"),
   new SlashCommandBuilder().setName("topweekly").setDescription("Weekly leaderboard")
 ];
@@ -255,21 +238,14 @@ client.on("interactionCreate", async (i) => {
     return i.reply({ embeds: [rankEmbed(i.member)] });
   }
 
-  if (i.commandName === "top") {
-    return i.reply({ embeds: [leaderboardEmbed("total", i.guild)] });
-  }
-
-  if (i.commandName === "topdaily") {
-    return i.reply({ embeds: [leaderboardEmbed("daily", i.guild)] });
-  }
-
-  if (i.commandName === "topweekly") {
-    return i.reply({ embeds: [leaderboardEmbed("weekly", i.guild)] });
-  }
+  if (i.commandName === "top") return sendLeaderboard(i, "total");
+  if (i.commandName === "topdaily") return sendLeaderboard(i, "daily");
+  if (i.commandName === "topweekly") return sendLeaderboard(i, "weekly");
 });
 
+// ===== START =====
 client.once("ready", () => {
-  console.log("🔥 FINAL BOSS SYSTEM ONLINE");
+  console.log("🔥 ELITE SYSTEM READY");
 });
 
 client.login(TOKEN);
