@@ -80,7 +80,7 @@ function getNextEvent() {
   };
 }
 
-// ================= COUNTDOWN =================
+// ================= ANIMATED COUNTDOWN =================
 function getCountdown(ts) {
   const now = Math.floor(Date.now() / 1000);
   const diff = ts - now;
@@ -88,36 +88,33 @@ function getCountdown(ts) {
   const m = Math.floor((diff % 3600) / 60);
   const s = diff % 60;
 
-  return `${m}m ${s}s`;
+  return `⏳ ${m.toString().padStart(2, "0")}m ${s.toString().padStart(2, "0")}s`;
 }
 
-// ================= EMBED DESIGN =================
+// ================= EMBED =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
   return new EmbedBuilder()
-    .setColor(current === "egg" ? "#00ff99" : current === "merchant" ? "#ffaa00" : "#aa00ff")
+    .setColor("#5865F2")
     .setTitle("✨ EVENT PANEL")
     .setDescription("Automatyczny system eventów")
     .addFields(
-      {
-        name: "🟢 Aktualny Event",
-        value: `\`${current.toUpperCase()}\``,
-        inline: true
-      },
-      {
-        name: "🔜 Następny Event",
-        value: `\`${next.type.toUpperCase()}\``,
-        inline: true
-      },
-      {
-        name: "⏳ Start za",
-        value: getCountdown(next.timestamp),
-        inline: false
-      }
+      { name: "🟢 Aktualny", value: `\`${current.toUpperCase()}\``, inline: true },
+      { name: "⏭️ Następny", value: `\`${next.type.toUpperCase()}\``, inline: true },
+      { name: "⏳ Countdown", value: getCountdown(next.timestamp) }
     )
-    .setFooter({ text: "Auto refresh co 10s • PRO SYSTEM" })
+    .setFooter({ text: "LIVE COUNTDOWN • ULTRA PRO" })
+    .setTimestamp();
+}
+
+// ================= DM EMBED =================
+function dmEmbed(type, status) {
+  return new EmbedBuilder()
+    .setColor(status === "start" ? "#00ff99" : "#ffaa00")
+    .setTitle(status === "start" ? "🚀 EVENT START" : "⏳ EVENT SOON")
+    .setDescription(`Event **${type.toUpperCase()}** ${status === "start" ? "wystartował!" : "za 5 minut!"}`)
     .setTimestamp();
 }
 
@@ -158,11 +155,32 @@ async function startAutoPanel() {
 
   panelMessage = await channel.send({ embeds: [panelEmbed()], components: getPanel() });
 
+  // 🔥 ANIMATED UPDATE EVERY SECOND
   setInterval(async () => {
     if (!panelMessage) return;
 
-    await panelMessage.edit({ embeds: [panelEmbed()], components: getPanel() });
-  }, 10000);
+    try {
+      await panelMessage.edit({ embeds: [panelEmbed()], components: getPanel() });
+    } catch {}
+  }, 1000);
+}
+
+// ================= CLEAN PING =================
+let lastPingMessage = null;
+
+async function sendCleanPing(channel, content) {
+  if (lastPingMessage) {
+    try { await lastPingMessage.delete(); } catch {}
+  }
+
+  lastPingMessage = await channel.send(content);
+
+  setTimeout(async () => {
+    try {
+      await lastPingMessage.delete();
+      lastPingMessage = null;
+    } catch {}
+  }, 15 * 60 * 1000);
 }
 
 // ================= NOTIFICATIONS =================
@@ -179,32 +197,28 @@ setInterval(async () => {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
-  // 5 min before
   if (min === 55 && lastNotify !== `${hour}-5`) {
     lastNotify = `${hour}-5`;
 
-    await channel.send(`⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** za 5 minut!`);
+    await sendCleanPing(channel, `⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** za 5 minut!`);
 
-    // DM
     for (const userId in db.dm) {
       if (db.dm[userId].includes(next.type)) {
         const user = await client.users.fetch(userId);
-        user.send(`⏳ Event ${next.type.toUpperCase()} za 5 minut!`);
+        user.send({ embeds: [dmEmbed(next.type, "soon")] });
       }
     }
   }
 
-  // START
   if (min === 0 && lastNotify !== `${hour}-start`) {
     lastNotify = `${hour}-start`;
 
-    await channel.send(`🚀 <@&${ROLES[current]}> Event **${current.toUpperCase()}** START!`);
+    await sendCleanPing(channel, `🚀 <@&${ROLES[current]}> Event **${current.toUpperCase()}** START!`);
 
-    // DM
     for (const userId in db.dm) {
       if (db.dm[userId].includes(current)) {
         const user = await client.users.fetch(userId);
-        user.send(`🚀 Event ${current.toUpperCase()} właśnie wystartował!`);
+        user.send({ embeds: [dmEmbed(current, "start")] });
       }
     }
   }
@@ -268,7 +282,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 BOT PRO READY");
+  console.log("🔥 BOT ANIMATED READY");
   await registerCommands();
   await startAutoPanel();
 });
