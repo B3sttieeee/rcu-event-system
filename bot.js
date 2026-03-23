@@ -44,7 +44,7 @@ function saveDB(data) {
 
 // ================= TIME =================
 
-function getTime() {
+function getNowPL() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
   );
@@ -64,34 +64,6 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= COUNTDOWN =================
-
-function getNextEventData() {
-  const now = getTime();
-  const currentHour = now.getHours();
-
-  let nextHour = (currentHour + 1) % 24;
-
-  const nextDate = new Date(now);
-  nextDate.setHours(nextHour, 0, 0, 0);
-
-  if (nextHour <= currentHour) {
-    nextDate.setDate(nextDate.getDate() + 1);
-  }
-
-  const diff = nextDate - now;
-
-  const minutes = Math.floor(diff / 60000);
-  const seconds = Math.floor((diff % 60000) / 1000);
-
-  return {
-    type: getEventByHour(nextHour),
-    minutes,
-    seconds,
-    timestamp: Math.floor(nextDate.getTime() / 1000)
-  };
-}
-
 // ================= ROLE =================
 
 function getRole(type) {
@@ -100,27 +72,153 @@ function getRole(type) {
   return `<@&${ROLE_SPIN}>`;
 }
 
-// ================= EMBED =================
+// ================= EMBEDS =================
 
-function buildPanelEmbed() {
-  const now = getTime();
-  const current = getEventByHour(now.getHours());
-  const next = getNextEventData();
+function getEmbed(type) {
 
-  return new EmbedBuilder()
-    .setColor("#5865F2")
-    .setTitle("🎮 PANEL EVENTÓW")
-    .setDescription(
-`🟢 **Aktualny Event:** ${current.toUpperCase()}
+  if (type === "egg") {
+    return new EmbedBuilder()
+      .setColor("#FFD700")
+      .setTitle("🥚 RNG EGG EVENT")
+      .setDescription(
+`**➤ Otwieraj jajka i zdobywaj punkty!**
 
-🔜 **Następny Event:** ${next.type.toUpperCase()}
-⏱️ **Start za:** ${next.minutes}m ${next.seconds}s
+► Im lepsze pety zdobędziesz, tym więcej punktów otrzymasz  
+► Więcej punktów = wyższy tier  
+► Wyższy tier = lepsze nagrody na koniec eventu  
 
-📅 <t:${next.timestamp}:F>`
-    )
-    .setFooter({ text: "Twórca: B3sttiee" })
-    .setTimestamp();
+✨ Graj aktywnie i zgarnij najlepsze bonusy!`
+      )
+      .setThumbnail("https://imgur.com/JqyeITl.png")
+      .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
+      .setTimestamp();
+  }
+
+  if (type === "merchant") {
+    return [
+      new EmbedBuilder()
+        .setColor("#f39c12")
+        .setTitle("🍯 HONEY MERCHANT")
+        .setDescription(
+`**➤ Zdobywaj miód z pszczółek i kupuj przedmioty!**
+
+► 🌍 Bee World  
+► 🛒 Specjalne oferty  
+► 💎 Szansa na Supreme (110%)`
+        )
+        .setThumbnail("https://imgur.com/zhLC0zn.png")
+        .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
+        .setTimestamp(),
+
+      new EmbedBuilder()
+        .setColor("#e74c3c")
+        .setTitle("💀 BOSS MERCHANT")
+        .setDescription(
+`**➤ Zdobywaj Tokeny Bossa i kupuj nagrody!**
+
+► ⚔️ Tokeny Bossa z bossów  
+► 🛒 Sklep eventowy  
+► 💎 Szansa na Supreme (125%)`
+        )
+        .setThumbnail("https://imgur.com/yFvb6jY.png")
+        .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
+        .setTimestamp()
+    ];
+  }
+
+  if (type === "spin") {
+    return new EmbedBuilder()
+      .setColor("#9b59b6")
+      .setTitle("🎡 DEV SPIN EVENT")
+      .setDescription(
+`**➤ Zakręć kołem i wygraj nagrody!**
+
+► 🎁 Losowe nagrody  
+► 💎 Rzadkie dropy  
+► ✨ Szansa na Supreme  
+
+🎯 Spróbuj swojego szczęścia!`
+      )
+      .setThumbnail("https://imgur.com/NJI7052.png")
+      .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
+      .setTimestamp();
+  }
 }
+
+// ================= DM =================
+
+async function sendDM(type, msg) {
+  const db = loadDB();
+
+  for (const id in db.dm) {
+    if (!db.dm[id].includes(type)) continue;
+
+    try {
+      const user = await client.users.fetch(id);
+      await user.send(msg);
+    } catch {}
+  }
+}
+
+// ================= EVENT =================
+
+let lastHour = null;
+let lastReminderHour = null;
+
+async function sendEvent() {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+  const now = getNowPL();
+  const hour = now.getHours();
+
+  if (lastHour === hour) return;
+  lastHour = hour;
+
+  const type = getEventByHour(hour);
+
+  await channel.send(`${getRole(type)} 🚀 **EVENT WYSTARTOWAŁ!**`);
+
+  const embed = getEmbed(type);
+
+  if (Array.isArray(embed)) {
+    for (const e of embed) await channel.send({ embeds: [e] });
+  } else {
+    await channel.send({ embeds: [embed] });
+  }
+
+  await sendDM(type, `🚀 EVENT ${type.toUpperCase()} WYSTARTOWAŁ!`);
+}
+
+// ================= REMINDER 5 MIN =================
+
+async function reminder() {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+  const now = getNowPL();
+
+  if (now.getMinutes() === 55) {
+
+    const hour = now.getHours();
+
+    if (lastReminderHour === hour) return;
+    lastReminderHour = hour;
+
+    const nextType = getEventByHour((hour + 1) % 24);
+
+    await channel.send(`${getRole(nextType)} ⏳ **EVENT ZA 5 MINUT!**`);
+
+    await sendDM(nextType, `⏳ EVENT ${nextType.toUpperCase()} ZA 5 MINUT!`);
+  }
+}
+
+// ================= LOOP =================
+
+setInterval(() => {
+  const now = getNowPL();
+
+  if (now.getMinutes() === 0) sendEvent();
+
+  reminder();
+
+}, 1000);
 
 // ================= PANEL =================
 
@@ -159,50 +257,6 @@ function getPanel() {
   ];
 }
 
-// ================= DM =================
-
-async function sendDM(type) {
-  const db = loadDB();
-
-  for (const id in db.dm) {
-    if (!db.dm[id].includes(type)) continue;
-
-    try {
-      const user = await client.users.fetch(id);
-      await user.send(`🔔 EVENT ${type.toUpperCase()} WYSTARTOWAŁ!`);
-    } catch {}
-  }
-}
-
-// ================= EVENT =================
-
-let lastHour = null;
-
-async function sendEvent() {
-  const channel = await client.channels.fetch(CHANNEL_ID);
-
-  const now = getTime();
-  const hour = now.getHours();
-
-  if (lastHour === hour) return;
-  lastHour = hour;
-
-  const type = getEventByHour(hour);
-
-  await channel.send(`${getRole(type)} 🚀 **EVENT WYSTARTOWAŁ!**`);
-
-  await sendDM(type);
-}
-
-// ================= LOOP =================
-
-setInterval(() => {
-  const now = getTime();
-
-  if (now.getMinutes() === 0) sendEvent();
-
-}, 1000);
-
 // ================= COMMAND =================
 
 const commands = [
@@ -228,7 +282,7 @@ client.on("interactionCreate", async (i) => {
     if (i.commandName === "panel") {
 
       const msg = await i.reply({
-        embeds: [buildPanelEmbed()],
+        embeds: [new EmbedBuilder().setTitle("🎮 PANEL EVENTÓW")],
         components: getPanel(),
         fetchReply: true
       });
@@ -239,16 +293,15 @@ client.on("interactionCreate", async (i) => {
 
   if (i.isButton()) {
     if (i.customId === "refresh") {
-      return i.update({
-        embeds: [buildPanelEmbed()],
-        components: getPanel()
+      return i.reply({
+        content: "🔄 Panel odświeżony",
+        ephemeral: true
       });
     }
   }
 
   if (i.isStringSelectMenu()) {
 
-    // ROLE
     if (i.customId === "roles") {
       const member = await i.guild.members.fetch(i.user.id);
 
@@ -260,39 +313,23 @@ client.on("interactionCreate", async (i) => {
         }
       }
 
-      return i.reply({ content: "✅ Zaktualizowano role", ephemeral: true });
+      return i.reply({ content: "✅ Role zaktualizowane", ephemeral: true });
     }
 
-    // DM
     if (i.customId === "dm") {
-
       const db = loadDB();
       db.dm[i.user.id] = i.values;
-
       saveDB(db);
 
-      return i.reply({ content: "📩 Zapisano ustawienia DM", ephemeral: true });
+      return i.reply({ content: "📩 DM zapisane", ephemeral: true });
     }
   }
 });
 
-// ================= AUTO PANEL UPDATE =================
-
-setInterval(async () => {
-  if (!panelMessage) return;
-
-  try {
-    await panelMessage.edit({
-      embeds: [buildPanelEmbed()],
-      components: getPanel()
-    });
-  } catch {}
-}, 10000);
-
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 GOD MODE BOT ONLINE");
+  console.log("🔥 BOT ONLINE FINAL");
   await registerCommands();
 });
 
