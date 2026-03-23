@@ -24,9 +24,14 @@ const ROLES = {
 
 const DB_PATH = "./data.json";
 
+// ================= DB =================
 function loadDB() {
   if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ dm: {}, panelMessageId: null }, null, 2));
+    fs.writeFileSync(DB_PATH, JSON.stringify({
+      dm: {},
+      panelMessageId: null,
+      lastPingId: null
+    }, null, 2));
   }
   return JSON.parse(fs.readFileSync(DB_PATH));
 }
@@ -80,7 +85,7 @@ function getCountdown(ts) {
   const m = Math.floor((diff % 3600) / 60);
   const s = diff % 60;
 
-  return `⏳ ${m.toString().padStart(2, "0")}m ${s.toString().padStart(2, "0")}s`;
+  return `⏳ ${m}m ${s}s`;
 }
 
 // ================= EMBED =================
@@ -90,13 +95,29 @@ function panelEmbed() {
 
   return new EmbedBuilder()
     .setColor("#5865F2")
-    .setTitle("✨ EVENT PANEL")
-    .setDescription("Automated event system")
-    .addFields(
-      { name: "🟢 Current Event", value: `\`${current.toUpperCase()}\``, inline: true },
-      { name: "⏭️ Next Event", value: `\`${next.type.toUpperCase()}\`\n${getCountdown(next.timestamp)}`, inline: true }
+    .setTitle("🎮 EVENT PANEL")
+    .setDescription(
+`🟢 **AKTUALNY EVENT**
+> **${current.toUpperCase()}**
+
+⏭️ **NASTĘPNY EVENT**
+> **${next.type.toUpperCase()}**
+${getCountdown(next.timestamp)}`
     )
     .setFooter({ text: "By B3sttiee" })
+    .setTimestamp();
+}
+
+// ================= DM EMBED =================
+function dmEmbed(type, status) {
+  return new EmbedBuilder()
+    .setColor(status === "start" ? "#00ff99" : "#ffaa00")
+    .setTitle(status === "start" ? "🚀 EVENT START" : "⏳ EVENT SOON")
+    .setDescription(
+      `🔔 Event **${type.toUpperCase()}** ${
+        status === "start" ? "STARTED!" : "starts in 5 minutes!"
+      }`
+    )
     .setTimestamp();
 }
 
@@ -175,55 +196,90 @@ async function startPanel() {
 
 // ================= PING SYSTEM =================
 let lastNotify = "";
-let lastPingMessage = null;
 
-async function sendPing(channel, content) {
-  if (lastPingMessage) {
-    try { await lastPingMessage.delete(); } catch {}
+async function deleteOldPing(channel, db) {
+  if (db.lastPingId) {
+    try {
+      const msg = await channel.messages.fetch(db.lastPingId);
+      await msg.delete();
+    } catch {}
+    db.lastPingId = null;
+    saveDB(db);
   }
-
-  lastPingMessage = await channel.send(content);
-  return lastPingMessage;
 }
 
+async function sendPing(channel, content, db) {
+  await deleteOldPing(channel, db);
+
+  const msg = await channel.send(content);
+  db.lastPingId = msg.id;
+  saveDB(db);
+
+  return msg;
+}
+
+// ================= NOTIFICATIONS =================
 setInterval(async () => {
   const now = getNowPL();
   const min = now.getMinutes();
   const hour = now.getHours();
 
   const channel = await client.channels.fetch(CHANNEL_ID);
+  const db = loadDB();
 
   const current = getCurrentEvent();
   const next = getNextEvent();
 
+  // ===== 5 MIN BEFORE =====
   if (min === 55 && lastNotify !== `${hour}-5`) {
     lastNotify = `${hour}-5`;
 
-    lastPingMessage = await sendPing(
+    await sendPing(
       channel,
-      `⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** za 5 minut!`
+      `⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** za 5 minut!`,
+      db
     );
+
+    // DM
+    for (const userId in db.dm) {
+      if (db.dm[userId].includes(next.type)) {
+        try {
+          const user = await client.users.fetch(userId);
+          await user.send({
+            content: `<@${userId}>`,
+            embeds: [dmEmbed(next.type, "soon")]
+          });
+        } catch {}
+      }
+    }
   }
 
+  // ===== START =====
   if (min === 0 && lastNotify !== `${hour}-start`) {
     lastNotify = `${hour}-start`;
 
-    if (lastPingMessage) {
-      try { await lastPingMessage.delete(); } catch {}
-    }
-
-    lastPingMessage = await sendPing(
+    await sendPing(
       channel,
-      `🚀 <@&${ROLES[current]}> Event **${current.toUpperCase()}** START!`
+      `🚀 <@&${ROLES[current]}> Event **${current.toUpperCase()}** START!`,
+      db
     );
 
-    setTimeout(async () => {
-      if (lastPingMessage) {
+    // DM
+    for (const userId in db.dm) {
+      if (db.dm[userId].includes(current)) {
         try {
-          await lastPingMessage.delete();
-          lastPingMessage = null;
+          const user = await client.users.fetch(userId);
+          await user.send({
+            content: `<@${userId}>`,
+            embeds: [dmEmbed(current, "start")]
+          });
         } catch {}
       }
+    }
+
+    // usuń po 15 min
+    setTimeout(async () => {
+      await deleteOldPing(channel, loadDB());
     }, 15 * 60 * 1000);
   }
 
@@ -283,7 +339,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 BOT STABLE READY");
+  console.log("🔥 BOT FULL FIX READY");
   await startPanel();
 });
 
