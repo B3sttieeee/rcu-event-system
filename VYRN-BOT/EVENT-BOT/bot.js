@@ -6,7 +6,6 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
   REST,
   Routes,
   SlashCommandBuilder,
@@ -75,12 +74,11 @@ function getNextEvent() {
 
   return {
     type: getEventByHour(nextHour),
-    timestamp: Math.floor(nextDate.getTime() / 1000),
-    date: nextDate
+    timestamp: Math.floor(nextDate.getTime() / 1000)
   };
 }
 
-// ================= ANIMATED COUNTDOWN =================
+// ================= COUNTDOWN =================
 function getCountdown(ts) {
   const now = Math.floor(Date.now() / 1000);
   const diff = ts - now;
@@ -102,188 +100,99 @@ function panelEmbed() {
     .setDescription("Automatyczny system eventów")
     .addFields(
       { name: "🟢 Aktualny", value: `\`${current.toUpperCase()}\``, inline: true },
-      { name: "⏭️ Następny", value: `\`${next.type.toUpperCase()}\``, inline: true },
-      { name: "⏳ Countdown", value: getCountdown(next.timestamp) }
+      { name: "⏭️ Następny", value: `\`${next.type.toUpperCase()}\`\n${getCountdown(next.timestamp)}`, inline: true }
     )
-    .setFooter({ text: "LIVE COUNTDOWN • ULTRA PRO" })
+    .setFooter({ text: "By B3sttiee" })
     .setTimestamp();
 }
 
-// ================= DM EMBED =================
-function dmEmbed(type, status) {
-  return new EmbedBuilder()
-    .setColor(status === "start" ? "#00ff99" : "#ffaa00")
-    .setTitle(status === "start" ? "🚀 EVENT START" : "⏳ EVENT SOON")
-    .setDescription(`Event **${type.toUpperCase()}** ${status === "start" ? "wystartował!" : "za 5 minut!"}`)
-    .setTimestamp();
-}
-
-// ================= PANEL =================
+// ================= PANEL BUTTONS =================
 function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Odśwież").setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId("roles")
-        .setPlaceholder("🎭 Role eventów")
-        .addOptions([
-          { label: "EGG", value: ROLES.egg },
-          { label: "MERCHANT", value: ROLES.merchant },
-          { label: "SPIN", value: ROLES.spin }
-        ])
+      new ButtonBuilder().setCustomId("role_egg").setLabel("🥚 EGG").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("role_merchant").setLabel("🛒 MERCHANT").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("role_spin").setLabel("🎰 SPIN").setStyle(ButtonStyle.Danger)
     ),
     new ActionRowBuilder().addComponents(
-      new StringSelectMenuBuilder()
-        .setCustomId("dm")
-        .setPlaceholder("📩 Powiadomienia DM")
-        .addOptions([
-          { label: "EGG", value: "egg" },
-          { label: "MERCHANT", value: "merchant" },
-          { label: "SPIN", value: "spin" }
-        ])
+      new ButtonBuilder().setCustomId("dm_egg").setLabel("📩 EGG DM").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("dm_merchant").setLabel("📩 MERCHANT DM").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId("dm_spin").setLabel("📩 SPIN DM").setStyle(ButtonStyle.Danger)
     )
   ];
 }
 
-// ================= AUTO PANEL =================
+// ================= SINGLE PANEL =================
 let panelMessage;
 
 async function startAutoPanel() {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
-  panelMessage = await channel.send({ embeds: [panelEmbed()], components: getPanel() });
+  const messages = await channel.messages.fetch({ limit: 10 });
+  panelMessage = messages.find(m => m.author.id === client.user.id);
 
-  // 🔥 ANIMATED UPDATE EVERY SECOND
+  if (!panelMessage) {
+    panelMessage = await channel.send({ embeds: [panelEmbed()], components: getPanel() });
+  }
+
   setInterval(async () => {
-    if (!panelMessage) return;
-
     try {
       await panelMessage.edit({ embeds: [panelEmbed()], components: getPanel() });
     } catch {}
   }, 1000);
 }
 
-// ================= CLEAN PING =================
-let lastPingMessage = null;
-
-async function sendCleanPing(channel, content) {
-  if (lastPingMessage) {
-    try { await lastPingMessage.delete(); } catch {}
-  }
-
-  lastPingMessage = await channel.send(content);
-
-  setTimeout(async () => {
-    try {
-      await lastPingMessage.delete();
-      lastPingMessage = null;
-    } catch {}
-  }, 15 * 60 * 1000);
-}
-
-// ================= NOTIFICATIONS =================
-let lastNotify = "";
-
-setInterval(async () => {
-  const now = getNowPL();
-  const min = now.getMinutes();
-  const hour = now.getHours();
-
-  const channel = await client.channels.fetch(CHANNEL_ID);
-  const db = loadDB();
-
-  const current = getCurrentEvent();
-  const next = getNextEvent();
-
-  if (min === 55 && lastNotify !== `${hour}-5`) {
-    lastNotify = `${hour}-5`;
-
-    await sendCleanPing(channel, `⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** za 5 minut!`);
-
-    for (const userId in db.dm) {
-      if (db.dm[userId].includes(next.type)) {
-        const user = await client.users.fetch(userId);
-        user.send({ embeds: [dmEmbed(next.type, "soon")] });
-      }
-    }
-  }
-
-  if (min === 0 && lastNotify !== `${hour}-start`) {
-    lastNotify = `${hour}-start`;
-
-    await sendCleanPing(channel, `🚀 <@&${ROLES[current]}> Event **${current.toUpperCase()}** START!`);
-
-    for (const userId in db.dm) {
-      if (db.dm[userId].includes(current)) {
-        const user = await client.users.fetch(userId);
-        user.send({ embeds: [dmEmbed(current, "start")] });
-      }
-    }
-  }
-
-}, 10000);
-
-// ================= COMMAND =================
-const commands = [
-  new SlashCommandBuilder()
-    .setName("panel")
-    .setDescription("Wyślij panel")
-    .addChannelOption(opt =>
-      opt.setName("kanał")
-        .setDescription("Kanał")
-        .addChannelTypes(ChannelType.GuildText)
-        .setRequired(true)
-    )
-];
-
-async function registerCommands() {
-  const rest = new REST({ version: "10" }).setToken(TOKEN);
-  await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-}
-
 // ================= INTERACTIONS =================
 client.on("interactionCreate", async (i) => {
 
-  if (i.isChatInputCommand()) {
-    const channel = i.options.getChannel("kanał");
+  if (i.isButton()) {
 
-    await channel.send({ embeds: [panelEmbed()], components: getPanel() });
-    return i.reply({ content: "✅ Panel wysłany", ephemeral: true });
-  }
+    const member = await i.guild.members.fetch(i.user.id);
+    const db = loadDB();
 
-  if (i.isButton() && i.customId === "refresh") {
-    return i.update({ embeds: [panelEmbed()], components: getPanel() });
-  }
+    // ROLE SYSTEM
+    if (i.customId.startsWith("role_")) {
+      const type = i.customId.split("_")[1];
+      const role = ROLES[type];
 
-  if (i.isStringSelectMenu()) {
-
-    if (i.customId === "roles") {
-      const member = await i.guild.members.fetch(i.user.id);
-
-      for (const role of i.values) {
-        if (member.roles.cache.has(role)) await member.roles.remove(role);
-        else await member.roles.add(role);
+      if (member.roles.cache.has(role)) {
+        await member.roles.remove(role);
+        return i.reply({ content: `❌ Usunięto rolę ${type}`, ephemeral: true });
+      } else {
+        await member.roles.add(role);
+        return i.reply({ content: `✅ Dodano rolę ${type}`, ephemeral: true });
       }
-
-      return i.reply({ content: "✅ Role zaktualizowane", ephemeral: true });
     }
 
-    if (i.customId === "dm") {
-      const db = loadDB();
-      db.dm[i.user.id] = i.values;
-      saveDB(db);
+    // DM SYSTEM
+    if (i.customId.startsWith("dm_")) {
+      const type = i.customId.split("_")[1];
 
-      return i.reply({ content: "📩 DM zapisane", ephemeral: true });
+      if (!db.dm[i.user.id]) db.dm[i.user.id] = [];
+
+      if (db.dm[i.user.id].includes(type)) {
+        db.dm[i.user.id] = db.dm[i.user.id].filter(e => e !== type);
+        saveDB(db);
+        return i.reply({ content: `❌ Wyłączono DM ${type}`, ephemeral: true });
+      } else {
+        db.dm[i.user.id].push(type);
+        saveDB(db);
+        return i.reply({ content: `✅ Włączono DM ${type}`, ephemeral: true });
+      }
+    }
+
+    if (i.customId === "refresh") {
+      return i.update({ embeds: [panelEmbed()], components: getPanel() });
     }
   }
 });
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 BOT ANIMATED READY");
-  await registerCommands();
+  console.log("🔥 FINAL VERSION READY");
   await startAutoPanel();
 });
 
