@@ -9,10 +9,12 @@ const {
 
 const fs = require("fs");
 
-// ================= ENV =================
+// ================= CONFIG =================
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
+
+const LEVEL_CHANNEL = "1475999590716018719";
 
 // ================= CLIENT =================
 const client = new Client({
@@ -24,31 +26,15 @@ const client = new Client({
   ]
 });
 
-// ================= CONFIG =================
-
-const LEVEL_CHANNEL = "1475999590716018719";
-
-// 🎭 ROLE ZA LEVEL
-const ROLES = {
-  1: "1476000458987278397",
-  15: "1476000995501670534",
-  30: "1476000459595448442",
-  45: "1476000991206707221",
-  60: "1476000991823532032",
-  75: "1476000992351879229"
-};
-
-// ⚡ MULTIPLIER ROLE
-const MULTIPLIERS = {
-  "1476000398107217980": 2.5
-};
-
 // ================= DB =================
-
 const DB_PATH = "./data.json";
 
 if (!fs.existsSync(DB_PATH)) {
-  fs.writeFileSync(DB_PATH, JSON.stringify({ xp: {}, vc: {} }, null, 2));
+  fs.writeFileSync(DB_PATH, JSON.stringify({
+    xp: {},
+    vc: {},
+    messages: {}
+  }, null, 2));
 }
 
 function loadDB() {
@@ -59,9 +45,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= SYSTEM =================
-
-const cooldown = new Map();
+// ================= LEVEL =================
 
 function neededXP(level) {
   return Math.floor(100 * Math.pow(1.25, level));
@@ -70,12 +54,52 @@ function neededXP(level) {
 function progressBar(current, max, size = 12) {
   const percent = current / max;
   const progress = Math.round(size * percent);
-  const empty = size - progress;
-
-  return "▰".repeat(progress) + "▱".repeat(empty);
+  return "▰".repeat(progress) + "▱".repeat(size - progress);
 }
 
-// ================= XP ADD =================
+// ================= MESSAGE TRACK =================
+
+function trackMessage(userId) {
+  const db = loadDB();
+
+  if (!db.messages[userId]) {
+    db.messages[userId] = {
+      total: 0,
+      daily: 0,
+      weekly: 0,
+      monthly: 0,
+      lastDay: new Date().getDate(),
+      lastWeek: new Date().getWeek?.() || 0,
+      lastMonth: new Date().getMonth()
+    };
+  }
+
+  const user = db.messages[userId];
+  const now = new Date();
+
+  // reset daily
+  if (user.lastDay !== now.getDate()) {
+    user.daily = 0;
+    user.lastDay = now.getDate();
+  }
+
+  // reset monthly
+  if (user.lastMonth !== now.getMonth()) {
+    user.monthly = 0;
+    user.lastMonth = now.getMonth();
+  }
+
+  user.total++;
+  user.daily++;
+  user.weekly++;
+  user.monthly++;
+
+  saveDB(db);
+}
+
+// ================= XP =================
+
+const cooldown = new Map();
 
 function addXP(userId, member) {
   const db = loadDB();
@@ -86,14 +110,7 @@ function addXP(userId, member) {
 
   let gain = Math.floor(Math.random() * 10) + 10;
 
-  // MULTIPLIER
-  for (const roleId in MULTIPLIERS) {
-    if (member.roles.cache.has(roleId)) {
-      gain *= MULTIPLIERS[roleId];
-    }
-  }
-
-  db.xp[userId].xp += Math.floor(gain);
+  db.xp[userId].xp += gain;
 
   let leveled = false;
 
@@ -105,45 +122,16 @@ function addXP(userId, member) {
 
   saveDB(db);
 
-  return {
-    leveled,
-    level: db.xp[userId].level,
-    xp: db.xp[userId].xp
-  };
+  return { leveled, level: db.xp[userId].level };
 }
 
-// ================= LEVEL UP =================
-
-async function levelUp(member, level) {
-  const channel = await client.channels.fetch(LEVEL_CHANNEL);
-
-  const embed = new EmbedBuilder()
-    .setColor("#FFD700")
-    .setTitle("🎉 LEVEL UP!")
-    .setDescription(
-`Gratulacje ${member}!
-
-🏆 Osiągnąłeś poziom **${level}**`
-    )
-    .setThumbnail(member.user.displayAvatarURL())
-    .setFooter({ text: "VYRN Level System" })
-    .setTimestamp();
-
-  channel.send({ embeds: [embed] });
-
-  if (ROLES[level]) {
-    try {
-      await member.roles.add(ROLES[level]);
-    } catch {}
-  }
-}
-
-// ================= MESSAGE XP =================
+// ================= EVENTS =================
 
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
+  if (msg.content.length < 5) return;
 
-  if (msg.content.length < 5) return; // anty spam
+  trackMessage(msg.author.id);
 
   const now = Date.now();
 
@@ -156,63 +144,39 @@ client.on("messageCreate", async (msg) => {
   const result = addXP(msg.author.id, msg.member);
 
   if (result.leveled) {
-    levelUp(msg.member, result.level);
+    const channel = await client.channels.fetch(LEVEL_CHANNEL);
+
+    channel.send({
+      content: `🎉 ${msg.author} awansował na poziom ${result.level}!`
+    });
   }
 });
-
-// ================= VOICE XP =================
-
-setInterval(() => {
-  const db = loadDB();
-
-  client.guilds.cache.forEach(guild => {
-    guild.members.cache.forEach(member => {
-
-      if (!member.voice.channel) return;
-
-      // minimum 2 osoby
-      if (member.voice.channel.members.size < 2) return;
-
-      if (member.voice.selfMute || member.voice.selfDeaf) return;
-
-      if (!db.xp[member.id]) {
-        db.xp[member.id] = { xp: 0, level: 0 };
-      }
-
-      let gain = 5;
-
-      for (const roleId in MULTIPLIERS) {
-        if (member.roles.cache.has(roleId)) {
-          gain *= MULTIPLIERS[roleId];
-        }
-      }
-
-      db.xp[member.id].xp += Math.floor(gain);
-
-      if (db.xp[member.id].xp >= neededXP(db.xp[member.id].level)) {
-        db.xp[member.id].xp = 0;
-        db.xp[member.id].level++;
-
-        levelUp(member, db.xp[member.id].level);
-      }
-    });
-  });
-
-  saveDB(db);
-
-}, 60000);
 
 // ================= COMMANDS =================
 
 const commands = [
+
   new SlashCommandBuilder()
     .setName("rank")
     .setDescription("Twój poziom"),
 
   new SlashCommandBuilder()
     .setName("top")
-    .setDescription("Topka serwera")
+    .setDescription("Topka"),
+
+  new SlashCommandBuilder()
+    .setName("messages")
+    .setDescription("Ilość wiadomości")
+    .addUserOption(o =>
+      o.setName("user").setDescription("Użytkownik")
+    ),
+
+  new SlashCommandBuilder()
+    .setName("message-stats")
+    .setDescription("Statystyki wiadomości")
 ];
+
+// ================= REGISTER =================
 
 async function registerCommands() {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -230,60 +194,59 @@ client.on("interactionCreate", async (i) => {
 
   const db = loadDB();
 
+  // RANK
   if (i.commandName === "rank") {
-
-    const user = i.user;
-    const data = db.xp[user.id] || { xp: 0, level: 0 };
-
+    const data = db.xp[i.user.id] || { xp: 0, level: 0 };
     const needed = neededXP(data.level);
-    const bar = progressBar(data.xp, needed);
-    const percent = Math.floor((data.xp / needed) * 100);
 
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
-      .setTitle(`📊 ${user.username}`)
+      .setTitle(i.user.username)
       .setDescription(
-`🏆 **Poziom:** ${data.level}
-
-${bar} ${percent}%
-
-✨ ${data.xp} / ${needed} XP`
-      )
-      .setThumbnail(user.displayAvatarURL())
-      .setFooter({ text: "VYRN Level System" });
+`Poziom: ${data.level}
+${progressBar(data.xp, needed)}`
+      );
 
     i.reply({ embeds: [embed] });
   }
 
+  // TOP
   if (i.commandName === "top") {
-
     const sorted = Object.entries(db.xp)
       .sort((a, b) => b[1].level - a[1].level)
       .slice(0, 10);
 
     let desc = "";
-    const medals = ["🥇", "🥈", "🥉"];
 
     for (let i2 = 0; i2 < sorted.length; i2++) {
       const user = await client.users.fetch(sorted[i2][0]);
-      const medal = medals[i2] || `**${i2 + 1}.**`;
-
-      desc += `${medal} ${user.username} — lvl ${sorted[i2][1].level}\n`;
+      desc += `**${i2 + 1}. ${user.username}** — lvl ${sorted[i2][1].level}\n`;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor("#FFD700")
-      .setTitle("🏆 TOP GRACZY")
-      .setDescription(desc || "Brak danych");
+    i.reply({ content: desc });
+  }
 
-    i.reply({ embeds: [embed] });
+  // MESSAGES
+  if (i.commandName === "messages") {
+    const user = i.options.getUser("user") || i.user;
+    const data = db.messages[user.id];
+
+    if (!data) return i.reply("Brak danych");
+
+    i.reply(
+`📊 ${user.username}
+Total: ${data.total}
+Daily: ${data.daily}
+Weekly: ${data.weekly}
+Monthly: ${data.monthly}`
+    );
   }
 });
 
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 LEVEL BOT PRO ONLINE");
+  console.log("🔥 BOT ULTRA READY");
   await registerCommands();
 });
 
