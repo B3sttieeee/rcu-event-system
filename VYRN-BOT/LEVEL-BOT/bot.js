@@ -7,7 +7,7 @@ const {
   EmbedBuilder
 } = require("discord.js");
 
-const { RankCardBuilder } = require("rank-card");
+const { createCanvas, loadImage } = require("canvas");
 const fs = require("fs");
 
 // CONFIG
@@ -57,25 +57,24 @@ function addXP(userId) {
   saveDB(db);
 }
 
-// MESSAGE TRACK
+// MESSAGES
 function trackMessage(userId) {
   const db = loadDB();
 
-  if (!db.messages[userId]) {
-    db.messages[userId] = { total: 0 };
-  }
+  if (!db.messages[userId]) db.messages[userId] = { total: 0 };
 
   db.messages[userId].total++;
   saveDB(db);
 }
 
-// MESSAGE EVENT
+// EVENT
 client.on("messageCreate", (msg) => {
   if (msg.author.bot) return;
 
   trackMessage(msg.author.id);
 
   const now = Date.now();
+
   if (cooldown.has(msg.author.id)) {
     if (now - cooldown.get(msg.author.id) < 30000) return;
   }
@@ -86,24 +85,25 @@ client.on("messageCreate", (msg) => {
 
 // COMMANDS
 const commands = [
-  new SlashCommandBuilder().setName("rank").setDescription("Twój poziom"),
+  new SlashCommandBuilder().setName("rank").setDescription("Poziom"),
   new SlashCommandBuilder().setName("top").setDescription("Topka"),
   new SlashCommandBuilder()
     .setName("messages")
-    .setDescription("Ilość wiadomości")
-    .addUserOption(o => o.setName("user").setDescription("Użytkownik"))
+    .setDescription("Wiadomości")
+    .addUserOption(o => o.setName("user").setDescription("User"))
 ];
 
 // REGISTER
 async function registerCommands() {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
+
   await rest.put(
     Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
     { body: commands }
   );
 }
 
-// INTERACTIONS
+// INTERACTION
 client.on("interactionCreate", async (i) => {
   if (!i.isChatInputCommand()) return;
 
@@ -112,28 +112,56 @@ client.on("interactionCreate", async (i) => {
   // RANK
   if (i.commandName === "rank") {
 
-    const userData = db.xp[i.user.id] || { xp: 0, level: 0 };
+    const data = db.xp[i.user.id] || { xp: 0, level: 0 };
+    const needed = neededXP(data.level);
+    const percent = data.xp / needed;
 
-    const sorted = Object.entries(db.xp)
-      .sort((a, b) => b[1].level - a[1].level);
+    const canvas = createCanvas(900, 300);
+    const ctx = canvas.getContext("2d");
 
-    const rankPosition = sorted.findIndex(u => u[0] === i.user.id) + 1;
-    const needed = neededXP(userData.level);
+    // BG
+    const grad = ctx.createLinearGradient(0, 0, 900, 300);
+    grad.addColorStop(0, "#0f172a");
+    grad.addColorStop(1, "#1e293b");
 
-    const card = await new RankCardBuilder({
-      currentLvl: userData.level,
-      currentRank: rankPosition || 0,
-      currentXP: userData.xp,
-      requiredXP: needed,
-      avatarImgURL: i.user.displayAvatarURL({ extension: "png" }),
-      nicknameText: { content: i.user.username },
-      backgroundColor: { background: "#0f172a", bubbles: "#22c55e" },
-      progressBarColor: "#22c55e",
-      colorTextDefault: "#22c55e"
-    }).build();
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 900, 300);
+
+    // PANEL
+    ctx.fillStyle = "#020617";
+    ctx.fillRect(20, 20, 860, 260);
+
+    // AVATAR
+    const avatar = await loadImage(i.user.displayAvatarURL({ extension: "png" }));
+    ctx.drawImage(avatar, 50, 90, 120, 120);
+
+    // TEXT
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 32px sans-serif";
+    ctx.fillText(i.user.username, 200, 110);
+
+    // BAR
+    ctx.fillStyle = "#1f2937";
+    ctx.fillRect(200, 180, 450, 25);
+
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(200, 180, 450 * percent, 25);
+
+    ctx.fillStyle = "#9ca3af";
+    ctx.fillText(`${data.xp}/${needed}`, 200, 160);
+
+    ctx.fillStyle = "#fff";
+    ctx.fillText(`${Math.floor(percent * 100)}%`, 670, 200);
+
+    // LEVEL
+    ctx.fillStyle = "#111827";
+    ctx.fillRect(700, 80, 150, 80);
+
+    ctx.fillStyle = "#fff";
+    ctx.fillText(`LVL ${data.level}`, 720, 130);
 
     return i.reply({
-      files: [{ attachment: card.toBuffer(), name: "rank.png" }]
+      files: [{ attachment: canvas.toBuffer(), name: "rank.png" }]
     });
   }
 
@@ -164,18 +192,15 @@ client.on("interactionCreate", async (i) => {
     const user = i.options.getUser("user") || i.user;
     const data = db.messages[user.id] || { total: 0 };
 
-    const embed = new EmbedBuilder()
-      .setTitle(`💬 ${user.username}`)
-      .setDescription(`Wiadomości: ${data.total}`)
-      .setColor("#3b82f6");
-
-    return i.reply({ embeds: [embed] });
+    return i.reply({
+      content: `💬 ${user.username} napisał: ${data.total} wiadomości`
+    });
   }
 });
 
 // READY
 client.once("clientReady", async () => {
-  console.log("BOT ONLINE");
+  console.log("BOT DZIAŁA");
   await registerCommands();
 });
 
