@@ -7,7 +7,6 @@
   },
   "dependencies": {
     "discord.js": "^14.14.1",
-    "canvas": "^2.11.2",
-    "rank-card": "^1.0.4"
+    "canvas": "^2.11.2"
   }
 }
