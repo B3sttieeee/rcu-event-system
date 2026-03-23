@@ -6,16 +6,15 @@ const {
 
 const fs = require("fs");
 
-// CONFIG
 const TOKEN = process.env.TOKEN;
 
-// ROLE PROGI (TWOJE ID)
+// ===== CONFIG =====
 const ROLE_REWARDS = [
-  { level: 15, role: "1476000995501670534" },
-  { level: 30, role: "1476000459595448442" },
-  { level: 45, role: "1476000991206707221" },
-  { level: 60, role: "1476000991823532032" },
-  { level: 75, role: "1476000992351879229" }
+  { level: 15 },
+  { level: 30 },
+  { level: 45 },
+  { level: 60 },
+  { level: 75 }
 ];
 
 const client = new Client({
@@ -30,7 +29,11 @@ const client = new Client({
 const DB_PATH = "./data.json";
 
 function loadDB() {
-  return JSON.parse(fs.readFileSync(DB_PATH));
+  try {
+    return JSON.parse(fs.readFileSync(DB_PATH));
+  } catch {
+    return { xp: {}, messages: {} };
+  }
 }
 
 function saveDB(data) {
@@ -81,7 +84,7 @@ function trackMessage(userId) {
   saveDB(db);
 }
 
-// ===== MESSAGE EVENT =====
+// ===== EVENT =====
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
 
@@ -91,18 +94,15 @@ client.on("messageCreate", async (msg) => {
 
   const now = Date.now();
 
-  if (cooldown.has(msg.author.id)) {
-    if (now - cooldown.get(msg.author.id) < 30000) return;
+  if (!cooldown.has(msg.author.id) || now - cooldown.get(msg.author.id) > 30000) {
+    cooldown.set(msg.author.id, now);
+    addXP(msg.author.id);
   }
 
-  cooldown.set(msg.author.id, now);
-  addXP(msg.author.id);
-
-  // ===== PREFIX COMMANDS =====
   if (!msg.content.startsWith(".")) return;
 
   const args = msg.content.slice(1).split(" ");
-  const cmd = args[0];
+  const cmd = args[0].toLowerCase();
 
   // ===== RANK =====
   if (cmd === "rank") {
@@ -111,8 +111,6 @@ client.on("messageCreate", async (msg) => {
     const needed = neededXP(data.level);
     const percent = Math.floor((data.xp / needed) * 100);
 
-    const member = msg.member;
-
     const nextRole = ROLE_REWARDS.find(r => r.level > data.level);
     const nextInfo = nextRole
       ? `Next role in **${nextRole.level - data.level} levels**`
@@ -120,86 +118,97 @@ client.on("messageCreate", async (msg) => {
 
     const embed = new EmbedBuilder()
       .setAuthor({
-        name: `${msg.author.username} • Level Stats`,
+        name: `${msg.author.username} • Level`,
         iconURL: msg.author.displayAvatarURL()
       })
-      .setColor(member.displayHexColor === "#000000" ? "#22c55e" : member.displayHexColor)
+      .setColor(msg.member.displayHexColor || "#22c55e")
       .setThumbnail(msg.author.displayAvatarURL())
       .addFields(
-        { name: "🏆 Level", value: `**${data.level}**`, inline: true },
-        { name: "📊 XP", value: `**${data.xp}/${needed} (${percent}%)**`, inline: true },
-        { name: "🎯 Progress", value: "▰▰▰▰▰▰▱▱▱▱", inline: false },
-        { name: "🚀 Next Reward", value: nextInfo, inline: false }
+        { name: "🏆 Level", value: `${data.level}`, inline: true },
+        { name: "📊 XP", value: `${data.xp}/${needed} (${percent}%)`, inline: true },
+        { name: "🚀 Next", value: nextInfo }
       )
       .setFooter({ text: "by B3sttiee" });
 
-    msg.reply({ embeds: [embed] });
+    return msg.reply({ embeds: [embed] });
   }
 
   // ===== TOP =====
   if (cmd === "top") {
 
-    const users = msg.guild.members.cache;
+    const members = msg.guild.members.cache.filter(m => !m.user.bot);
 
     let ranking = [];
 
-    users.forEach(u => {
-      if (u.user.bot) return;
-
-      const data = db.xp[u.id] || { level: 0 };
-      ranking.push({ id: u.id, level: data.level });
+    members.forEach(m => {
+      const data = db.xp[m.id] || { level: 0 };
+      ranking.push({
+        id: m.id,
+        level: data.level
+      });
     });
 
     ranking.sort((a, b) => b.level - a.level);
 
-    let desc = "";
-
-    ranking.slice(0, 10).forEach((u, i) => {
+    let desc = ranking.slice(0, 10).map((u, i) => {
       const user = msg.guild.members.cache.get(u.id);
-      desc += `**#${i + 1}** ${user.user.username} — LVL ${u.level}\n`;
-    });
+      return `**#${i + 1}** ${user.user.username} — LVL ${u.level}`;
+    }).join("\n");
 
     const embed = new EmbedBuilder()
       .setTitle("🏆 TOP LEVELS")
-      .setDescription(desc || "No data")
+      .setDescription(desc || "No users found")
       .setColor("#22c55e")
       .setFooter({ text: "by B3sttiee" });
 
-    msg.reply({ embeds: [embed] });
+    return msg.reply({ embeds: [embed] });
   }
 
   // ===== MESSAGES =====
   if (cmd === "messages") {
 
-    const user = msg.mentions.users.first() || msg.author;
-    const data = db.messages[user.id] || {
+    let target = msg.mentions.users.first() || msg.author;
+    let type = args[1] || args[2] || "total";
+
+    const data = db.messages[target.id] || {
       total: 0,
       daily: 0,
       weekly: 0,
       monthly: 0
     };
 
+    let value;
+
+    switch (type) {
+      case "daily":
+        value = data.daily;
+        break;
+      case "weekly":
+        value = data.weekly;
+        break;
+      case "monthly":
+        value = data.monthly;
+        break;
+      default:
+        value = data.total;
+    }
+
     const embed = new EmbedBuilder()
       .setAuthor({
-        name: `${user.username} • Messages`,
-        iconURL: user.displayAvatarURL()
+        name: `${target.username} • Messages`,
+        iconURL: target.displayAvatarURL()
       })
       .setColor("#3b82f6")
-      .addFields(
-        { name: "📅 Today", value: `${data.daily}`, inline: true },
-        { name: "📆 Weekly", value: `${data.weekly}`, inline: true },
-        { name: "🗓️ Monthly", value: `${data.monthly}`, inline: true },
-        { name: "📊 Total", value: `${data.total}`, inline: false }
-      )
+      .setDescription(`**${type.toUpperCase()}**: ${value}`)
       .setFooter({ text: "by B3sttiee" });
 
-    msg.reply({ embeds: [embed] });
+    return msg.reply({ embeds: [embed] });
   }
-});
 
-// ===== READY =====
+});
+  
 client.once("ready", () => {
-  console.log("🔥 BOT ONLINE (EMBED VERSION)");
+  console.log("🔥 BOT ONLINE (FIXED)");
 });
 
 client.login(TOKEN);
