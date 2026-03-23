@@ -49,16 +49,24 @@ function saveDB(data) {
 const cooldown = new Map();
 
 function neededXP(level) {
-  return Math.floor(100 * Math.pow(1.25, level));
+  return Math.floor(120 * Math.pow(1.22, level));
 }
 
-function progressBar(current, max, size = 12) {
+function progressBar(current, max, size = 14) {
   const percent = current / max;
   const progress = Math.round(size * percent);
-  return "▰".repeat(progress) + "▱".repeat(size - progress);
+  return "🟩".repeat(progress) + "⬛".repeat(size - progress);
 }
 
+const separator = "✨━━━━━━━━━━━━━━━━━━━━✨";
+
 // ================= MESSAGE TRACK =================
+
+function getWeek() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  return Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
+}
 
 function trackMessage(userId) {
   const db = loadDB();
@@ -78,19 +86,16 @@ function trackMessage(userId) {
   const user = db.messages[userId];
   const now = new Date();
 
-  // DAILY RESET
   if (user.lastDay !== now.toISOString().slice(0,10)) {
     user.daily = 0;
     user.lastDay = now.toISOString().slice(0,10);
   }
 
-  // WEEKLY RESET
   if (user.lastWeek !== getWeek()) {
     user.weekly = 0;
     user.lastWeek = getWeek();
   }
 
-  // MONTHLY RESET
   if (user.lastMonth !== now.getMonth()) {
     user.monthly = 0;
     user.lastMonth = now.getMonth();
@@ -102,13 +107,6 @@ function trackMessage(userId) {
   user.monthly++;
 
   saveDB(db);
-}
-
-// WEEK FUNCTION
-function getWeek() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  return Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
 }
 
 // ================= XP =================
@@ -160,9 +158,23 @@ client.on("messageCreate", async (msg) => {
 
     const embed = new EmbedBuilder()
       .setColor("#FFD700")
-      .setTitle("🎉 LEVEL UP!")
-      .setDescription(`${msg.author} osiągnął poziom **${result.level}**`)
-      .setThumbnail(msg.author.displayAvatarURL());
+      .setAuthor({
+        name: `${msg.author.username} awansował! • by B3sttiee`,
+        iconURL: msg.author.displayAvatarURL()
+      })
+      .setDescription(
+`🎉 **Nowy poziom!**
+
+${separator}
+
+🏆 Poziom: **${result.level}**
+
+${separator}
+
+🚀 Lecisz dalej!`
+      )
+      .setThumbnail(msg.author.displayAvatarURL())
+      .setTimestamp();
 
     channel.send({ embeds: [embed] });
   }
@@ -178,7 +190,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("top")
-    .setDescription("Topka"),
+    .setDescription("Ranking graczy"),
 
   new SlashCommandBuilder()
     .setName("messages")
@@ -206,27 +218,35 @@ client.on("interactionCreate", async (i) => {
 
   const db = loadDB();
 
-  // RANK
+  // ===== RANK =====
   if (i.commandName === "rank") {
     const data = db.xp[i.user.id] || { xp: 0, level: 0 };
     const needed = neededXP(data.level);
+    const percent = Math.floor((data.xp / needed) * 100);
 
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
-      .setTitle(`📊 ${i.user.username}`)
+      .setAuthor({
+        name: `${i.user.username} • Statystyki • by B3sttiee`,
+        iconURL: i.user.displayAvatarURL()
+      })
       .setDescription(
-`🏆 Poziom: ${data.level}
+`🎖️ **Poziom:** \`${data.level}\`
 
-${progressBar(data.xp, needed)}
+${separator}
 
-XP: ${data.xp}/${needed}`
+${progressBar(data.xp, needed)} **${percent}%**
+
+${separator}
+
+📈 XP: \`${data.xp}/${needed}\``
       )
-      .setThumbnail(i.user.displayAvatarURL());
+      .setTimestamp();
 
     return i.reply({ embeds: [embed] });
   }
 
-  // TOP
+  // ===== TOP =====
   if (i.commandName === "top") {
     const sorted = Object.entries(db.xp)
       .sort((a, b) => b[1].level - a[1].level)
@@ -239,18 +259,19 @@ XP: ${data.xp}/${needed}`
       const user = await client.users.fetch(sorted[x][0]);
       const medal = medals[x] || `**${x + 1}.**`;
 
-      desc += `${medal} ${user.username} — lvl ${sorted[x][1].level}\n`;
+      desc += `${medal} **${user.username}**\n🎖️ Poziom: \`${sorted[x][1].level}\`\n\n`;
     }
 
     const embed = new EmbedBuilder()
       .setColor("#FFD700")
-      .setTitle("🏆 TOP GRACZY")
-      .setDescription(desc || "Brak danych");
+      .setTitle("🏆 Ranking Serwera • by B3sttiee")
+      .setDescription(desc || "Brak danych")
+      .setTimestamp();
 
     return i.reply({ embeds: [embed] });
   }
 
-  // MESSAGES
+  // ===== MESSAGES =====
   if (i.commandName === "messages") {
     const user = i.options.getUser("user") || i.user;
     const data = db.messages[user.id];
@@ -259,14 +280,25 @@ XP: ${data.xp}/${needed}`
 
     const embed = new EmbedBuilder()
       .setColor("#2ecc71")
-      .setTitle(`📊 ${user.username}`)
+      .setAuthor({
+        name: `${user.username} • Aktywność • by B3sttiee`,
+        iconURL: user.displayAvatarURL()
+      })
       .setDescription(
-`💬 Total: ${data.total}
-📅 Daily: ${data.daily}
-📆 Weekly: ${data.weekly}
-🗓 Monthly: ${data.monthly}`
+`💬 **Statystyki wiadomości**
+
+${separator}
+
+📊 Łącznie: \`${data.total}\`
+📅 Dzisiaj: \`${data.daily}\`
+📆 Tydzień: \`${data.weekly}\`
+🗓 Miesiąc: \`${data.monthly}\`
+
+${separator}
+
+📈 Średnia: **${Math.floor(data.total / 30) || 0} msg/dzień**`
       )
-      .setThumbnail(user.displayAvatarURL());
+      .setTimestamp();
 
     return i.reply({ embeds: [embed] });
   }
@@ -275,7 +307,7 @@ XP: ${data.xp}/${needed}`
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 LEVEL BOT FINAL DZIAŁA");
+  console.log("🔥 BOT PRO ONLINE");
   await registerCommands();
 });
 
