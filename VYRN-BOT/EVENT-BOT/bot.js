@@ -25,6 +25,9 @@ const ROLES = {
 const DB_PATH = "./data.json";
 
 function loadDB() {
+  if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify({ dm: {}, panelMessageId: null }, null, 2));
+  }
   return JSON.parse(fs.readFileSync(DB_PATH));
 }
 
@@ -32,12 +35,12 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
+// ================= TIME =================
 function getNowPL() {
-  return new Date(
-    new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
-  );
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
 }
 
+// ================= EVENTS =================
 const EVENTS = {
   egg: [0,3,6,9,12,15,18,21],
   merchant: [1,4,7,10,13,16,19,22],
@@ -69,6 +72,7 @@ function getNextEvent() {
   };
 }
 
+// ================= COUNTDOWN =================
 function getCountdown(ts) {
   const now = Math.floor(Date.now() / 1000);
   const diff = ts - now;
@@ -89,8 +93,8 @@ function panelEmbed() {
     .setTitle("✨ EVENT PANEL")
     .setDescription("Automated event system")
     .addFields(
-      { name: "🟢 Current", value: `\`${current.toUpperCase()}\``, inline: true },
-      { name: "⏭️ Next", value: `\`${next.type.toUpperCase()}\`\n${getCountdown(next.timestamp)}`, inline: true }
+      { name: "🟢 Current Event", value: `\`${current.toUpperCase()}\``, inline: true },
+      { name: "⏭️ Next Event", value: `\`${next.type.toUpperCase()}\`\n${getCountdown(next.timestamp)}`, inline: true }
     )
     .setFooter({ text: "By B3sttiee" })
     .setTimestamp();
@@ -139,15 +143,24 @@ let panelMessage;
 
 async function startPanel() {
   const channel = await client.channels.fetch(CHANNEL_ID);
+  const db = loadDB();
 
-  const messages = await channel.messages.fetch({ limit: 10 });
-  panelMessage = messages.find(m => m.author.id === client.user.id);
+  if (db.panelMessageId) {
+    try {
+      panelMessage = await channel.messages.fetch(db.panelMessageId);
+    } catch {
+      panelMessage = null;
+    }
+  }
 
   if (!panelMessage) {
     panelMessage = await channel.send({
       embeds: [panelEmbed()],
       components: getPanel()
     });
+
+    db.panelMessageId = panelMessage.id;
+    saveDB(db);
   }
 
   setInterval(async () => {
@@ -183,17 +196,15 @@ setInterval(async () => {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
-  // 5 MIN BEFORE
   if (min === 55 && lastNotify !== `${hour}-5`) {
     lastNotify = `${hour}-5`;
 
     lastPingMessage = await sendPing(
       channel,
-      `⏳ <@&${ROLES[next.type]}> Event **${next.toUpperCase()}** za 5 minut!`
+      `⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** za 5 minut!`
     );
   }
 
-  // START
   if (min === 0 && lastNotify !== `${hour}-start`) {
     lastNotify = `${hour}-start`;
 
@@ -272,7 +283,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 BOT FINAL READY");
+  console.log("🔥 BOT STABLE READY");
   await startPanel();
 });
 
