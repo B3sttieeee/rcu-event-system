@@ -19,8 +19,8 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates
   ]
 });
 
@@ -28,6 +28,7 @@ const client = new Client({
 
 const LEVEL_CHANNEL = "1475999590716018719";
 
+// 🎭 ROLE ZA LEVEL
 const ROLES = {
   1: "1476000458987278397",
   15: "1476000995501670534",
@@ -37,11 +38,18 @@ const ROLES = {
   75: "1476000992351879229"
 };
 
-const BOOST_ROLE = "1476000398107217980"; // 2.5x XP
+// ⚡ MULTIPLIER ROLE
+const MULTIPLIERS = {
+  "1476000398107217980": 2.5
+};
 
 // ================= DB =================
 
 const DB_PATH = "./data.json";
+
+if (!fs.existsSync(DB_PATH)) {
+  fs.writeFileSync(DB_PATH, JSON.stringify({ xp: {}, vc: {} }, null, 2));
+}
 
 function loadDB() {
   return JSON.parse(fs.readFileSync(DB_PATH));
@@ -51,13 +59,23 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= XP SYSTEM =================
+// ================= SYSTEM =================
 
 const cooldown = new Map();
 
 function neededXP(level) {
-  return 100 + level * 75; // trudniejsze levele
+  return Math.floor(100 * Math.pow(1.25, level));
 }
+
+function progressBar(current, max, size = 12) {
+  const percent = current / max;
+  const progress = Math.round(size * percent);
+  const empty = size - progress;
+
+  return "▰".repeat(progress) + "▱".repeat(empty);
+}
+
+// ================= XP ADD =================
 
 function addXP(userId, member) {
   const db = loadDB();
@@ -68,12 +86,14 @@ function addXP(userId, member) {
 
   let gain = Math.floor(Math.random() * 10) + 10;
 
-  // multiplier
-  if (member.roles.cache.has(BOOST_ROLE)) {
-    gain = Math.floor(gain * 2.5);
+  // MULTIPLIER
+  for (const roleId in MULTIPLIERS) {
+    if (member.roles.cache.has(roleId)) {
+      gain *= MULTIPLIERS[roleId];
+    }
   }
 
-  db.xp[userId].xp += gain;
+  db.xp[userId].xp += Math.floor(gain);
 
   let leveled = false;
 
@@ -99,13 +119,15 @@ async function levelUp(member, level) {
 
   const embed = new EmbedBuilder()
     .setColor("#FFD700")
-    .setTitle(`${member.user.username} leveled up!`)
+    .setTitle("🎉 LEVEL UP!")
     .setDescription(
-`**CONGRATS**
-You are now level **${level}**!!`
+`Gratulacje ${member}!
+
+🏆 Osiągnąłeś poziom **${level}**`
     )
     .setThumbnail(member.user.displayAvatarURL())
-    .setFooter({ text: "VYRN — Vengeance Yearns Ruthless Night" });
+    .setFooter({ text: "VYRN Level System" })
+    .setTimestamp();
 
   channel.send({ embeds: [embed] });
 
@@ -120,6 +142,8 @@ You are now level **${level}**!!`
 
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
+
+  if (msg.content.length < 5) return; // anty spam
 
   const now = Date.now();
 
@@ -143,7 +167,13 @@ setInterval(() => {
 
   client.guilds.cache.forEach(guild => {
     guild.members.cache.forEach(member => {
+
       if (!member.voice.channel) return;
+
+      // minimum 2 osoby
+      if (member.voice.channel.members.size < 2) return;
+
+      if (member.voice.selfMute || member.voice.selfDeaf) return;
 
       if (!db.xp[member.id]) {
         db.xp[member.id] = { xp: 0, level: 0 };
@@ -151,11 +181,13 @@ setInterval(() => {
 
       let gain = 5;
 
-      if (member.roles.cache.has(BOOST_ROLE)) {
-        gain *= 2.5;
+      for (const roleId in MULTIPLIERS) {
+        if (member.roles.cache.has(roleId)) {
+          gain *= MULTIPLIERS[roleId];
+        }
       }
 
-      db.xp[member.id].xp += gain;
+      db.xp[member.id].xp += Math.floor(gain);
 
       if (db.xp[member.id].xp >= neededXP(db.xp[member.id].level)) {
         db.xp[member.id].xp = 0;
@@ -168,7 +200,7 @@ setInterval(() => {
 
   saveDB(db);
 
-}, 60000); // co minute
+}, 60000);
 
 // ================= COMMANDS =================
 
@@ -179,7 +211,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("top")
-    .setDescription("Topka")
+    .setDescription("Topka serwera")
 ];
 
 async function registerCommands() {
@@ -191,7 +223,7 @@ async function registerCommands() {
   );
 }
 
-// ================= RANK =================
+// ================= INTERACTIONS =================
 
 client.on("interactionCreate", async (i) => {
   if (!i.isChatInputCommand()) return;
@@ -203,14 +235,22 @@ client.on("interactionCreate", async (i) => {
     const user = i.user;
     const data = db.xp[user.id] || { xp: 0, level: 0 };
 
+    const needed = neededXP(data.level);
+    const bar = progressBar(data.xp, needed);
+    const percent = Math.floor((data.xp / needed) * 100);
+
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
-      .setTitle(`${user.username}`)
+      .setTitle(`📊 ${user.username}`)
       .setDescription(
-`**LEVEL:** ${data.level}
-**XP:** ${data.xp}/${neededXP(data.level)}`
+`🏆 **Poziom:** ${data.level}
+
+${bar} ${percent}%
+
+✨ ${data.xp} / ${needed} XP`
       )
-      .setThumbnail(user.displayAvatarURL());
+      .setThumbnail(user.displayAvatarURL())
+      .setFooter({ text: "VYRN Level System" });
 
     i.reply({ embeds: [embed] });
   }
@@ -222,10 +262,13 @@ client.on("interactionCreate", async (i) => {
       .slice(0, 10);
 
     let desc = "";
+    const medals = ["🥇", "🥈", "🥉"];
 
     for (let i2 = 0; i2 < sorted.length; i2++) {
       const user = await client.users.fetch(sorted[i2][0]);
-      desc += `**${i2 + 1}. ${user.username}** — lvl ${sorted[i2][1].level}\n`;
+      const medal = medals[i2] || `**${i2 + 1}.**`;
+
+      desc += `${medal} ${user.username} — lvl ${sorted[i2][1].level}\n`;
     }
 
     const embed = new EmbedBuilder()
@@ -240,7 +283,7 @@ client.on("interactionCreate", async (i) => {
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 LEVEL SYSTEM READY");
+  console.log("🔥 LEVEL BOT PRO ONLINE");
   await registerCommands();
 });
 
