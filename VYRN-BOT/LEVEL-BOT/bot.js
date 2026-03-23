@@ -23,7 +23,7 @@ const client = new Client({
   ]
 });
 
-// DB
+// ===== DATABASE =====
 const DB_PATH = "./data.json";
 
 function loadDB() {
@@ -34,11 +34,11 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// XP SYSTEM
+// ===== XP SYSTEM =====
 const cooldown = new Map();
 
 function neededXP(level) {
-  return Math.floor(120 * Math.pow(1.22, level));
+  return Math.floor(120 * Math.pow(1.25, level));
 }
 
 function addXP(userId) {
@@ -46,7 +46,7 @@ function addXP(userId) {
 
   if (!db.xp[userId]) db.xp[userId] = { xp: 0, level: 0 };
 
-  let gain = Math.floor(Math.random() * 10) + 15;
+  let gain = Math.floor(Math.random() * 15) + 10;
   db.xp[userId].xp += gain;
 
   while (db.xp[userId].xp >= neededXP(db.xp[userId].level)) {
@@ -57,17 +57,28 @@ function addXP(userId) {
   saveDB(db);
 }
 
-// MESSAGES
+// ===== MESSAGE TRACK =====
 function trackMessage(userId) {
   const db = loadDB();
 
-  if (!db.messages[userId]) db.messages[userId] = { total: 0 };
+  if (!db.messages[userId]) {
+    db.messages[userId] = {
+      total: 0,
+      daily: 0,
+      weekly: 0,
+      monthly: 0
+    };
+  }
 
   db.messages[userId].total++;
+  db.messages[userId].daily++;
+  db.messages[userId].weekly++;
+  db.messages[userId].monthly++;
+
   saveDB(db);
 }
 
-// EVENT
+// ===== MESSAGE EVENT =====
 client.on("messageCreate", (msg) => {
   if (msg.author.bot) return;
 
@@ -83,17 +94,17 @@ client.on("messageCreate", (msg) => {
   addXP(msg.author.id);
 });
 
-// COMMANDS
+// ===== COMMANDS =====
 const commands = [
-  new SlashCommandBuilder().setName("rank").setDescription("Poziom"),
-  new SlashCommandBuilder().setName("top").setDescription("Topka"),
+  new SlashCommandBuilder().setName("rank").setDescription("Twój poziom"),
+  new SlashCommandBuilder().setName("top").setDescription("Top poziomów"),
   new SlashCommandBuilder()
     .setName("messages")
-    .setDescription("Wiadomości")
-    .addUserOption(o => o.setName("user").setDescription("User"))
+    .setDescription("Statystyki wiadomości")
+    .addUserOption(o => o.setName("user").setDescription("Użytkownik"))
 ];
 
-// REGISTER
+// ===== REGISTER =====
 async function registerCommands() {
   const rest = new REST({ version: "10" }).setToken(TOKEN);
 
@@ -103,104 +114,145 @@ async function registerCommands() {
   );
 }
 
-// INTERACTION
+// ===== INTERACTIONS =====
 client.on("interactionCreate", async (i) => {
   if (!i.isChatInputCommand()) return;
 
   const db = loadDB();
 
-  // RANK
+  // ===== RANK =====
   if (i.commandName === "rank") {
 
     const data = db.xp[i.user.id] || { xp: 0, level: 0 };
     const needed = neededXP(data.level);
     const percent = data.xp / needed;
 
-    const canvas = createCanvas(900, 300);
+    const canvas = createCanvas(1000, 300);
     const ctx = canvas.getContext("2d");
 
     // BG
-    const grad = ctx.createLinearGradient(0, 0, 900, 300);
-    grad.addColorStop(0, "#0f172a");
-    grad.addColorStop(1, "#1e293b");
+    const gradient = ctx.createLinearGradient(0, 0, 1000, 300);
+    gradient.addColorStop(0, "#020617");
+    gradient.addColorStop(1, "#0f172a");
 
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 900, 300);
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, 1000, 300);
 
     // PANEL
-    ctx.fillStyle = "#020617";
-    ctx.fillRect(20, 20, 860, 260);
+    ctx.fillStyle = "#0b1220";
+    ctx.roundRect(20, 20, 960, 260, 25);
+    ctx.fill();
 
     // AVATAR
     const avatar = await loadImage(i.user.displayAvatarURL({ extension: "png" }));
-    ctx.drawImage(avatar, 50, 90, 120, 120);
 
-    // TEXT
-    ctx.fillStyle = "#fff";
-    ctx.font = "bold 32px sans-serif";
-    ctx.fillText(i.user.username, 200, 110);
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(120, 150, 70, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(avatar, 50, 80, 140, 140);
+    ctx.restore();
+
+    // NAME
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 36px sans-serif";
+    ctx.fillText(i.user.username, 230, 110);
+
+    // XP TEXT
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "20px sans-serif";
+    ctx.fillText(`${data.xp} / ${needed} XP`, 230, 150);
+
+    // BAR BG
+    ctx.fillStyle = "#1e293b";
+    ctx.roundRect(230, 180, 500, 30, 20);
+    ctx.fill();
 
     // BAR
-    ctx.fillStyle = "#1f2937";
-    ctx.fillRect(200, 180, 450, 25);
+    const barGradient = ctx.createLinearGradient(230, 0, 730, 0);
+    barGradient.addColorStop(0, "#22c55e");
+    barGradient.addColorStop(1, "#4ade80");
+
+    ctx.fillStyle = barGradient;
+    ctx.roundRect(230, 180, 500 * percent, 30, 20);
+    ctx.fill();
+
+    // %
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 18px sans-serif";
+    ctx.fillText(`${Math.floor(percent * 100)}%`, 750, 200);
+
+    // LEVEL BOX
+    ctx.fillStyle = "#020617";
+    ctx.roundRect(800, 80, 140, 100, 20);
+    ctx.fill();
+
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "18px sans-serif";
+    ctx.fillText("LEVEL", 835, 110);
 
     ctx.fillStyle = "#22c55e";
-    ctx.fillRect(200, 180, 450 * percent, 25);
-
-    ctx.fillStyle = "#9ca3af";
-    ctx.fillText(`${data.xp}/${needed}`, 200, 160);
-
-    ctx.fillStyle = "#fff";
-    ctx.fillText(`${Math.floor(percent * 100)}%`, 670, 200);
-
-    // LEVEL
-    ctx.fillStyle = "#111827";
-    ctx.fillRect(700, 80, 150, 80);
-
-    ctx.fillStyle = "#fff";
-    ctx.fillText(`LVL ${data.level}`, 720, 130);
+    ctx.font = "bold 36px sans-serif";
+    ctx.fillText(data.level, 845, 150);
 
     return i.reply({
       files: [{ attachment: canvas.toBuffer(), name: "rank.png" }]
     });
   }
 
-  // TOP
+  // ===== TOP =====
   if (i.commandName === "top") {
+
     const sorted = Object.entries(db.xp)
       .sort((a, b) => b[1].level - a[1].level)
       .slice(0, 10);
 
-    const embed = new EmbedBuilder()
-      .setTitle("🏆 TOP")
-      .setColor("#22c55e");
+    let desc = "";
 
-    for (let x = 0; x < sorted.length; x++) {
-      const user = await client.users.fetch(sorted[x][0]);
-
-      embed.addFields({
-        name: `#${x + 1} ${user.username}`,
-        value: `LVL ${sorted[x][1].level}`
-      });
+    for (let i2 = 0; i2 < sorted.length; i2++) {
+      const user = await client.users.fetch(sorted[i2][0]);
+      desc += `**#${i2 + 1}** ${user.username} — LVL ${sorted[i2][1].level}\n`;
     }
+
+    const embed = new EmbedBuilder()
+      .setTitle("🏆 TOP POZIOMÓW")
+      .setDescription(desc || "Brak danych")
+      .setColor("#22c55e")
+      .setFooter({ text: "by B3sttiee" });
 
     return i.reply({ embeds: [embed] });
   }
 
-  // MESSAGES
+  // ===== MESSAGES =====
   if (i.commandName === "messages") {
-    const user = i.options.getUser("user") || i.user;
-    const data = db.messages[user.id] || { total: 0 };
 
-    return i.reply({
-      content: `💬 ${user.username} napisał: ${data.total} wiadomości`
-    });
+    const user = i.options.getUser("user") || i.user;
+    const data = db.messages[user.id] || {
+      total: 0,
+      daily: 0,
+      weekly: 0,
+      monthly: 0
+    };
+
+    const embed = new EmbedBuilder()
+      .setTitle(`💬 ${user.username}`)
+      .setColor("#3b82f6")
+      .addFields(
+        { name: "📅 Dziś", value: `${data.daily}`, inline: true },
+        { name: "📆 Tydzień", value: `${data.weekly}`, inline: true },
+        { name: "🗓️ Miesiąc", value: `${data.monthly}`, inline: true },
+        { name: "📊 Łącznie", value: `${data.total}`, inline: false }
+      )
+      .setFooter({ text: "by B3sttiee" });
+
+    return i.reply({ embeds: [embed] });
   }
 });
 
-// READY
+// ===== READY =====
 client.once("clientReady", async () => {
-  console.log("BOT DZIAŁA");
+  console.log("🔥 BOT ONLINE");
   await registerCommands();
 });
 
