@@ -35,7 +35,8 @@ const giveawaySchema = new mongoose.Schema({
   winners: Number,
   endTime: Number,
   requiredRole: String,
-  participants: [String]
+  participants: [String],
+  ended: { type: Boolean, default: false }
 });
 
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
@@ -51,34 +52,26 @@ client.once('clientReady', async () => {
     new SlashCommandBuilder()
       .setName('giveaway-create')
       .setDescription('Create giveaway')
-      .addStringOption(o =>
-        o.setName('time').setDescription('np 1m, 1h').setRequired(true))
-      .addStringOption(o =>
-        o.setName('reward').setDescription('Nagroda').setRequired(true))
-      .addIntegerOption(o =>
-        o.setName('winners').setDescription('Ilość zwycięzców').setRequired(true))
-      .addRoleOption(o =>
-        o.setName('role').setDescription('Wymagana rola')),
+      .addStringOption(o => o.setName('time').setDescription('np 1m').setRequired(true))
+      .addStringOption(o => o.setName('reward').setDescription('Nagroda').setRequired(true))
+      .addIntegerOption(o => o.setName('winners').setDescription('Ilość').setRequired(true))
+      .addRoleOption(o => o.setName('role').setDescription('Wymagana rola')),
 
     new SlashCommandBuilder()
       .setName('giveaway-role')
-      .setDescription('Set bonus entries')
-      .addRoleOption(o =>
-        o.setName('role').setDescription('Rola').setRequired(true))
-      .addIntegerOption(o =>
-        o.setName('entries').setDescription('Ile wejść').setRequired(true)),
+      .setDescription('Bonus entries')
+      .addRoleOption(o => o.setName('role').setDescription('Rola').setRequired(true))
+      .addIntegerOption(o => o.setName('entries').setDescription('Ile wejść').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('giveaway-end')
       .setDescription('End giveaway')
-      .addStringOption(o =>
-        o.setName('id').setDescription('ID wiadomości').setRequired(true)),
+      .addStringOption(o => o.setName('id').setDescription('ID').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('giveaway-reroll')
-      .setDescription('Reroll giveaway')
-      .addStringOption(o =>
-        o.setName('id').setDescription('ID wiadomości').setRequired(true))
+      .setDescription('Reroll')
+      .addStringOption(o => o.setName('id').setDescription('ID').setRequired(true))
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
@@ -87,30 +80,29 @@ client.once('clientReady', async () => {
   restoreGiveaways();
 });
 
-// ===== EMBED BUILDER =====
+// ===== EMBED =====
 function buildEmbed(data) {
   let bonus = 'Brak';
   if (roleEntries.size > 0) {
     bonus = [...roleEntries.entries()]
-      .map(([id, val]) => `• <@&${id}> → **+${val} entries**`)
+      .map(([id, val]) => `• <@&${id}> → **+${val}**`)
       .join('\n');
   }
 
   return new EmbedBuilder()
-    .setTitle('🎉 **GIVEAWAY** 🎉')
-    .setDescription(`**🎁 Nagroda:**\n> ${data.reward}`)
+    .setTitle('🎉 GIVEAWAY 🎉')
+    .setDescription(`🎁 **Nagroda:**\n> ${data.reward}`)
     .addFields(
-      { name: '🏆 **Winners**', value: `\`${data.winners}\``, inline: true },
-      { name: '👥 **Participants**', value: `\`${data.participants.length}\``, inline: true },
-      { name: '⏳ **Ends**', value: `<t:${Math.floor(data.endTime / 1000)}:R>`, inline: false },
-      { name: '🔒 **Required Role**', value: data.requiredRole ? `<@&${data.requiredRole}>` : '`Brak`' },
-      { name: '🎟 **Bonus Roles**', value: bonus }
+      { name: '🏆 Winners', value: `\`${data.winners}\``, inline: true },
+      { name: '👥 Participants', value: `\`${data.participants.length}\``, inline: true },
+      { name: '⏳ Koniec', value: `<t:${Math.floor(data.endTime / 1000)}:R>` },
+      { name: '🔒 Rola', value: data.requiredRole ? `<@&${data.requiredRole}>` : '`Brak`' },
+      { name: '🎟 Bonus', value: bonus }
     )
-    .setColor('#ff4d6d')
-    .setFooter({ text: 'Kliknij przycisk poniżej aby wziąć udział!' });
+    .setColor('#ff4d6d');
 }
 
-// ===== INTERACTIONS =====
+// ===== INTERACTION =====
 client.on('interactionCreate', async interaction => {
 
   if (interaction.isChatInputCommand()) {
@@ -133,7 +125,8 @@ client.on('interactionCreate', async interaction => {
         winners,
         endTime,
         requiredRole: role ? role.id : null,
-        participants: []
+        participants: [],
+        ended: false
       };
 
       const embed = buildEmbed(data);
@@ -151,7 +144,7 @@ client.on('interactionCreate', async interaction => {
         channelId: msg.channel.id
       });
 
-      interaction.reply({ content: '✅ Giveaway created', ephemeral: true });
+      interaction.reply({ content: '✅ Created', ephemeral: true });
 
       setTimeout(() => endGiveaway(msg.id), duration);
     }
@@ -162,7 +155,7 @@ client.on('interactionCreate', async interaction => {
 
       roleEntries.set(role.id, entries);
 
-      interaction.reply({ content: '✅ Role bonus set', ephemeral: true });
+      interaction.reply({ content: '✅ Ustawiono', ephemeral: true });
     }
 
     if (interaction.commandName === 'giveaway-end') {
@@ -179,13 +172,21 @@ client.on('interactionCreate', async interaction => {
     const data = await Giveaway.findOne({ messageId: interaction.message.id });
     if (!data) return;
 
+    // 🔒 BLOCK AFTER END
+    if (data.ended) {
+      return interaction.reply({
+        content: '❌ Giveaway zakończony!',
+        ephemeral: true
+      });
+    }
+
     if (data.requiredRole && !interaction.member.roles.cache.has(data.requiredRole)) {
-      return interaction.reply({ content: '❌ Missing role', ephemeral: true });
+      return interaction.reply({ content: '❌ Brak roli', ephemeral: true });
     }
 
     if (interaction.customId === 'join') {
       if (data.participants.includes(interaction.user.id)) {
-        return interaction.reply({ content: '❌ Already joined', ephemeral: true });
+        return interaction.reply({ content: '❌ Już jesteś', ephemeral: true });
       }
 
       data.participants.push(interaction.user.id);
@@ -193,7 +194,7 @@ client.on('interactionCreate', async interaction => {
 
       updateMessage(interaction.message, data);
 
-      interaction.reply({ content: '✅ Joined', ephemeral: true });
+      interaction.reply({ content: '✅ Dołączono', ephemeral: true });
     }
 
     if (interaction.customId === 'leave') {
@@ -202,12 +203,12 @@ client.on('interactionCreate', async interaction => {
 
       updateMessage(interaction.message, data);
 
-      interaction.reply({ content: '❌ Left', ephemeral: true });
+      interaction.reply({ content: '❌ Opuściłeś', ephemeral: true });
     }
   }
 });
 
-// ===== UPDATE EMBED =====
+// ===== UPDATE =====
 async function updateMessage(msg, data) {
   const embed = buildEmbed(data);
   msg.edit({ embeds: [embed] });
@@ -216,12 +217,17 @@ async function updateMessage(msg, data) {
 // ===== END =====
 async function endGiveaway(id) {
   const data = await Giveaway.findOne({ messageId: id });
-  if (!data) return;
+  if (!data || data.ended) return;
+
+  data.ended = true;
+  await data.save();
 
   const channel = await client.channels.fetch(data.channelId);
-
   const users = data.participants;
-  if (users.length === 0) return channel.send('❌ Brak uczestników');
+
+  if (users.length === 0) {
+    return channel.send('❌ Brak uczestników');
+  }
 
   let pool = [];
 
@@ -252,9 +258,14 @@ async function endGiveaway(id) {
 
   channel.send(`🎉 **Winners:** ${winners.map(id => `<@${id}>`).join(', ')}`);
 
-  // ===== CREATE PRIVATE CHANNEL =====
+  // 🔥 NAZWA KANAŁU = NAGRODA
+  const safeName = data.reward
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .slice(0, 20);
+
   const winnerChannel = await channel.guild.channels.create({
-    name: `🎉-winner-${Date.now()}`,
+    name: `🎉-${safeName}`,
     type: ChannelType.GuildText,
     permissionOverwrites: [
       { id: channel.guild.roles.everyone.id, deny: ['ViewChannel'] },
@@ -266,8 +277,6 @@ async function endGiveaway(id) {
   });
 
   winnerChannel.send(`🎉 Gratulacje ${winners.map(id => `<@${id}>`).join(', ')}!\nOdbierz nagrodę tutaj.`);
-
-  await Giveaway.deleteOne({ messageId: id });
 }
 
 // ===== REROLL =====
