@@ -1,13 +1,3 @@
-// PRO MAX GIVEAWAY BOT (SINGLE FILE, ADVANCED)
-// Features:
-// - Buttons (join/leave)
-// - Weighted entries (roles)
-// - MongoDB persistence
-// - Disable buttons after end
-// - Auto reroll system
-// - Claim timeout
-// - Clean embeds
-
 const {
   Client,
   GatewayIntentBits,
@@ -25,9 +15,22 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 const ms = require('ms');
 
-// ===== DB =====
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+});
+
+// ===== Mongo =====
 mongoose.connect(process.env.MONGO_URI);
 
+mongoose.connection.on('connected', () => {
+  console.log('✅ MongoDB connected');
+});
+
+mongoose.connection.on('error', err => {
+  console.error('❌ Mongo error:', err);
+});
+
+// ===== Schema =====
 const giveawaySchema = new mongoose.Schema({
   messageId: String,
   channelId: String,
@@ -40,51 +43,68 @@ const giveawaySchema = new mongoose.Schema({
 
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
 
+// ===== Role bonus =====
 const roleEntries = new Map();
 
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
-});
-
+// ===== READY =====
 client.once('ready', async () => {
-  console.log(`🔥 ${client.user.tag} PRO MAX READY`);
+  console.log(`🔥 ${client.user.tag} READY`);
 
   const commands = [
     new SlashCommandBuilder()
       .setName('giveaway-create')
-      .addStringOption(o => o.setName('time').setRequired(true))
-      .addStringOption(o => o.setName('reward').setRequired(true))
-      .addIntegerOption(o => o.setName('winners').setRequired(true))
-      .addRoleOption(o => o.setName('role')),
+      .setDescription('Create giveaway')
+      .addStringOption(o =>
+        o.setName('time').setDescription('np 1m, 1h').setRequired(true))
+      .addStringOption(o =>
+        o.setName('reward').setDescription('Nagroda').setRequired(true))
+      .addIntegerOption(o =>
+        o.setName('winners').setDescription('Ilość zwycięzców').setRequired(true))
+      .addRoleOption(o =>
+        o.setName('role').setDescription('Wymagana rola')),
 
     new SlashCommandBuilder()
       .setName('giveaway-role')
-      .addRoleOption(o => o.setName('role').setRequired(true))
-      .addIntegerOption(o => o.setName('entries').setRequired(true)),
+      .setDescription('Set bonus entries')
+      .addRoleOption(o =>
+        o.setName('role').setDescription('Rola').setRequired(true))
+      .addIntegerOption(o =>
+        o.setName('entries').setDescription('Ile wejść').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('giveaway-end')
-      .addStringOption(o => o.setName('id').setRequired(true)),
+      .setDescription('End giveaway')
+      .addStringOption(o =>
+        o.setName('id').setDescription('ID wiadomości').setRequired(true)),
 
     new SlashCommandBuilder()
       .setName('giveaway-reroll')
-      .addStringOption(o => o.setName('id').setRequired(true))
-
+      .setDescription('Reroll giveaway')
+      .addStringOption(o =>
+        o.setName('id').setDescription('ID wiadomości').setRequired(true))
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-  await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+
+  await rest.put(
+    Routes.applicationCommands(client.user.id),
+    { body: commands }
+  );
 
   restoreGiveaways();
 });
 
+// ===== INTERACTIONS =====
 client.on('interactionCreate', async interaction => {
+
+  // ===== SLASH =====
   if (interaction.isChatInputCommand()) {
 
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return interaction.reply({ content: '❌ Admin only', ephemeral: true });
     }
 
+    // CREATE
     if (interaction.commandName === 'giveaway-create') {
       const time = interaction.options.getString('time');
       const reward = interaction.options.getString('reward');
@@ -92,6 +112,8 @@ client.on('interactionCreate', async interaction => {
       const role = interaction.options.getRole('role');
 
       const duration = ms(time);
+      if (!duration) return interaction.reply({ content: '❌ Zły czas', ephemeral: true });
+
       const endTime = Date.now() + duration;
 
       const embed = buildEmbed(reward, winners, endTime, role, 0);
@@ -113,29 +135,34 @@ client.on('interactionCreate', async interaction => {
         participants: []
       });
 
-      interaction.reply({ content: '✅ Created', ephemeral: true });
+      interaction.reply({ content: '✅ Giveaway created', ephemeral: true });
 
       setTimeout(() => endGiveaway(msg.id), duration);
     }
 
+    // ROLE BONUS
     if (interaction.commandName === 'giveaway-role') {
       const role = interaction.options.getRole('role');
       const entries = interaction.options.getInteger('entries');
 
       roleEntries.set(role.id, entries);
+
       interaction.reply({ content: '✅ Role updated', ephemeral: true });
     }
 
+    // END
     if (interaction.commandName === 'giveaway-end') {
       endGiveaway(interaction.options.getString('id'));
       interaction.reply({ content: '⏹ Ended', ephemeral: true });
     }
 
+    // REROLL
     if (interaction.commandName === 'giveaway-reroll') {
       reroll(interaction.options.getString('id'), interaction);
     }
   }
 
+  // ===== BUTTONS =====
   if (interaction.isButton()) {
     const data = await Giveaway.findOne({ messageId: interaction.message.id });
     if (!data) return;
@@ -164,18 +191,21 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
+// ===== EMBED =====
 function buildEmbed(reward, winners, endTime, role, count) {
   return new EmbedBuilder()
     .setTitle('🎉 GIVEAWAY 🎉')
-    .setDescription(`🎁 **${reward}**\n🏆 Winners: ${winners}`)
+    .setDescription(`🎁 **${reward}**`)
     .addFields(
+      { name: '🏆 Winners', value: String(winners), inline: true },
       { name: '👥 Participants', value: String(count), inline: true },
-      { name: '⏳ Ends', value: `<t:${Math.floor(endTime/1000)}:R>`, inline: true },
+      { name: '⏳ Ends', value: `<t:${Math.floor(endTime / 1000)}:R>`, inline: false },
       { name: '🔒 Role', value: role ? `<@&${role.id}>` : 'None', inline: false }
     )
     .setColor('Random');
 }
 
+// ===== END =====
 async function endGiveaway(id) {
   const data = await Giveaway.findOne({ messageId: id });
   if (!data) return;
@@ -205,44 +235,40 @@ async function endGiveaway(id) {
     if (!winners.includes(rand)) winners.push(rand);
   }
 
+  const msg = await channel.messages.fetch(id);
+
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('ended').setLabel('Ended').setStyle(ButtonStyle.Secondary).setDisabled(true)
   );
 
-  const msg = await channel.messages.fetch(id);
   msg.edit({ components: [row] });
 
   channel.send(`🎉 Winners: ${winners.map(id => `<@${id}>`).join(', ')}`);
 
-  setTimeout(() => autoReroll(channel, users, winners), 86400000);
-
   await Giveaway.deleteOne({ messageId: id });
 }
 
+// ===== REROLL =====
 async function reroll(id, interaction) {
   const data = await Giveaway.findOne({ messageId: id });
   if (!data) return interaction.reply({ content: '❌ Not found', ephemeral: true });
 
   const users = data.participants;
+  if (users.length === 0) return interaction.reply({ content: '❌ No users', ephemeral: true });
+
   const winner = users[Math.floor(Math.random() * users.length)];
 
   interaction.channel.send(`🔄 New winner: <@${winner}>`);
   interaction.reply({ content: '✅ Rerolled', ephemeral: true });
 }
 
-function autoReroll(channel, users, oldWinners) {
-  const remaining = users.filter(u => !oldWinners.includes(u));
-  if (remaining.length === 0) return;
-
-  const newWinner = remaining[Math.floor(Math.random() * remaining.length)];
-  channel.send(`⏰ Auto reroll winner: <@${newWinner}>`);
-}
-
+// ===== RESTORE =====
 async function restoreGiveaways() {
   const all = await Giveaway.find();
 
   for (const g of all) {
     const remaining = g.endTime - Date.now();
+
     if (remaining > 0) {
       setTimeout(() => endGiveaway(g.messageId), remaining);
     } else {
