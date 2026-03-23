@@ -1,17 +1,13 @@
 {
-  "name": "vyrn-level-bot",
+  "name": "discord-bot",
   "version": "1.0.0",
-  "description": "Discord Level Bot by B3sttiee",
   "main": "bot.js",
-  "type": "commonjs",
   "scripts": {
     "start": "node bot.js"
   },
-  "keywords": [],
-  "author": "B3sttiee",
-  "license": "ISC",
   "dependencies": {
     "discord.js": "^14.14.1",
-    "canvas": "^2.11.2"
+    "canvas": "^2.11.2",
+    "rank-card": "^1.0.4"
   }
 }
