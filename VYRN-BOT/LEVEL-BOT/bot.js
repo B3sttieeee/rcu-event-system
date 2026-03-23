@@ -21,18 +21,17 @@ const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.MessageContent
   ]
 });
 
 // ================= DB =================
+
 const DB_PATH = "./data.json";
 
 if (!fs.existsSync(DB_PATH)) {
   fs.writeFileSync(DB_PATH, JSON.stringify({
     xp: {},
-    vc: {},
     messages: {}
   }, null, 2));
 }
@@ -45,7 +44,9 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= LEVEL =================
+// ================= SYSTEM =================
+
+const cooldown = new Map();
 
 function neededXP(level) {
   return Math.floor(100 * Math.pow(1.25, level));
@@ -68,8 +69,8 @@ function trackMessage(userId) {
       daily: 0,
       weekly: 0,
       monthly: 0,
-      lastDay: new Date().getDate(),
-      lastWeek: new Date().getWeek?.() || 0,
+      lastDay: new Date().toISOString().slice(0,10),
+      lastWeek: getWeek(),
       lastMonth: new Date().getMonth()
     };
   }
@@ -77,13 +78,19 @@ function trackMessage(userId) {
   const user = db.messages[userId];
   const now = new Date();
 
-  // reset daily
-  if (user.lastDay !== now.getDate()) {
+  // DAILY RESET
+  if (user.lastDay !== now.toISOString().slice(0,10)) {
     user.daily = 0;
-    user.lastDay = now.getDate();
+    user.lastDay = now.toISOString().slice(0,10);
   }
 
-  // reset monthly
+  // WEEKLY RESET
+  if (user.lastWeek !== getWeek()) {
+    user.weekly = 0;
+    user.lastWeek = getWeek();
+  }
+
+  // MONTHLY RESET
   if (user.lastMonth !== now.getMonth()) {
     user.monthly = 0;
     user.lastMonth = now.getMonth();
@@ -97,18 +104,23 @@ function trackMessage(userId) {
   saveDB(db);
 }
 
+// WEEK FUNCTION
+function getWeek() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 1);
+  return Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
+}
+
 // ================= XP =================
 
-const cooldown = new Map();
-
-function addXP(userId, member) {
+function addXP(userId) {
   const db = loadDB();
 
   if (!db.xp[userId]) {
     db.xp[userId] = { xp: 0, level: 0 };
   }
 
-  let gain = Math.floor(Math.random() * 10) + 10;
+  let gain = Math.floor(Math.random() * 10) + 15;
 
   db.xp[userId].xp += gain;
 
@@ -125,7 +137,7 @@ function addXP(userId, member) {
   return { leveled, level: db.xp[userId].level };
 }
 
-// ================= EVENTS =================
+// ================= MESSAGE EVENT =================
 
 client.on("messageCreate", async (msg) => {
   if (msg.author.bot) return;
@@ -141,14 +153,18 @@ client.on("messageCreate", async (msg) => {
 
   cooldown.set(msg.author.id, now);
 
-  const result = addXP(msg.author.id, msg.member);
+  const result = addXP(msg.author.id);
 
   if (result.leveled) {
     const channel = await client.channels.fetch(LEVEL_CHANNEL);
 
-    channel.send({
-      content: `🎉 ${msg.author} awansował na poziom ${result.level}!`
-    });
+    const embed = new EmbedBuilder()
+      .setColor("#FFD700")
+      .setTitle("🎉 LEVEL UP!")
+      .setDescription(`${msg.author} osiągnął poziom **${result.level}**`)
+      .setThumbnail(msg.author.displayAvatarURL());
+
+    channel.send({ embeds: [embed] });
   }
 });
 
@@ -166,14 +182,10 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("messages")
-    .setDescription("Ilość wiadomości")
+    .setDescription("Statystyki wiadomości")
     .addUserOption(o =>
       o.setName("user").setDescription("Użytkownik")
-    ),
-
-  new SlashCommandBuilder()
-    .setName("message-stats")
-    .setDescription("Statystyki wiadomości")
+    )
 ];
 
 // ================= REGISTER =================
@@ -201,13 +213,17 @@ client.on("interactionCreate", async (i) => {
 
     const embed = new EmbedBuilder()
       .setColor("#5865F2")
-      .setTitle(i.user.username)
+      .setTitle(`📊 ${i.user.username}`)
       .setDescription(
-`Poziom: ${data.level}
-${progressBar(data.xp, needed)}`
-      );
+`🏆 Poziom: ${data.level}
 
-    i.reply({ embeds: [embed] });
+${progressBar(data.xp, needed)}
+
+XP: ${data.xp}/${needed}`
+      )
+      .setThumbnail(i.user.displayAvatarURL());
+
+    return i.reply({ embeds: [embed] });
   }
 
   // TOP
@@ -217,13 +233,21 @@ ${progressBar(data.xp, needed)}`
       .slice(0, 10);
 
     let desc = "";
+    const medals = ["🥇", "🥈", "🥉"];
 
-    for (let i2 = 0; i2 < sorted.length; i2++) {
-      const user = await client.users.fetch(sorted[i2][0]);
-      desc += `**${i2 + 1}. ${user.username}** — lvl ${sorted[i2][1].level}\n`;
+    for (let x = 0; x < sorted.length; x++) {
+      const user = await client.users.fetch(sorted[x][0]);
+      const medal = medals[x] || `**${x + 1}.**`;
+
+      desc += `${medal} ${user.username} — lvl ${sorted[x][1].level}\n`;
     }
 
-    i.reply({ content: desc });
+    const embed = new EmbedBuilder()
+      .setColor("#FFD700")
+      .setTitle("🏆 TOP GRACZY")
+      .setDescription(desc || "Brak danych");
+
+    return i.reply({ embeds: [embed] });
   }
 
   // MESSAGES
@@ -233,20 +257,25 @@ ${progressBar(data.xp, needed)}`
 
     if (!data) return i.reply("Brak danych");
 
-    i.reply(
-`📊 ${user.username}
-Total: ${data.total}
-Daily: ${data.daily}
-Weekly: ${data.weekly}
-Monthly: ${data.monthly}`
-    );
+    const embed = new EmbedBuilder()
+      .setColor("#2ecc71")
+      .setTitle(`📊 ${user.username}`)
+      .setDescription(
+`💬 Total: ${data.total}
+📅 Daily: ${data.daily}
+📆 Weekly: ${data.weekly}
+🗓 Monthly: ${data.monthly}`
+      )
+      .setThumbnail(user.displayAvatarURL());
+
+    return i.reply({ embeds: [embed] });
   }
 });
 
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 BOT ULTRA READY");
+  console.log("🔥 LEVEL BOT FINAL DZIAŁA");
   await registerCommands();
 });
 
