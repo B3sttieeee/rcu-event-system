@@ -64,6 +64,52 @@ function getEventByHour(hour) {
   return "spin";
 }
 
+// ================= NEXT EVENT =================
+
+function getNextEvent() {
+  const now = getNowPL();
+  const hour = now.getHours();
+  const nextHour = (hour + 1) % 24;
+
+  const nextDate = new Date(now);
+  nextDate.setHours(nextHour, 0, 0, 0);
+
+  if (nextHour <= hour) {
+    nextDate.setDate(nextDate.getDate() + 1);
+  }
+
+  const diff = nextDate - now;
+
+  return {
+    type: getEventByHour(nextHour),
+    minutes: Math.floor(diff / 60000),
+    seconds: Math.floor((diff % 60000) / 1000),
+    timestamp: Math.floor(nextDate.getTime() / 1000)
+  };
+}
+
+// ================= PANEL EMBED =================
+
+function buildPanelEmbed() {
+  const now = getNowPL();
+  const current = getEventByHour(now.getHours());
+  const next = getNextEvent();
+
+  return new EmbedBuilder()
+    .setColor("#5865F2")
+    .setTitle("🎮 PANEL EVENTÓW")
+    .setDescription(
+`🟢 **Aktualny Event:** ${current.toUpperCase()}
+
+🔜 **Następny Event:** ${next.type.toUpperCase()}
+⏱️ **Start za:** ${next.minutes}m ${next.seconds}s
+
+📅 <t:${next.timestamp}:F>`
+    )
+    .setFooter({ text: "Twórca: B3sttiee" })
+    .setTimestamp();
+}
+
 // ================= ROLE =================
 
 function getRole(type) {
@@ -72,7 +118,7 @@ function getRole(type) {
   return `<@&${ROLE_SPIN}>`;
 }
 
-// ================= EMBEDS =================
+// ================= EMBEDS EVENT =================
 
 function getEmbed(type) {
 
@@ -80,18 +126,8 @@ function getEmbed(type) {
     return new EmbedBuilder()
       .setColor("#FFD700")
       .setTitle("🥚 RNG EGG EVENT")
-      .setDescription(
-`**➤ Otwieraj jajka i zdobywaj punkty!**
-
-► Im lepsze pety zdobędziesz, tym więcej punktów otrzymasz  
-► Więcej punktów = wyższy tier  
-► Wyższy tier = lepsze nagrody na koniec eventu  
-
-✨ Graj aktywnie i zgarnij najlepsze bonusy!`
-      )
-      .setThumbnail("https://imgur.com/JqyeITl.png")
-      .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
-      .setTimestamp();
+      .setDescription(`**➤ Otwieraj jajka i zdobywaj punkty!**`)
+      .setThumbnail("https://imgur.com/JqyeITl.png");
   }
 
   if (type === "merchant") {
@@ -99,30 +135,14 @@ function getEmbed(type) {
       new EmbedBuilder()
         .setColor("#f39c12")
         .setTitle("🍯 HONEY MERCHANT")
-        .setDescription(
-`**➤ Zdobywaj miód z pszczółek i kupuj przedmioty!**
-
-► 🌍 Bee World  
-► 🛒 Specjalne oferty  
-► 💎 Szansa na Supreme (110%)`
-        )
-        .setThumbnail("https://imgur.com/zhLC0zn.png")
-        .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
-        .setTimestamp(),
+        .setDescription(`**➤ Zdobywaj miód i kupuj itemy!**`)
+        .setThumbnail("https://imgur.com/zhLC0zn.png"),
 
       new EmbedBuilder()
         .setColor("#e74c3c")
         .setTitle("💀 BOSS MERCHANT")
-        .setDescription(
-`**➤ Zdobywaj Tokeny Bossa i kupuj nagrody!**
-
-► ⚔️ Tokeny Bossa z bossów  
-► 🛒 Sklep eventowy  
-► 💎 Szansa na Supreme (125%)`
-        )
+        .setDescription(`**➤ Zdobywaj Tokeny Bossa!**`)
         .setThumbnail("https://imgur.com/yFvb6jY.png")
-        .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
-        .setTimestamp()
     ];
   }
 
@@ -130,18 +150,8 @@ function getEmbed(type) {
     return new EmbedBuilder()
       .setColor("#9b59b6")
       .setTitle("🎡 DEV SPIN EVENT")
-      .setDescription(
-`**➤ Zakręć kołem i wygraj nagrody!**
-
-► 🎁 Losowe nagrody  
-► 💎 Rzadkie dropy  
-► ✨ Szansa na Supreme  
-
-🎯 Spróbuj swojego szczęścia!`
-      )
-      .setThumbnail("https://imgur.com/NJI7052.png")
-      .setFooter({ text: "Start: 2026-03-22 • Twórca: B3sttiee" })
-      .setTimestamp();
+      .setDescription(`**➤ Zakręć kołem i wygraj!**`)
+      .setThumbnail("https://imgur.com/NJI7052.png");
   }
 }
 
@@ -163,19 +173,19 @@ async function sendDM(type, msg) {
 // ================= EVENT =================
 
 let lastHour = null;
-let lastReminderHour = null;
+let lastReminder = null;
 
 async function sendEvent() {
-  const channel = await client.channels.fetch(CHANNEL_ID);
   const now = getNowPL();
   const hour = now.getHours();
 
   if (lastHour === hour) return;
   lastHour = hour;
 
+  const channel = await client.channels.fetch(CHANNEL_ID);
   const type = getEventByHour(hour);
 
-  await channel.send(`${getRole(type)} 🚀 **EVENT WYSTARTOWAŁ!**`);
+  await channel.send(`${getRole(type)} 🚀 EVENT WYSTARTOWAŁ!`);
 
   const embed = getEmbed(type);
 
@@ -188,23 +198,19 @@ async function sendEvent() {
   await sendDM(type, `🚀 EVENT ${type.toUpperCase()} WYSTARTOWAŁ!`);
 }
 
-// ================= REMINDER 5 MIN =================
+// ================= REMINDER =================
 
 async function reminder() {
-  const channel = await client.channels.fetch(CHANNEL_ID);
   const now = getNowPL();
+  const hour = now.getHours();
 
-  if (now.getMinutes() === 55) {
-
-    const hour = now.getHours();
-
-    if (lastReminderHour === hour) return;
-    lastReminderHour = hour;
+  if (now.getMinutes() === 55 && lastReminder !== hour) {
+    lastReminder = hour;
 
     const nextType = getEventByHour((hour + 1) % 24);
+    const channel = await client.channels.fetch(CHANNEL_ID);
 
-    await channel.send(`${getRole(nextType)} ⏳ **EVENT ZA 5 MINUT!**`);
-
+    await channel.send(`${getRole(nextType)} ⏳ EVENT ZA 5 MINUT!`);
     await sendDM(nextType, `⏳ EVENT ${nextType.toUpperCase()} ZA 5 MINUT!`);
   }
 }
@@ -237,7 +243,7 @@ function getPanel() {
         .setMinValues(1)
         .setMaxValues(3)
         .addOptions([
-          { label: "RNG EGG", value: ROLE_EGG },
+          { label: "EGG", value: ROLE_EGG },
           { label: "MERCHANT", value: ROLE_MERCHANT },
           { label: "SPIN", value: ROLE_SPIN }
         ])
@@ -272,30 +278,24 @@ async function registerCommands() {
   );
 }
 
-// ================= INTERACTIONS =================
-
-let panelMessage = null;
+// ================= INTERACTION =================
 
 client.on("interactionCreate", async (i) => {
 
   if (i.isChatInputCommand()) {
     if (i.commandName === "panel") {
-
-      const msg = await i.reply({
-        embeds: [new EmbedBuilder().setTitle("🎮 PANEL EVENTÓW")],
-        components: getPanel(),
-        fetchReply: true
+      return i.reply({
+        embeds: [buildPanelEmbed()],
+        components: getPanel()
       });
-
-      panelMessage = msg;
     }
   }
 
   if (i.isButton()) {
     if (i.customId === "refresh") {
-      return i.reply({
-        content: "🔄 Panel odświeżony",
-        ephemeral: true
+      return i.update({
+        embeds: [buildPanelEmbed()],
+        components: getPanel()
       });
     }
   }
@@ -329,7 +329,7 @@ client.on("interactionCreate", async (i) => {
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 BOT ONLINE FINAL");
+  console.log("🔥 BOT ONLINE FINAL FIX");
   await registerCommands();
 });
 
