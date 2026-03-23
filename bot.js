@@ -8,7 +8,8 @@ const {
   StringSelectMenuBuilder,
   REST,
   Routes,
-  SlashCommandBuilder
+  SlashCommandBuilder,
+  ChannelType
 } = require("discord.js");
 
 const fs = require("fs");
@@ -64,7 +65,7 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= NEXT =================
+// ================= NEXT EVENT =================
 
 function getNextEvent() {
   const now = getNowPL();
@@ -102,21 +103,19 @@ function panelEmbed() {
     .setTimestamp();
 }
 
-// ================= PANEL UI =================
+// ================= PANEL =================
 
 function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("current")
-        .setLabel("🟢 Aktualny Event")
+        .setLabel("🟢 Aktualny")
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId("next")
-        .setLabel("🔜 Następny Event")
-        .setStyle(ButtonStyle.Primary)
-    ),
-    new ActionRowBuilder().addComponents(
+        .setLabel("🔜 Następny")
+        .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
         .setCustomId("refresh")
         .setLabel("🔄 Odśwież")
@@ -150,7 +149,13 @@ function getPanel() {
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
-    .setDescription("Panel eventów")
+    .setDescription("Wyślij panel eventów")
+    .addChannelOption(opt =>
+      opt.setName("kanał")
+        .setDescription("Wybierz kanał")
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(true)
+    )
 ];
 
 async function registerCommands() {
@@ -162,19 +167,29 @@ async function registerCommands() {
   );
 }
 
-// ================= INTERACTION =================
+// ================= INTERACTIONS =================
 
 client.on("interactionCreate", async (i) => {
 
+  // ===== KOMENDA =====
   if (i.isChatInputCommand()) {
     if (i.commandName === "panel") {
-      return i.reply({
+
+      const channel = i.options.getChannel("kanał");
+
+      await channel.send({
         embeds: [panelEmbed()],
         components: getPanel()
+      });
+
+      return i.reply({
+        content: "✅ Panel wysłany!",
+        ephemeral: true
       });
     }
   }
 
+  // ===== BUTTON =====
   if (i.isButton()) {
 
     if (i.customId === "refresh") {
@@ -204,6 +219,7 @@ client.on("interactionCreate", async (i) => {
     }
   }
 
+  // ===== SELECT =====
   if (i.isStringSelectMenu()) {
 
     if (i.customId === "roles") {
@@ -233,7 +249,7 @@ client.on("interactionCreate", async (i) => {
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 PANEL FIXED");
+  console.log("🔥 BOT 100% GOTOWY");
   await registerCommands();
 });
 
