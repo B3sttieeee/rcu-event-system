@@ -55,7 +55,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== XP =====
+// ===== XP SYSTEM =====
 function neededXP(level) {
   return 50 + level * 25;
 }
@@ -74,12 +74,16 @@ async function levelUp(member, level) {
   const embed = new EmbedBuilder()
     .setColor("#facc15")
     .setAuthor({
-      name: `${member.user.username} leveled up!`,
+      name: `${member.user.username} • Level Up`,
       iconURL: member.user.displayAvatarURL()
     })
     .setThumbnail(member.user.displayAvatarURL())
-    .setDescription(`🏆 **New Level:** ${level}`)
-    .setFooter({ text: "VYRN • by B3sttiee" });
+    .setDescription(
+      `🏆 **New Level Achieved!**\n\n` +
+      `🎯 You are now **Level ${level}**\n\n` +
+      `🚀 Keep chatting to earn more XP!`
+    )
+    .setFooter({ text: "VYRN Level System • by B3sttiee" });
 
   channel.send({ embeds: [embed] });
 }
@@ -116,21 +120,28 @@ client.on("messageCreate", (msg) => {
   const db = loadDB();
 
   if (!db.messages[msg.author.id]) {
-    db.messages[msg.author.id] = { total: 0, daily: 0, weekly: 0 };
+    db.messages[msg.author.id] = { total: 0, daily: 0, weekly: 0, monthly: 0 };
   }
 
   db.messages[msg.author.id].total++;
   db.messages[msg.author.id].daily++;
   db.messages[msg.author.id].weekly++;
+  db.messages[msg.author.id].monthly++;
 
   saveDB(db);
 
   addXP(msg.member);
 
   if (!msg.content.startsWith(".")) return;
+
   const cmd = msg.content.slice(1).split(" ")[0];
 
-  if (cmd === "rank") return msg.reply({ embeds: [rankEmbed(msg.member)] });
+  if (cmd === "rank" || cmd === "r")
+    return msg.reply({ embeds: [rankEmbed(msg.member)] });
+
+  if (cmd === "messages")
+    return msg.reply({ embeds: [messagesEmbed(msg.author)] });
+
   if (cmd === "top") return sendLeaderboard(msg, "total");
   if (cmd === "topdaily") return sendLeaderboard(msg, "daily");
   if (cmd === "topweekly") return sendLeaderboard(msg, "weekly");
@@ -142,49 +153,80 @@ function rankEmbed(member) {
   const data = db.xp[member.id] || { xp: 0, level: 0 };
 
   const needed = neededXP(data.level);
-  const percent = Math.floor((data.xp / needed) * 100);
+  const multiplier = getMultiplier(member);
+
+  const hasBoost = member.roles.cache.has(BOOST_ROLE);
 
   return new EmbedBuilder()
     .setColor(member.displayHexColor || "#22c55e")
     .setAuthor({
-      name: `${member.user.username} • Stats`,
+      name: `${member.user.username} • Profile`,
       iconURL: member.user.displayAvatarURL()
     })
     .setThumbnail(member.user.displayAvatarURL())
     .setDescription(
-      `🏆 **Level:** ${data.level}\n\n` +
-      `📊 **XP:** ${data.xp}/${needed} (${percent}%)\n\n` +
-      `⚡ **Multiplier:** x${getMultiplier(member)}`
-    );
+      `🏆 **Level Information**\n` +
+      `➤ Level: **${data.level}**\n` +
+      `➤ XP: **${data.xp}/${needed}**\n\n` +
+
+      `⚡ **XP Boost Status**\n` +
+      (hasBoost
+        ? `➤ Activated Booster Role\n➤ **${BOOST_MULTIPLIER}x More XP**`
+        : `➤ No Active Boost`)
+    )
+    .setFooter({ text: "VYRN System • by B3sttiee" });
 }
 
-// ===== PAGINATION =====
-async function sendLeaderboard(msg, type) {
+// ===== MESSAGES EMBED =====
+function messagesEmbed(user) {
+  const db = loadDB();
+  const data = db.messages[user.id] || {
+    total: 0, daily: 0, weekly: 0, monthly: 0
+  };
+
+  return new EmbedBuilder()
+    .setColor("#3b82f6")
+    .setAuthor({
+      name: `${user.username} • Message Activity`,
+      iconURL: user.displayAvatarURL()
+    })
+    .setThumbnail(user.displayAvatarURL())
+    .setDescription(
+      `📊 **Message Statistics**\n\n` +
+      `📅 Today: **${data.daily}**\n` +
+      `📆 Weekly: **${data.weekly}**\n` +
+      `🗓️ Monthly: **${data.monthly}**\n\n` +
+      `📌 Total Messages: **${data.total}**`
+    )
+    .setFooter({ text: "VYRN System • by B3sttiee" });
+}
+
+// ===== LEADERBOARD =====
+async function sendLeaderboard(ctx, type) {
   const db = loadDB();
 
-  let data;
-
-  if (type === "total") {
-    data = Object.entries(db.xp).sort((a, b) => b[1].level - a[1].level);
-  } else {
-    data = Object.entries(db.messages).sort((a, b) => b[1][type] - a[1][type]);
-  }
+  let data =
+    type === "total"
+      ? Object.entries(db.xp).sort((a, b) => b[1].level - a[1].level)
+      : Object.entries(db.messages).sort((a, b) => b[1][type] - a[1][type]);
 
   let page = 0;
   const perPage = 10;
 
-  const generateEmbed = () => {
+  const generate = () => {
     const slice = data.slice(page * perPage, (page + 1) * perPage);
 
-    let desc = slice.map((u, i) => {
-      return `**#${page * perPage + i + 1}** <@${u[0]}> • ${
-        type === "total" ? "LVL " + (u[1].level || 0) : u[1][type] || 0
-      }`;
-    }).join("\n");
+    const desc = slice
+      .map((u, i) => {
+        return `**#${page * perPage + i + 1}** <@${u[0]}> • ${
+          type === "total" ? "Level " + (u[1].level || 0) : u[1][type] || 0
+        }`;
+      })
+      .join("\n");
 
     return new EmbedBuilder()
-      .setTitle(`🏆 Leaderboard (${type})`)
-      .setColor("#3b82f6")
+      .setColor("#6366f1")
+      .setTitle(`🏆 Leaderboard • ${type.toUpperCase()}`)
       .setDescription(desc || "No data")
       .setFooter({ text: `Page ${page + 1}` });
   };
@@ -194,29 +236,24 @@ async function sendLeaderboard(msg, type) {
     new ButtonBuilder().setCustomId("next").setLabel("➡️").setStyle(ButtonStyle.Secondary)
   );
 
-  const message = await msg.reply({
-    embeds: [generateEmbed()],
-    components: [row]
-  });
+  const msg = await ctx.reply({ embeds: [generate()], components: [row] });
 
-  const collector = message.createMessageComponentCollector({ time: 60000 });
+  const collector = msg.createMessageComponentCollector({ time: 60000 });
 
   collector.on("collect", async (i) => {
-    if (i.user.id !== msg.author.id) return;
+    if (i.user.id !== ctx.author?.id && i.user.id !== ctx.user?.id) return;
 
     if (i.customId === "prev") page = Math.max(page - 1, 0);
     if (i.customId === "next") page++;
 
-    await i.update({
-      embeds: [generateEmbed()],
-      components: [row]
-    });
+    await i.update({ embeds: [generate()], components: [row] });
   });
 }
 
 // ===== SLASH =====
 const commands = [
-  new SlashCommandBuilder().setName("rank").setDescription("Rank"),
+  new SlashCommandBuilder().setName("rank").setDescription("Check your level"),
+  new SlashCommandBuilder().setName("messages").setDescription("Check messages"),
   new SlashCommandBuilder().setName("top").setDescription("Leaderboard"),
   new SlashCommandBuilder().setName("topdaily").setDescription("Daily leaderboard"),
   new SlashCommandBuilder().setName("topweekly").setDescription("Weekly leaderboard")
@@ -234,9 +271,11 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
 client.on("interactionCreate", async (i) => {
   if (!i.isChatInputCommand()) return;
 
-  if (i.commandName === "rank") {
+  if (i.commandName === "rank")
     return i.reply({ embeds: [rankEmbed(i.member)] });
-  }
+
+  if (i.commandName === "messages")
+    return i.reply({ embeds: [messagesEmbed(i.user)] });
 
   if (i.commandName === "top") return sendLeaderboard(i, "total");
   if (i.commandName === "topdaily") return sendLeaderboard(i, "daily");
@@ -245,7 +284,7 @@ client.on("interactionCreate", async (i) => {
 
 // ===== START =====
 client.once("ready", () => {
-  console.log("🔥 ELITE SYSTEM READY");
+  console.log("🔥 ULTRA SYSTEM READY");
 });
 
 client.login(TOKEN);
