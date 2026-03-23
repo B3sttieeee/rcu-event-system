@@ -6,7 +6,6 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
-  ChannelSelectMenuBuilder,
   REST,
   Routes,
   SlashCommandBuilder
@@ -65,193 +64,68 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= ROLE =================
+// ================= NEXT =================
 
-function getRole(type) {
-  if (type === "egg") return `<@&${ROLE_EGG}>`;
-  if (type === "merchant") return `<@&${ROLE_MERCHANT}>`;
-  return `<@&${ROLE_SPIN}>`;
+function getNextEvent() {
+  const now = getNowPL();
+  const hour = now.getHours();
+  const nextHour = (hour + 1) % 24;
+
+  const nextDate = new Date(now);
+  nextDate.setHours(nextHour, 0, 0, 0);
+
+  if (nextHour <= hour) nextDate.setDate(nextDate.getDate() + 1);
+
+  return {
+    type: getEventByHour(nextHour),
+    timestamp: Math.floor(nextDate.getTime() / 1000)
+  };
 }
 
-// ================= EMBED BUILDER =================
+// ================= PANEL EMBED =================
 
-function baseFooter(embed) {
-  return embed
+function panelEmbed() {
+  const now = getNowPL();
+  const current = getEventByHour(now.getHours());
+  const next = getNextEvent();
+
+  return new EmbedBuilder()
+    .setColor("#5865F2")
+    .setTitle("🎮 PANEL EVENTÓW")
+    .setDescription(
+`🟢 **Aktualny Event:** \`${current.toUpperCase()}\`
+
+🔜 **Następny Event:** \`${next.type.toUpperCase()}\`
+📅 <t:${next.timestamp}:F>`
+    )
     .setFooter({ text: "Twórca: B3sttiee" })
     .setTimestamp();
 }
 
-// ===== MAIN EVENT EMBEDS =====
-
-function getEventEmbed(type) {
-
-  if (type === "egg") {
-    return new EmbedBuilder()
-      .setColor("#FFD700")
-      .setTitle("🥚 RNG EGG EVENT")
-      .setDescription(
-`**➤ Otwieraj jajka i zdobywaj punkty!**
-
-► Im lepsze pety zdobędziesz, tym więcej punktów  
-► Więcej punktów = wyższy tier  
-► Wyższy tier = lepsze nagrody na koniec  
-
-✨ Graj aktywnie i zgarnij najlepsze bonusy!`
-      )
-      .setThumbnail("https://imgur.com/JqyeITl.png");
-  }
-
-  if (type === "merchant") {
-    return [
-      new EmbedBuilder()
-        .setColor("#f39c12")
-        .setTitle("🍯 HONEY MERCHANT")
-        .setDescription(
-`**➤ Zdobywaj miód i kupuj itemy!**
-
-► 🌍 Bee World  
-► 🛒 Specjalne oferty  
-► 💎 Szansa na Supreme (110%)`
-        )
-        .setThumbnail("https://imgur.com/zhLC0zn.png"),
-
-      new EmbedBuilder()
-        .setColor("#e74c3c")
-        .setTitle("💀 BOSS MERCHANT")
-        .setDescription(
-`**➤ Zdobywaj Tokeny Bossa i kupuj nagrody!**
-
-► ⚔️ Tokeny z bossów  
-► 🛒 Sklep eventowy  
-► 💎 Szansa na Supreme (125%)`
-        )
-        .setThumbnail("https://imgur.com/yFvb6jY.png")
-    ];
-  }
-
-  if (type === "spin") {
-    return new EmbedBuilder()
-      .setColor("#9b59b6")
-      .setTitle("🎡 DEV SPIN EVENT")
-      .setDescription(
-`**➤ Zakręć kołem i wygraj nagrody!**
-
-► 🎁 Losowe nagrody  
-► 💎 Rzadkie dropy  
-► ✨ Szansa na Supreme  
-
-🎯 Spróbuj swojego szczęścia!`
-      )
-      .setThumbnail("https://imgur.com/NJI7052.png");
-  }
-}
-
-// ===== REMINDER EMBED =====
-
-function reminderEmbed(type) {
-  return baseFooter(
-    new EmbedBuilder()
-      .setColor("#e67e22")
-      .setTitle("⏳ EVENT ZA 5 MINUT!")
-      .setDescription(`Przygotuj się na **${type.toUpperCase()}**! 🔥`)
-  );
-}
-
-// ================= DM =================
-
-async function sendDM(type, embed) {
-  const db = loadDB();
-
-  for (const id in db.dm) {
-    if (!db.dm[id].includes(type)) continue;
-
-    try {
-      const user = await client.users.fetch(id);
-      await user.send({ embeds: [embed] });
-    } catch {}
-  }
-}
-
-// ================= EVENT =================
-
-let lastHour = null;
-let lastReminder = null;
-
-async function sendEvent() {
-  const now = getNowPL();
-  const hour = now.getHours();
-
-  if (lastHour === hour) return;
-  lastHour = hour;
-
-  const channel = await client.channels.fetch(CHANNEL_ID);
-  const type = getEventByHour(hour);
-
-  await channel.send(`${getRole(type)} 🚀 **EVENT WYSTARTOWAŁ!**`);
-
-  const embed = getEventEmbed(type);
-
-  if (Array.isArray(embed)) {
-    for (const e of embed) {
-      await channel.send({ embeds: [baseFooter(e)] });
-    }
-  } else {
-    await channel.send({ embeds: [baseFooter(embed)] });
-  }
-
-  await sendDM(type, baseFooter(getEventEmbed(type)));
-}
-
-// ================= REMINDER =================
-
-async function reminder() {
-  const now = getNowPL();
-  const hour = now.getHours();
-
-  if (now.getMinutes() === 55 && lastReminder !== hour) {
-    lastReminder = hour;
-
-    const nextType = getEventByHour((hour + 1) % 24);
-    const channel = await client.channels.fetch(CHANNEL_ID);
-
-    const embed = reminderEmbed(nextType);
-
-    await channel.send({
-      content: `${getRole(nextType)}`,
-      embeds: [embed]
-    });
-
-    await sendDM(nextType, embed);
-  }
-}
-
-// ================= LOOP =================
-
-setInterval(() => {
-  const now = getNowPL();
-
-  if (now.getMinutes() === 0) sendEvent();
-
-  reminder();
-
-}, 1000);
-
-// ================= PANEL =================
+// ================= PANEL UI =================
 
 function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
+        .setCustomId("current")
+        .setLabel("🟢 Aktualny Event")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("next")
+        .setLabel("🔜 Następny Event")
+        .setStyle(ButtonStyle.Primary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
         .setCustomId("refresh")
         .setLabel("🔄 Odśwież")
-        .setStyle(ButtonStyle.Primary)
+        .setStyle(ButtonStyle.Secondary)
     ),
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("roles")
         .setPlaceholder("🎭 Role eventów")
-        .setMinValues(1)
-        .setMaxValues(3)
         .addOptions([
           { label: "RNG EGG", value: ROLE_EGG },
           { label: "MERCHANT", value: ROLE_MERCHANT },
@@ -262,8 +136,6 @@ function getPanel() {
       new StringSelectMenuBuilder()
         .setCustomId("dm")
         .setPlaceholder("📩 Powiadomienia DM")
-        .setMinValues(1)
-        .setMaxValues(3)
         .addOptions([
           { label: "EGG", value: "egg" },
           { label: "MERCHANT", value: "merchant" },
@@ -278,12 +150,7 @@ function getPanel() {
 const commands = [
   new SlashCommandBuilder()
     .setName("panel")
-    .setDescription("Wyślij panel eventów")
-    .addChannelOption(opt =>
-      opt.setName("kanał")
-        .setDescription("Gdzie wysłać panel")
-        .setRequired(true)
-    )
+    .setDescription("Panel eventów")
 ];
 
 async function registerCommands() {
@@ -295,27 +162,45 @@ async function registerCommands() {
   );
 }
 
-// ================= INTERACTIONS =================
+// ================= INTERACTION =================
 
 client.on("interactionCreate", async (i) => {
 
   if (i.isChatInputCommand()) {
     if (i.commandName === "panel") {
-
-      const channel = i.options.getChannel("kanał");
-
-      await channel.send({
-        content: "🎮 **PANEL EVENTÓW**",
+      return i.reply({
+        embeds: [panelEmbed()],
         components: getPanel()
       });
-
-      return i.reply({ content: "✅ Panel wysłany", ephemeral: true });
     }
   }
 
   if (i.isButton()) {
+
     if (i.customId === "refresh") {
-      return i.reply({ content: "🔄 Odświeżono", ephemeral: true });
+      return i.update({
+        embeds: [panelEmbed()],
+        components: getPanel()
+      });
+    }
+
+    if (i.customId === "current") {
+      const now = getNowPL();
+      const current = getEventByHour(now.getHours());
+
+      return i.reply({
+        content: `🟢 Aktualny Event: **${current.toUpperCase()}**`,
+        ephemeral: true
+      });
+    }
+
+    if (i.customId === "next") {
+      const next = getNextEvent();
+
+      return i.reply({
+        content: `🔜 Następny Event: **${next.type.toUpperCase()}**\n<t:${next.timestamp}:R>`,
+        ephemeral: true
+      });
     }
   }
 
@@ -348,7 +233,7 @@ client.on("interactionCreate", async (i) => {
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 BOT ONLINE ULTRA");
+  console.log("🔥 PANEL FIXED");
   await registerCommands();
 });
 
