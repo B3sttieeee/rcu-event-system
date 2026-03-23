@@ -6,6 +6,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
   StringSelectMenuBuilder,
+  ChannelSelectMenuBuilder,
   REST,
   Routes,
   SlashCommandBuilder
@@ -24,7 +25,7 @@ const client = new Client({
 
 // ================= CONFIG =================
 
-const CHANNEL_ID = "1484937784283369502";
+let CHANNEL_ID = "1484937784283369502";
 
 const ROLE_EGG = "1476000993119568105";
 const ROLE_MERCHANT = "1476000993660502139";
@@ -64,52 +65,6 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= NEXT EVENT =================
-
-function getNextEvent() {
-  const now = getNowPL();
-  const hour = now.getHours();
-  const nextHour = (hour + 1) % 24;
-
-  const nextDate = new Date(now);
-  nextDate.setHours(nextHour, 0, 0, 0);
-
-  if (nextHour <= hour) {
-    nextDate.setDate(nextDate.getDate() + 1);
-  }
-
-  const diff = nextDate - now;
-
-  return {
-    type: getEventByHour(nextHour),
-    minutes: Math.floor(diff / 60000),
-    seconds: Math.floor((diff % 60000) / 1000),
-    timestamp: Math.floor(nextDate.getTime() / 1000)
-  };
-}
-
-// ================= PANEL EMBED =================
-
-function buildPanelEmbed() {
-  const now = getNowPL();
-  const current = getEventByHour(now.getHours());
-  const next = getNextEvent();
-
-  return new EmbedBuilder()
-    .setColor("#5865F2")
-    .setTitle("🎮 PANEL EVENTÓW")
-    .setDescription(
-`🟢 **Aktualny Event:** ${current.toUpperCase()}
-
-🔜 **Następny Event:** ${next.type.toUpperCase()}
-⏱️ **Start za:** ${next.minutes}m ${next.seconds}s
-
-📅 <t:${next.timestamp}:F>`
-    )
-    .setFooter({ text: "Twórca: B3sttiee" })
-    .setTimestamp();
-}
-
 // ================= ROLE =================
 
 function getRole(type) {
@@ -118,15 +73,31 @@ function getRole(type) {
   return `<@&${ROLE_SPIN}>`;
 }
 
-// ================= EMBEDS EVENT =================
+// ================= EMBED BUILDER =================
 
-function getEmbed(type) {
+function baseFooter(embed) {
+  return embed
+    .setFooter({ text: "Twórca: B3sttiee" })
+    .setTimestamp();
+}
+
+// ===== MAIN EVENT EMBEDS =====
+
+function getEventEmbed(type) {
 
   if (type === "egg") {
     return new EmbedBuilder()
       .setColor("#FFD700")
       .setTitle("🥚 RNG EGG EVENT")
-      .setDescription(`**➤ Otwieraj jajka i zdobywaj punkty!**`)
+      .setDescription(
+`**➤ Otwieraj jajka i zdobywaj punkty!**
+
+► Im lepsze pety zdobędziesz, tym więcej punktów  
+► Więcej punktów = wyższy tier  
+► Wyższy tier = lepsze nagrody na koniec  
+
+✨ Graj aktywnie i zgarnij najlepsze bonusy!`
+      )
       .setThumbnail("https://imgur.com/JqyeITl.png");
   }
 
@@ -135,13 +106,25 @@ function getEmbed(type) {
       new EmbedBuilder()
         .setColor("#f39c12")
         .setTitle("🍯 HONEY MERCHANT")
-        .setDescription(`**➤ Zdobywaj miód i kupuj itemy!**`)
+        .setDescription(
+`**➤ Zdobywaj miód i kupuj itemy!**
+
+► 🌍 Bee World  
+► 🛒 Specjalne oferty  
+► 💎 Szansa na Supreme (110%)`
+        )
         .setThumbnail("https://imgur.com/zhLC0zn.png"),
 
       new EmbedBuilder()
         .setColor("#e74c3c")
         .setTitle("💀 BOSS MERCHANT")
-        .setDescription(`**➤ Zdobywaj Tokeny Bossa!**`)
+        .setDescription(
+`**➤ Zdobywaj Tokeny Bossa i kupuj nagrody!**
+
+► ⚔️ Tokeny z bossów  
+► 🛒 Sklep eventowy  
+► 💎 Szansa na Supreme (125%)`
+        )
         .setThumbnail("https://imgur.com/yFvb6jY.png")
     ];
   }
@@ -150,14 +133,33 @@ function getEmbed(type) {
     return new EmbedBuilder()
       .setColor("#9b59b6")
       .setTitle("🎡 DEV SPIN EVENT")
-      .setDescription(`**➤ Zakręć kołem i wygraj!**`)
+      .setDescription(
+`**➤ Zakręć kołem i wygraj nagrody!**
+
+► 🎁 Losowe nagrody  
+► 💎 Rzadkie dropy  
+► ✨ Szansa na Supreme  
+
+🎯 Spróbuj swojego szczęścia!`
+      )
       .setThumbnail("https://imgur.com/NJI7052.png");
   }
 }
 
+// ===== REMINDER EMBED =====
+
+function reminderEmbed(type) {
+  return baseFooter(
+    new EmbedBuilder()
+      .setColor("#e67e22")
+      .setTitle("⏳ EVENT ZA 5 MINUT!")
+      .setDescription(`Przygotuj się na **${type.toUpperCase()}**! 🔥`)
+  );
+}
+
 // ================= DM =================
 
-async function sendDM(type, msg) {
+async function sendDM(type, embed) {
   const db = loadDB();
 
   for (const id in db.dm) {
@@ -165,7 +167,7 @@ async function sendDM(type, msg) {
 
     try {
       const user = await client.users.fetch(id);
-      await user.send(msg);
+      await user.send({ embeds: [embed] });
     } catch {}
   }
 }
@@ -185,17 +187,19 @@ async function sendEvent() {
   const channel = await client.channels.fetch(CHANNEL_ID);
   const type = getEventByHour(hour);
 
-  await channel.send(`${getRole(type)} 🚀 EVENT WYSTARTOWAŁ!`);
+  await channel.send(`${getRole(type)} 🚀 **EVENT WYSTARTOWAŁ!**`);
 
-  const embed = getEmbed(type);
+  const embed = getEventEmbed(type);
 
   if (Array.isArray(embed)) {
-    for (const e of embed) await channel.send({ embeds: [e] });
+    for (const e of embed) {
+      await channel.send({ embeds: [baseFooter(e)] });
+    }
   } else {
-    await channel.send({ embeds: [embed] });
+    await channel.send({ embeds: [baseFooter(embed)] });
   }
 
-  await sendDM(type, `🚀 EVENT ${type.toUpperCase()} WYSTARTOWAŁ!`);
+  await sendDM(type, baseFooter(getEventEmbed(type)));
 }
 
 // ================= REMINDER =================
@@ -210,8 +214,14 @@ async function reminder() {
     const nextType = getEventByHour((hour + 1) % 24);
     const channel = await client.channels.fetch(CHANNEL_ID);
 
-    await channel.send(`${getRole(nextType)} ⏳ EVENT ZA 5 MINUT!`);
-    await sendDM(nextType, `⏳ EVENT ${nextType.toUpperCase()} ZA 5 MINUT!`);
+    const embed = reminderEmbed(nextType);
+
+    await channel.send({
+      content: `${getRole(nextType)}`,
+      embeds: [embed]
+    });
+
+    await sendDM(nextType, embed);
   }
 }
 
@@ -239,11 +249,11 @@ function getPanel() {
     new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder()
         .setCustomId("roles")
-        .setPlaceholder("🎭 Wybierz role")
+        .setPlaceholder("🎭 Role eventów")
         .setMinValues(1)
         .setMaxValues(3)
         .addOptions([
-          { label: "EGG", value: ROLE_EGG },
+          { label: "RNG EGG", value: ROLE_EGG },
           { label: "MERCHANT", value: ROLE_MERCHANT },
           { label: "SPIN", value: ROLE_SPIN }
         ])
@@ -266,7 +276,14 @@ function getPanel() {
 // ================= COMMAND =================
 
 const commands = [
-  new SlashCommandBuilder().setName("panel").setDescription("Panel eventów")
+  new SlashCommandBuilder()
+    .setName("panel")
+    .setDescription("Wyślij panel eventów")
+    .addChannelOption(opt =>
+      opt.setName("kanał")
+        .setDescription("Gdzie wysłać panel")
+        .setRequired(true)
+    )
 ];
 
 async function registerCommands() {
@@ -278,25 +295,27 @@ async function registerCommands() {
   );
 }
 
-// ================= INTERACTION =================
+// ================= INTERACTIONS =================
 
 client.on("interactionCreate", async (i) => {
 
   if (i.isChatInputCommand()) {
     if (i.commandName === "panel") {
-      return i.reply({
-        embeds: [buildPanelEmbed()],
+
+      const channel = i.options.getChannel("kanał");
+
+      await channel.send({
+        content: "🎮 **PANEL EVENTÓW**",
         components: getPanel()
       });
+
+      return i.reply({ content: "✅ Panel wysłany", ephemeral: true });
     }
   }
 
   if (i.isButton()) {
     if (i.customId === "refresh") {
-      return i.update({
-        embeds: [buildPanelEmbed()],
-        components: getPanel()
-      });
+      return i.reply({ content: "🔄 Odświeżono", ephemeral: true });
     }
   }
 
@@ -329,7 +348,7 @@ client.on("interactionCreate", async (i) => {
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 BOT ONLINE FINAL FIX");
+  console.log("🔥 BOT ONLINE ULTRA");
   await registerCommands();
 });
 
