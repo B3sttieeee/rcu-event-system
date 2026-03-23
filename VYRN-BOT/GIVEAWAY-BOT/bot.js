@@ -1,4 +1,29 @@
 // Discord Giveaway Bot using discord.js v14
+// IMPORTANT: Railway FIX
+// Make sure you also have package.json in repo root:
+/*
+{
+  "name": "giveaway-bot",
+  "version": "1.0.0",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "ms": "^2.1.3",
+    "dotenv": "^16.0.0"
+  }
+}
+*/
+
+// Also add .env file locally (Railway -> Variables):
+// TOKEN=your_bot_token_here
+
+// If Railway still fails, set START COMMAND to:
+// npm start
+
+// =========================
 // Features:
 // - /giveaway-create
 // - /giveaway-role (extra entries)
