@@ -1,20 +1,18 @@
 const {
   Client,
   GatewayIntentBits,
-  EmbedBuilder,
   REST,
   Routes,
   SlashCommandBuilder
 } = require("discord.js");
 
+const { createCanvas, loadImage } = require("canvas");
 const fs = require("fs");
 
 // ================= CONFIG =================
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
-
-const LEVEL_CHANNEL = "1475999590716018719";
 
 // ================= CLIENT =================
 const client = new Client({
@@ -30,10 +28,7 @@ const client = new Client({
 const DB_PATH = "./data.json";
 
 if (!fs.existsSync(DB_PATH)) {
-  fs.writeFileSync(DB_PATH, JSON.stringify({
-    xp: {},
-    messages: {}
-  }, null, 2));
+  fs.writeFileSync(DB_PATH, JSON.stringify({ xp: {}, messages: {} }, null, 2));
 }
 
 function loadDB() {
@@ -52,59 +47,16 @@ function neededXP(level) {
   return Math.floor(120 * Math.pow(1.22, level));
 }
 
-function progressBar(current, max, size = 14) {
-  const percent = current / max;
-  const progress = Math.round(size * percent);
-  return "🟩".repeat(progress) + "⬛".repeat(size - progress);
-}
-
-const separator = "✨━━━━━━━━━━━━━━━━━━━━✨";
-
-// ================= MESSAGE TRACK =================
-
-function getWeek() {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 1);
-  return Math.ceil(((now - start) / 86400000 + start.getDay() + 1) / 7);
-}
+// ================= TRACK =================
 
 function trackMessage(userId) {
   const db = loadDB();
 
   if (!db.messages[userId]) {
-    db.messages[userId] = {
-      total: 0,
-      daily: 0,
-      weekly: 0,
-      monthly: 0,
-      lastDay: new Date().toISOString().slice(0,10),
-      lastWeek: getWeek(),
-      lastMonth: new Date().getMonth()
-    };
+    db.messages[userId] = { total: 0 };
   }
 
-  const user = db.messages[userId];
-  const now = new Date();
-
-  if (user.lastDay !== now.toISOString().slice(0,10)) {
-    user.daily = 0;
-    user.lastDay = now.toISOString().slice(0,10);
-  }
-
-  if (user.lastWeek !== getWeek()) {
-    user.weekly = 0;
-    user.lastWeek = getWeek();
-  }
-
-  if (user.lastMonth !== now.getMonth()) {
-    user.monthly = 0;
-    user.lastMonth = now.getMonth();
-  }
-
-  user.total++;
-  user.daily++;
-  user.weekly++;
-  user.monthly++;
+  db.messages[userId].total++;
 
   saveDB(db);
 }
@@ -137,7 +89,7 @@ function addXP(userId) {
 
 // ================= MESSAGE EVENT =================
 
-client.on("messageCreate", async (msg) => {
+client.on("messageCreate", (msg) => {
   if (msg.author.bot) return;
   if (msg.content.length < 5) return;
 
@@ -151,33 +103,7 @@ client.on("messageCreate", async (msg) => {
 
   cooldown.set(msg.author.id, now);
 
-  const result = addXP(msg.author.id);
-
-  if (result.leveled) {
-    const channel = await client.channels.fetch(LEVEL_CHANNEL);
-
-    const embed = new EmbedBuilder()
-      .setColor("#FFD700")
-      .setAuthor({
-        name: `${msg.author.username} awansował! • by B3sttiee`,
-        iconURL: msg.author.displayAvatarURL()
-      })
-      .setDescription(
-`🎉 **Nowy poziom!**
-
-${separator}
-
-🏆 Poziom: **${result.level}**
-
-${separator}
-
-🚀 Lecisz dalej!`
-      )
-      .setThumbnail(msg.author.displayAvatarURL())
-      .setTimestamp();
-
-    channel.send({ embeds: [embed] });
-  }
+  addXP(msg.author.id);
 });
 
 // ================= COMMANDS =================
@@ -186,7 +112,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("rank")
-    .setDescription("Twój poziom"),
+    .setDescription("Twój poziom (ładny panel)"),
 
   new SlashCommandBuilder()
     .setName("top")
@@ -194,7 +120,7 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName("messages")
-    .setDescription("Statystyki wiadomości")
+    .setDescription("Ilość wiadomości")
     .addUserOption(o =>
       o.setName("user").setDescription("Użytkownik")
     )
@@ -218,32 +144,76 @@ client.on("interactionCreate", async (i) => {
 
   const db = loadDB();
 
-  // ===== RANK =====
+  // ===== RANK (CANVAS) =====
   if (i.commandName === "rank") {
+
     const data = db.xp[i.user.id] || { xp: 0, level: 0 };
     const needed = neededXP(data.level);
-    const percent = Math.floor((data.xp / needed) * 100);
+    const percent = data.xp / needed;
 
-    const embed = new EmbedBuilder()
-      .setColor("#5865F2")
-      .setAuthor({
-        name: `${i.user.username} • Statystyki • by B3sttiee`,
-        iconURL: i.user.displayAvatarURL()
-      })
-      .setDescription(
-`🎖️ **Poziom:** \`${data.level}\`
+    const canvas = createCanvas(800, 250);
+    const ctx = canvas.getContext("2d");
 
-${separator}
+    // TŁO
+    ctx.fillStyle = "#0f1115";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-${progressBar(data.xp, needed)} **${percent}%**
+    // PANEL
+    ctx.fillStyle = "#1c1f26";
+    ctx.fillRect(20, 20, 760, 210);
 
-${separator}
+    // AVATAR
+    const avatar = await loadImage(i.user.displayAvatarURL({ extension: "png" }));
+    ctx.drawImage(avatar, 40, 60, 120, 120);
 
-📈 XP: \`${data.xp}/${needed}\``
-      )
-      .setTimestamp();
+    // NICK
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 28px sans-serif";
+    ctx.fillText(i.user.username, 180, 90);
 
-    return i.reply({ embeds: [embed] });
+    // LEVEL BOX
+    ctx.fillStyle = "#2a2d35";
+    ctx.fillRect(600, 40, 150, 60);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "20px sans-serif";
+    ctx.fillText("LEVEL", 640, 65);
+
+    ctx.font = "bold 26px sans-serif";
+    ctx.fillText(`${data.level}`, 660, 95);
+
+    // XP BOX
+    ctx.fillStyle = "#2a2d35";
+    ctx.fillRect(600, 120, 150, 60);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "18px sans-serif";
+    ctx.fillText("XP", 650, 145);
+
+    ctx.font = "bold 20px sans-serif";
+    ctx.fillText(`${data.xp}/${needed}`, 620, 175);
+
+    // PROGRESS BG
+    ctx.fillStyle = "#2f3136";
+    ctx.fillRect(180, 140, 380, 25);
+
+    // PROGRESS
+    ctx.fillStyle = "#ffd700";
+    ctx.fillRect(180, 140, 380 * percent, 25);
+
+    // %
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "16px sans-serif";
+    ctx.fillText(`${Math.floor(percent * 100)}%`, 570, 160);
+
+    const buffer = canvas.toBuffer();
+
+    return i.reply({
+      files: [{
+        attachment: buffer,
+        name: "rank.png"
+      }]
+    });
   }
 
   // ===== TOP =====
@@ -252,23 +222,14 @@ ${separator}
       .sort((a, b) => b[1].level - a[1].level)
       .slice(0, 10);
 
-    let desc = "";
-    const medals = ["🥇", "🥈", "🥉"];
+    let text = "🏆 Ranking:\n\n";
 
     for (let x = 0; x < sorted.length; x++) {
       const user = await client.users.fetch(sorted[x][0]);
-      const medal = medals[x] || `**${x + 1}.**`;
-
-      desc += `${medal} **${user.username}**\n🎖️ Poziom: \`${sorted[x][1].level}\`\n\n`;
+      text += `${x + 1}. ${user.username} — lvl ${sorted[x][1].level}\n`;
     }
 
-    const embed = new EmbedBuilder()
-      .setColor("#FFD700")
-      .setTitle("🏆 Ranking Serwera • by B3sttiee")
-      .setDescription(desc || "Brak danych")
-      .setTimestamp();
-
-    return i.reply({ embeds: [embed] });
+    return i.reply({ content: text });
   }
 
   // ===== MESSAGES =====
@@ -276,38 +237,16 @@ ${separator}
     const user = i.options.getUser("user") || i.user;
     const data = db.messages[user.id];
 
-    if (!data) return i.reply("Brak danych");
-
-    const embed = new EmbedBuilder()
-      .setColor("#2ecc71")
-      .setAuthor({
-        name: `${user.username} • Aktywność • by B3sttiee`,
-        iconURL: user.displayAvatarURL()
-      })
-      .setDescription(
-`💬 **Statystyki wiadomości**
-
-${separator}
-
-📊 Łącznie: \`${data.total}\`
-📅 Dzisiaj: \`${data.daily}\`
-📆 Tydzień: \`${data.weekly}\`
-🗓 Miesiąc: \`${data.monthly}\`
-
-${separator}
-
-📈 Średnia: **${Math.floor(data.total / 30) || 0} msg/dzień**`
-      )
-      .setTimestamp();
-
-    return i.reply({ embeds: [embed] });
+    return i.reply(
+      `💬 ${user.username} napisał: ${data?.total || 0} wiadomości`
+    );
   }
 });
 
 // ================= READY =================
 
 client.once("clientReady", async () => {
-  console.log("🔥 BOT PRO ONLINE");
+  console.log("🔥 BOT DZIAŁA");
   await registerCommands();
 });
 
