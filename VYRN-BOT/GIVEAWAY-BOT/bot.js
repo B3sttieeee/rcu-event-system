@@ -91,29 +91,27 @@ function buildEmbed(data) {
 
   if (roleEntries.size > 0) {
     extra = [...roleEntries.entries()]
-      .map(([id, val]) => `• <@&${id}> (+${val})`)
+      .map(([id, val]) => `<@&${id}> (+${val})`)
       .join('\n');
   }
 
   return new EmbedBuilder()
     .setColor('#2b2d31')
-    .setDescription(
-`🎉 **GIVEAWAY**
+    .setTitle('🎉 GIVEAWAY')
+    .setDescription(`🎁 **${data.reward}**\n\nKliknij 🎉 aby wziąć udział!`)
 
-🎁 **Nagroda:** ${data.reward}
+    .addFields(
+      { name: '👥 Uczestnicy', value: `**${data.participants.length}**`, inline: true },
+      { name: '🏆 Zwycięzcy', value: `**${data.winners}**`, inline: true },
+      { name: '⏳ Koniec', value: `<t:${Math.floor(data.endTime / 1000)}:R>`, inline: true }
+    )
 
-👥 **Uczestnicy:** ${data.participants.length}
-🏆 **Zwycięzcy:** ${data.winners}
-⏳ **Koniec:** <t:${Math.floor(data.endTime / 1000)}:R>
+    .addFields(
+      { name: '🎟 Bonusowe szanse', value: extra, inline: false },
+      { name: '🔒 Wymagana rola', value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak', inline: false }
+    )
 
-🎟 **Bonusowe szanse:**
-${extra}
-
-🔒 **Wymagana rola:**
-${data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak'}
-
-Kliknij 🎉 aby dołączyć`
-    );
+    .setFooter({ text: '🎉 Giveaway System' });
 }
 
 // ================== LIVE UPDATE ==================
@@ -244,8 +242,8 @@ async function endGiveaway(id) {
     pool.splice(index, 1);
   }
 
-  // 🔥 PUBLIC MESSAGE (NOWOŚĆ)
-  channel.send(`🎉 **Zwycięzcy giveaway (${data.reward})**:\n<@${winners.join('>\n<@')}>`);
+  // 🔥 PUBLIC WINNER MESSAGE
+  channel.send(`🎉 **Zwycięzcy (${data.reward})**:\n<@${winners.join('>\n<@')}>`);
 
   // 🔒 PRIVATE CHANNEL
   const cleanName = data.reward.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 20);
