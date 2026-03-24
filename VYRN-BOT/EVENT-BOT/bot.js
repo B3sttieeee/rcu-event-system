@@ -85,49 +85,40 @@ function getCountdown(ts) {
   const m = Math.floor((diff % 3600) / 60);
   const s = diff % 60;
 
-  return `⏳ ${m}m ${s}s`;
+  return `${m}m ${s}s`;
 }
 
-// ================= EMBED =================
+// ================= EMBED (NOWY DESIGN) =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
   return new EmbedBuilder()
     .setColor("#5865F2")
-    .setTitle("✨ Event Panel")
-    .setDescription("**Automated Event System**")
+    .setTitle("🎮 EVENTS PANEL")
+    .setDescription("Stay updated with all upcoming events")
+
+    .setImage("https://imgur.com/sOU3JWV.png") // TWÓJ OBRAZEK
+
     .addFields(
       {
-        name: "🟢 Current Event",
-        value: `> **${current.toUpperCase()}**`,
+        name: "🟢 CURRENT EVENT",
+        value: `\`\`\`\n${current.toUpperCase()}\n\`\`\``,
         inline: true
       },
       {
-        name: "⏭️ Next Event",
-        value: `> **${next.type.toUpperCase()}**\n${getCountdown(next.timestamp)}`,
+        name: "⏭️ NEXT EVENT",
+        value: `\`\`\`\n${next.type.toUpperCase()}\n\`\`\``,
         inline: true
+      },
+      {
+        name: "⏳ STARTS IN",
+        value: `\`\`\`\n${getCountdown(next.timestamp)}\n\`\`\``,
+        inline: false
       }
     )
-    .addFields({
-      name: "⠀",
-      value: "━━━━━━━━━━━━━━━━━━━━━━",
-    })
-    .setFooter({ text: "By B3sttiee • Auto Refresh 10s" })
-    .setTimestamp();
-}
 
-// ================= DM EMBED =================
-function dmEmbed(type, status) {
-  return new EmbedBuilder()
-    .setColor(status === "start" ? "#00ff99" : "#ffaa00")
-    .setTitle(status === "start" ? "🚀 Event Started" : "⏳ Event Incoming")
-    .setDescription(
-      status === "start"
-        ? `> Event **${type.toUpperCase()}** has just started!`
-        : `> Event **${type.toUpperCase()}** starts in **5 minutes**`
-    )
-    .setFooter({ text: "Event Notification" })
+    .setFooter({ text: "By B3sttiee • Auto refresh 10s" })
     .setTimestamp();
 }
 
@@ -147,7 +138,7 @@ function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
-      .setPlaceholder("Choose event roles")
+      .setPlaceholder("Select event roles")
       .addOptions([
         { label: "Egg Event", value: "egg" },
         { label: "Merchant Event", value: "merchant" },
@@ -160,7 +151,7 @@ function dmMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
-      .setPlaceholder("Choose notifications")
+      .setPlaceholder("Select DM notifications")
       .addOptions([
         { label: "Egg", value: "egg" },
         { label: "Merchant", value: "merchant" },
@@ -204,147 +195,9 @@ async function startPanel() {
   }, 10000);
 }
 
-// ================= PING SYSTEM =================
-let lastNotify = "";
-
-async function deleteOldPing(channel, db) {
-  if (db.lastPingId) {
-    try {
-      const msg = await channel.messages.fetch(db.lastPingId);
-      await msg.delete();
-    } catch {}
-    db.lastPingId = null;
-    saveDB(db);
-  }
-}
-
-async function sendPing(channel, content, db) {
-  await deleteOldPing(channel, db);
-
-  const msg = await channel.send(content);
-  db.lastPingId = msg.id;
-  saveDB(db);
-
-  return msg;
-}
-
-// ================= NOTIFICATIONS =================
-setInterval(async () => {
-  const now = getNowPL();
-  const min = now.getMinutes();
-  const hour = now.getHours();
-
-  const channel = await client.channels.fetch(CHANNEL_ID);
-  const db = loadDB();
-
-  const current = getCurrentEvent();
-  const next = getNextEvent();
-
-  if (min === 55 && lastNotify !== `${hour}-5`) {
-    lastNotify = `${hour}-5`;
-
-    await sendPing(
-      channel,
-      `⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** in 5 minutes!`,
-      db
-    );
-
-    for (const userId in db.dm) {
-      if (db.dm[userId].includes(next.type)) {
-        try {
-          const user = await client.users.fetch(userId);
-          await user.send({
-            content: `<@${userId}>`,
-            embeds: [dmEmbed(next.type, "soon")]
-          });
-        } catch {}
-      }
-    }
-  }
-
-  if (min === 0 && lastNotify !== `${hour}-start`) {
-    lastNotify = `${hour}-start`;
-
-    await sendPing(
-      channel,
-      `🚀 <@&${ROLES[current]}> Event **${current.toUpperCase()}** START!`,
-      db
-    );
-
-    for (const userId in db.dm) {
-      if (db.dm[userId].includes(current)) {
-        try {
-          const user = await client.users.fetch(userId);
-          await user.send({
-            content: `<@${userId}>`,
-            embeds: [dmEmbed(current, "start")]
-          });
-        } catch {}
-      }
-    }
-
-    setTimeout(async () => {
-      await deleteOldPing(channel, loadDB());
-    }, 15 * 60 * 1000);
-  }
-
-}, 10000);
-
-// ================= INTERACTIONS =================
-client.on("interactionCreate", async (i) => {
-
-  const db = loadDB();
-
-  if (i.isButton()) {
-
-    if (i.customId === "refresh") {
-      return i.update({ embeds: [panelEmbed()], components: getPanel() });
-    }
-
-    if (i.customId === "pick_roles") {
-      return i.reply({
-        content: "🎭 Select your event roles:",
-        components: [rolesMenu()],
-        ephemeral: true
-      });
-    }
-
-    if (i.customId === "pick_dm") {
-      return i.reply({
-        content: "📩 Select DM notifications:",
-        components: [dmMenu()],
-        ephemeral: true
-      });
-    }
-  }
-
-  if (i.isStringSelectMenu()) {
-
-    if (i.customId === "roles_menu") {
-      const member = await i.guild.members.fetch(i.user.id);
-
-      for (const val of i.values) {
-        const role = ROLES[val];
-
-        if (member.roles.cache.has(role)) await member.roles.remove(role);
-        else await member.roles.add(role);
-      }
-
-      return i.reply({ content: "✅ Roles updated", ephemeral: true });
-    }
-
-    if (i.customId === "dm_menu") {
-      db.dm[i.user.id] = i.values;
-      saveDB(db);
-
-      return i.reply({ content: "✅ DM settings saved", ephemeral: true });
-    }
-  }
-});
-
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 BOT PREMIUM READY");
+  console.log("🔥 BOT ULTRA READY");
   await startPanel();
 });
 
