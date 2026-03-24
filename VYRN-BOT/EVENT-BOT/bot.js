@@ -21,22 +21,27 @@ const client = new Client({
 
 const CHANNEL_ID = "1484937784283369502";
 
-// ================= EVENT DATA =================
+// ================= OBRAZY =================
+const PANEL_IMAGE = "https://imgur.com/sOU3JWV.png";
+
 const EVENT_DATA = {
   egg: {
     name: "RNG EGG",
     color: "#ff8800",
-    image: "https://imgur.com/yTE8jim.png"
+    image: "https://imgur.com/yTE8jim.png",
+    tip: "Znajdź serwer i zacznij nabijać Tier!"
   },
   merchant: {
     name: "BOSS / HONEY MERCHANT",
     color: "#ff3300",
-    image: "https://imgur.com/ft4q1bC.png"
+    image: "https://imgur.com/ft4q1bC.png",
+    tip: "Przygotuj walutę i kup przedmioty!"
   },
   spin: {
     name: "DEV SPIN",
     color: "#ff0000",
-    image: "https://imgur.com/blg4iD8.png"
+    image: "https://imgur.com/blg4iD8.png",
+    tip: "Zakręć kołem i sprawdź swoje szczęście!"
   }
 };
 
@@ -54,7 +59,8 @@ function loadDB() {
     fs.writeFileSync(DB_PATH, JSON.stringify({
       dm: {},
       panelMessageId: null,
-      lastPingId: null
+      beforePingId: null,
+      startPingId: null
     }, null, 2));
   }
   return JSON.parse(fs.readFileSync(DB_PATH));
@@ -112,43 +118,25 @@ function getCountdown(ts) {
   return `${m}m ${s}s`;
 }
 
-// ================= EMBEDS =================
+// ================= EMBED PANEL =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
-  const currentData = EVENT_DATA[current];
-  const nextData = EVENT_DATA[next.type];
-
   return new EmbedBuilder()
-    .setColor(currentData.color)
+    .setColor("#5865F2")
     .setTitle("✨ Event Panel")
     .setDescription("Live event tracking")
 
-    .setImage(currentData.image)
+    .setImage(PANEL_IMAGE)
 
     .addFields(
-      { name: "🟢 Current", value: `**${currentData.name}**`, inline: true },
-      { name: "⏭️ Next", value: `**${nextData.name}**`, inline: true },
+      { name: "🟢 Current", value: `**${EVENT_DATA[current].name}**`, inline: true },
+      { name: "⏭️ Next", value: `**${EVENT_DATA[next.type].name}**`, inline: true },
       { name: "⏳ Starts In", value: `${getCountdown(next.timestamp)}` }
     )
 
     .setFooter({ text: "By B3sttiee • Auto 10s" })
-    .setTimestamp();
-}
-
-function eventEmbed(type, status) {
-  const data = EVENT_DATA[type];
-
-  return new EmbedBuilder()
-    .setColor(data.color)
-    .setTitle(status === "start" ? "🚀 EVENT STARTED" : "⏳ EVENT SOON")
-    .setDescription(
-      status === "start"
-        ? `🔥 **${data.name}** STARTED!`
-        : `⚠️ **${data.name}** starts in 5 minutes!`
-    )
-    .setImage(data.image)
     .setTimestamp();
 }
 
@@ -232,31 +220,16 @@ async function startPanel() {
 // ================= PING SYSTEM =================
 let lastNotify = "";
 
-async function deleteOldPing(channel, db) {
-  if (db.lastPingId) {
-    try {
-      const msg = await channel.messages.fetch(db.lastPingId);
-      await msg.delete();
-    } catch {}
-    db.lastPingId = null;
-    saveDB(db);
-  }
+async function deleteMessage(channel, id) {
+  if (!id) return;
+  try {
+    const msg = await channel.messages.fetch(id);
+    await msg.delete();
+  } catch {}
 }
 
-async function sendPing(channel, type, status, db) {
-  await deleteOldPing(channel, db);
-
-  const msg = await channel.send({
-    content: `<@&${ROLES[type]}>`,
-    embeds: [eventEmbed(type, status)]
-  });
-
-  db.lastPingId = msg.id;
-  saveDB(db);
-}
-
-// ================= NOTIFICATIONS =================
 setInterval(async () => {
+
   const now = getNowPL();
   const min = now.getMinutes();
   const hour = now.getHours();
@@ -267,46 +240,48 @@ setInterval(async () => {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
-  // 5 MIN BEFORE
+  // ===== 5 MIN BEFORE =====
   if (min === 55 && lastNotify !== `${hour}-5`) {
     lastNotify = `${hour}-5`;
 
-    await sendPing(channel, next.type, "soon", db);
+    const data = EVENT_DATA[next.type];
 
-    for (const userId in db.dm) {
-      if (db.dm[userId].includes(next.type)) {
-        try {
-          const user = await client.users.fetch(userId);
-          await user.send({
-            content: `<@${userId}>`,
-            embeds: [eventEmbed(next.type, "soon")]
-          });
-        } catch {}
-      }
-    }
+    const msg = await channel.send({
+      content: `<@&${ROLES[next.type]}>\n⚠️ EVENT **${data.name}** za 5 minut!\n👉 ${data.tip}`
+    });
+
+    db.beforePingId = msg.id;
+    saveDB(db);
   }
 
-  // START
+  // ===== START =====
   if (min === 0 && lastNotify !== `${hour}-start`) {
     lastNotify = `${hour}-start`;
 
-    await sendPing(channel, current, "start", db);
+    await deleteMessage(channel, db.beforePingId);
 
-    for (const userId in db.dm) {
-      if (db.dm[userId].includes(current)) {
-        try {
-          const user = await client.users.fetch(userId);
-          await user.send({
-            content: `<@${userId}>`,
-            embeds: [eventEmbed(current, "start")]
-          });
-        } catch {}
-      }
-    }
+    const data = EVENT_DATA[current];
 
-    // delete after 15 min
+    const msg = await channel.send({
+      content: `<@&${ROLES[current]}>`,
+      embeds: [
+        new EmbedBuilder()
+          .setColor(data.color)
+          .setTitle("🚀 EVENT STARTED")
+          .setDescription(`🔥 **${data.name}** wystartował!\n\n👉 ${data.tip}`)
+          .setImage(data.image)
+          .setTimestamp()
+      ]
+    });
+
+    db.startPingId = msg.id;
+    saveDB(db);
+
     setTimeout(async () => {
-      await deleteOldPing(channel, loadDB());
+      const fresh = loadDB();
+      await deleteMessage(channel, fresh.startPingId);
+      fresh.startPingId = null;
+      saveDB(fresh);
     }, 15 * 60 * 1000);
   }
 
@@ -359,7 +334,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 FINAL BOSS BOT READY");
+  console.log("🔥 FINAL BOT READY");
   await startPanel();
 });
 
