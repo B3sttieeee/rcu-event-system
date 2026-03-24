@@ -70,25 +70,57 @@ client.once('clientReady', async () => {
   restore();
 });
 
-// ===== 🔥 PREMIUM CLEAN EMBED =====
+// ===== 💎 PERFECT EMBED =====
 function buildEmbed(data) {
   let bonus = 'Brak';
   if (roleEntries.size > 0) {
     bonus = [...roleEntries.entries()]
       .map(([id, val]) => `<@&${id}> +${val}`)
-      .join(', ');
+      .join('\n');
   }
 
   return new EmbedBuilder()
     .setColor('#5865F2')
+
+    // 🔥 DUŻA NAGRODA
     .setTitle(`🎉 ${data.reward}`)
+
+    // 🧼 CZYSTY OPIS
     .setDescription(
-      `👥 **${data.participants.length}**  •  🏆 **${data.winners}**  •  ⏳ <t:${Math.floor(data.endTime / 1000)}:R>`
+      `Dołącz klikając przycisk poniżej\n\u200B`
     )
+
+    // 📊 STATY (ŁADNE ODSTĘPY)
     .addFields(
-      { name: '🎟 Bonus', value: bonus, inline: true },
       {
-        name: '🔒 Rola',
+        name: '👥 Uczestnicy',
+        value: `**${data.participants.length} osób**`,
+        inline: true
+      },
+      {
+        name: '🏆 Zwycięzcy',
+        value: `**${data.winners}**`,
+        inline: true
+      },
+      {
+        name: '⏳ Koniec',
+        value: `<t:${Math.floor(data.endTime / 1000)}:R>`,
+        inline: true
+      },
+
+      // ODSTĘP
+      {
+        name: '\u200B',
+        value: '\u200B'
+      },
+
+      {
+        name: '🎟 Bonusowe szanse',
+        value: bonus,
+        inline: true
+      },
+      {
+        name: '🔒 Wymagana rola',
         value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak',
         inline: true
       }
@@ -98,6 +130,7 @@ function buildEmbed(data) {
 // ===== LOGIC =====
 client.on('interactionCreate', async interaction => {
   try {
+
     if (interaction.isChatInputCommand()) {
 
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
