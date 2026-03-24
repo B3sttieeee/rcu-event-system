@@ -88,29 +88,29 @@ function getEventByHour(hour) {
   return "spin";
 }
 
-// ================= NEXT EVENT FIX =================
+// ================= 🔥 PERFECT NEXT EVENT =================
 function getNextEvent() {
   const now = getNowPL();
   const nowTs = Math.floor(now.getTime() / 1000);
 
   let closest = null;
 
-  for (let i = 0; i < 24; i++) {
-    const hour = (now.getHours() + i) % 24;
-    const type = getEventByHour(hour);
+  for (let dayOffset = 0; dayOffset < 2; dayOffset++) {
+    for (let hour = 0; hour < 24; hour++) {
 
-    const date = new Date(now);
-    date.setHours(hour, 0, 0, 0);
+      const type = getEventByHour(hour);
 
-    if (hour <= now.getHours()) {
-      date.setDate(date.getDate() + 1);
-    }
+      const date = new Date(now);
+      date.setDate(now.getDate() + dayOffset);
+      date.setHours(hour, 0, 0, 0);
 
-    const ts = Math.floor(date.getTime() / 1000);
+      const ts = Math.floor(date.getTime() / 1000);
 
-    if (ts > nowTs) {
-      closest = { type, timestamp: ts };
-      break;
+      if (ts <= nowTs) continue;
+
+      if (!closest || ts < closest.timestamp) {
+        closest = { type, timestamp: ts };
+      }
     }
   }
 
@@ -128,7 +128,7 @@ function formatTime(sec) {
   return `${m}m ${s}s`;
 }
 
-// ================= EMBED PANEL =================
+// ================= EMBED =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
@@ -208,7 +208,7 @@ async function startPanel() {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 PERFECT TIMER BOT READY");
+  console.log("🔥 PERFECT BOT READY (NO BUGS)");
   await startPanel();
 });
 
