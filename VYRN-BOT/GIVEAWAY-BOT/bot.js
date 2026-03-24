@@ -25,6 +25,7 @@ const client = new Client({
 
 mongoose.connect(process.env.MONGO_URI).catch(console.error);
 
+// ===== SCHEMA =====
 const giveawaySchema = new mongoose.Schema({
   messageId: String,
   channelId: String,
@@ -39,12 +40,14 @@ const giveawaySchema = new mongoose.Schema({
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
 const roleEntries = new Map();
 
+// ===== READY =====
 client.once('clientReady', async () => {
   console.log(`🔥 ${client.user.tag} READY`);
 
   const commands = [
     new SlashCommandBuilder()
       .setName('giveaway-create')
+      .setDescription('Stwórz giveaway')
       .addStringOption(o => o.setName('time').setRequired(true))
       .addStringOption(o => o.setName('reward').setRequired(true))
       .addIntegerOption(o => o.setName('winners').setRequired(true))
@@ -52,6 +55,7 @@ client.once('clientReady', async () => {
 
     new SlashCommandBuilder()
       .setName('giveaway-role')
+      .setDescription('Bonusowe wejścia')
       .addRoleOption(o => o.setName('role').setRequired(true))
       .addIntegerOption(o => o.setName('entries').setRequired(true)),
 
@@ -70,27 +74,35 @@ client.once('clientReady', async () => {
   restore();
 });
 
-// ===== 💎 PERFECT EMBED =====
+// ===== 💎 PRO EMBED =====
 function buildEmbed(data) {
-  let bonus = 'Brak';
+  let bonus = 'Brak bonusów';
+
   if (roleEntries.size > 0) {
     bonus = [...roleEntries.entries()]
-      .map(([id, val]) => `<@&${id}> +${val}`)
+      .map(([id, val]) => `• <@&${id}> (+${val})`)
       .join('\n');
   }
 
   return new EmbedBuilder()
     .setColor('#5865F2')
 
-    // 🔥 DUŻA NAGRODA
-    .setTitle(`🎉 ${data.reward}`)
+    // 🔥 HEADER
+    .setAuthor({
+      name: '🎉 NOWY GIVEAWAY',
+      iconURL: client.user.displayAvatarURL()
+    })
 
-    // 🧼 CZYSTY OPIS
+    // 🎁 NAGRODA
+    .setTitle(`🎁 ${data.reward}`)
+
+    // 🧼 OPIS
     .setDescription(
-      `Dołącz klikając przycisk poniżej\n\u200B`
+      `Dołącz do konkursu klikając przycisk poniżej!\n\n` +
+      `📌 **Informacje:**`
     )
 
-    // 📊 STATY (ŁADNE ODSTĘPY)
+    // 📊 INFO BOX
     .addFields(
       {
         name: '👥 Uczestnicy',
@@ -114,17 +126,27 @@ function buildEmbed(data) {
         value: '\u200B'
       },
 
+      // 🎟 BONUSY
       {
         name: '🎟 Bonusowe szanse',
         value: bonus,
-        inline: true
+        inline: false
       },
+
+      // 🔒 ROLA
       {
         name: '🔒 Wymagana rola',
         value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak',
-        inline: true
+        inline: false
       }
-    );
+    )
+
+    // FOOTER
+    .setFooter({
+      text: 'Kliknij "Join", aby wziąć udział'
+    })
+
+    .setTimestamp();
 }
 
 // ===== LOGIC =====
@@ -164,7 +186,7 @@ client.on('interactionCreate', async interaction => {
 
         await Giveaway.create({ ...data, messageId: msg.id, channelId: msg.channel.id });
 
-        interaction.reply({ content: '✅ Created', ephemeral: true });
+        interaction.reply({ content: '✅ Giveaway utworzony', ephemeral: true });
 
         setTimeout(() => end(msg.id), duration);
       }
@@ -174,12 +196,12 @@ client.on('interactionCreate', async interaction => {
           interaction.options.getRole('role').id,
           interaction.options.getInteger('entries')
         );
-        interaction.reply({ content: '✅ Bonus set', ephemeral: true });
+        interaction.reply({ content: '✅ Bonus ustawiony', ephemeral: true });
       }
 
       if (interaction.commandName === 'giveaway-end') {
         end(interaction.options.getString('id'));
-        interaction.reply({ content: '⏹ Ended', ephemeral: true });
+        interaction.reply({ content: '⏹ Zakończono', ephemeral: true });
       }
 
       if (interaction.commandName === 'giveaway-reroll') {
@@ -191,15 +213,15 @@ client.on('interactionCreate', async interaction => {
       const data = await Giveaway.findOne({ messageId: interaction.message.id });
       if (!data) return;
 
-      if (data.ended) return interaction.reply({ content: '❌ Zakończony', ephemeral: true });
+      if (data.ended) return interaction.reply({ content: '❌ Giveaway zakończony', ephemeral: true });
 
       if (data.requiredRole && !interaction.member.roles.cache.has(data.requiredRole)) {
-        return interaction.reply({ content: '❌ Brak roli', ephemeral: true });
+        return interaction.reply({ content: '❌ Brak wymaganej roli', ephemeral: true });
       }
 
       if (interaction.customId === 'join') {
         if (data.participants.includes(interaction.user.id)) {
-          return interaction.reply({ content: '❌ Już jesteś', ephemeral: true });
+          return interaction.reply({ content: '❌ Już bierzesz udział', ephemeral: true });
         }
 
         data.participants.push(interaction.user.id);
@@ -214,7 +236,7 @@ client.on('interactionCreate', async interaction => {
         await data.save();
 
         interaction.message.edit({ embeds: [buildEmbed(data)] });
-        interaction.reply({ content: '❌ Opuściłeś', ephemeral: true });
+        interaction.reply({ content: '❌ Opuściłeś giveaway', ephemeral: true });
       }
     }
 
