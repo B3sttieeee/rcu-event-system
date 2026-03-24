@@ -83,42 +83,42 @@ client.once('clientReady', async () => {
   restore();
 });
 
-// ===== PREMIUM EMBED (CLEAN) =====
+// ===== CLEAN EMBED =====
 function buildEmbed(data) {
-  let bonus = 'Brak';
+  let bonus = 'Brak bonusów';
+
   if (roleEntries.size > 0) {
     bonus = [...roleEntries.entries()]
-      .map(([id, val]) => `<@&${id}> +${val}`)
-      .join('\n');
+      .map(([id, val]) => `<@&${id}> (+${val})`)
+      .join(', ');
   }
 
   return new EmbedBuilder()
     .setColor('#5865F2')
     .setTitle(`🎉 ${data.reward}`)
     .setDescription(
-      `**Dołącz do giveaway!**\n\n` +
-      `👥 **${data.participants.length}** uczestników\n` +
-      `🏆 **${data.winners}** zwycięzców\n` +
-      `⏳ Koniec: <t:${Math.floor(data.endTime / 1000)}:R>\n`
+      `Kliknij **Join**, aby wziąć udział!\n\n` +
+      `👥 **Uczestnicy:** ${data.participants.length}\n` +
+      `🏆 **Zwycięzcy:** ${data.winners}\n` +
+      `⏳ **Koniec:** <t:${Math.floor(data.endTime / 1000)}:R>\n`
     )
     .addFields(
       {
         name: '🎟 Bonusowe szanse',
-        value: bonus,
-        inline: true
+        value: bonus
       },
       {
         name: '🔒 Wymagana rola',
-        value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak',
-        inline: true
+        value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak'
       }
     )
     .setFooter({
-      text: 'Kliknij Join aby wziąć udział'
-    });
+      text: `ID: ${data.messageId || '—'}`
+    })
+    .setTimestamp();
 }
 
-// ===== INTERACTIONS =====
+// ===== INTERACTION =====
 client.on('interactionCreate', async interaction => {
   try {
 
@@ -167,7 +167,7 @@ client.on('interactionCreate', async interaction => {
           interaction.options.getRole('role').id,
           interaction.options.getInteger('entries')
         );
-        interaction.reply({ content: '✅ Ustawiono bonus', ephemeral: true });
+        interaction.reply({ content: '✅ Bonus ustawiony', ephemeral: true });
       }
 
       if (interaction.commandName === 'giveaway-end') {
