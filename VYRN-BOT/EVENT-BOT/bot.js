@@ -20,6 +20,13 @@ const client = new Client({
   ]
 });
 
+// ================= CZAS PL =================
+function getNowPL() {
+  return new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
+  );
+}
+
 // ================= CONFIG =================
 const PANEL_IMAGE = "https://imgur.com/sOU3JWV.png";
 
@@ -40,7 +47,7 @@ const EVENT_DATA = {
     name: "DEV SPIN",
     color: "#ff0000",
     image: "https://imgur.com/blg4iD8.png",
-    tip: "Zakreć kołem!"
+    tip: "Zakręć kołem!"
   }
 };
 
@@ -69,9 +76,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= EVENT SYSTEM =================
-// ZERO timezone – tylko godzina systemowa
-
+// ================= EVENTY =================
 function getEventByHour(hour) {
   if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
   if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
@@ -79,30 +84,27 @@ function getEventByHour(hour) {
 }
 
 function getCurrentEvent() {
-  return getEventByHour(new Date().getHours());
+  return getEventByHour(getNowPL().getHours());
 }
 
 function getNextEvent() {
-  return getEventByHour((new Date().getHours() + 1) % 24);
+  return getEventByHour((getNowPL().getHours() + 1) % 24);
 }
 
 // ================= TIMER =================
-// czas do pełnej godziny (dokładnie to czego chcesz)
-
 function getSharedCountdown() {
-  const now = new Date();
+  const now = getNowPL();
 
-  let minutes = 59 - now.getMinutes();
-  let seconds = 60 - now.getSeconds();
+  let m = 59 - now.getMinutes();
+  let s = 60 - now.getSeconds();
 
-  if (seconds === 60) seconds = 0;
-  else minutes--;
+  if (s === 60) s = 0;
+  else m--;
 
-  return `${minutes}m ${seconds}s`;
+  return `${m}m ${s}s`;
 }
 
 // ================= EMBED =================
-
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
@@ -136,10 +138,10 @@ function panelEmbed() {
 }
 
 // ================= PANEL =================
-
 function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Refresh").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("roles").setLabel("🎭 Roles").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId("dm").setLabel("📩 Notifications").setStyle(ButtonStyle.Secondary)
     )
@@ -147,14 +149,11 @@ function getPanel() {
 }
 
 // ================= MENUS =================
-
 function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
       .setPlaceholder("Pick roles")
-      .setMinValues(0)
-      .setMaxValues(3)
       .addOptions([
         { label: "RNG EGG", value: "egg" },
         { label: "MERCHANT", value: "merchant" },
@@ -168,8 +167,6 @@ function dmMenu() {
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
       .setPlaceholder("DM notifications")
-      .setMinValues(0)
-      .setMaxValues(3)
       .addOptions([
         { label: "RNG EGG", value: "egg" },
         { label: "MERCHANT", value: "merchant" },
@@ -179,7 +176,6 @@ function dmMenu() {
 }
 
 // ================= PANEL SYSTEM =================
-
 let panelMessage;
 
 async function startPanel() {
@@ -213,7 +209,6 @@ async function startPanel() {
 }
 
 // ================= PING SYSTEM =================
-
 let lastPing = "";
 
 async function deleteMsg(channel, id) {
@@ -226,7 +221,7 @@ async function deleteMsg(channel, id) {
 
 setInterval(async () => {
 
-  const now = new Date();
+  const now = getNowPL();
   const min = now.getMinutes();
   const hour = now.getHours();
 
@@ -270,7 +265,6 @@ setInterval(async () => {
     db.startPingId = msg.id;
     saveDB(db);
 
-    // usuń po 15 min
     setTimeout(async () => {
       const fresh = loadDB();
       await deleteMsg(channel, fresh.startPingId);
@@ -282,10 +276,16 @@ setInterval(async () => {
 }, 10000);
 
 // ================= INTERACTIONS =================
-
 client.on("interactionCreate", async (i) => {
 
   if (i.isButton()) {
+
+    if (i.customId === "refresh") {
+      return i.update({
+        embeds: [panelEmbed()],
+        components: getPanel()
+      });
+    }
 
     if (i.customId === "roles") {
       return i.reply({ content: "🎭 Roles:", components: [rolesMenu()], ephemeral: true });
@@ -324,9 +324,8 @@ client.on("interactionCreate", async (i) => {
 });
 
 // ================= READY =================
-
 client.once("clientReady", async () => {
-  console.log("🔥 BOT DZIAŁA PERFEKCYJNIE");
+  console.log("🔥 DZIAŁA IDEALNIE");
   await startPanel();
 });
 
