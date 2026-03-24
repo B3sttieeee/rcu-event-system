@@ -13,7 +13,6 @@ const fs = require("fs");
 const TOKEN = process.env.TOKEN;
 const CHANNEL_ID = "1484937784283369502";
 
-// ================= CLIENT =================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -29,7 +28,7 @@ const EVENT_DATA = {
     name: "RNG EGG",
     color: "#ff8800",
     image: "https://imgur.com/yTE8jim.png",
-    tip: "Znajdź serwer i zacznij farmić!"
+    tip: "Znajdź serwer i farm Tier!"
   },
   merchant: {
     name: "BOSS / HONEY MERCHANT",
@@ -41,7 +40,7 @@ const EVENT_DATA = {
     name: "DEV SPIN",
     color: "#ff0000",
     image: "https://imgur.com/blg4iD8.png",
-    tip: "Spróbuj szczęścia!"
+    tip: "Zakręć kołem!"
   }
 };
 
@@ -51,7 +50,7 @@ const ROLES = {
   spin: "1484911421903999127"
 };
 
-// ROTACJA 24H
+// ROTACJA
 const ROTATION = [
   "egg","merchant","spin","egg","merchant","spin",
   "egg","merchant","spin","egg","merchant","spin",
@@ -78,54 +77,39 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= TIME =================
-function getNowPL() {
-  return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
-}
-
-// ================= EVENT SYSTEM =================
+// ================= EVENT =================
 function getCurrentEvent() {
-  return ROTATION[getNowPL().getHours()];
+  return ROTATION[new Date().getHours()];
 }
 
 function getNextEvent() {
-  const now = getNowPL();
+  const nextHour = (new Date().getHours() + 1) % 24;
+  return ROTATION[nextHour];
+}
 
-  const nextHour = (now.getHours() + 1) % 24;
+// ================= COUNTDOWN (PROSTY FIX) =================
+function getCountdown() {
+  const now = new Date();
 
-  const date = new Date(now);
-  date.setHours(nextHour, 0, 0, 0);
+  let m = 59 - now.getMinutes();
+  let s = 60 - now.getSeconds();
 
-  if (nextHour === 0) {
-    date.setDate(date.getDate() + 1);
+  if (s === 60) {
+    s = 0;
+  } else {
+    m -= 1;
   }
 
-  return {
-    type: ROTATION[nextHour],
-    timestamp: Math.floor(date.getTime() / 1000)
-  };
-}
-
-function getRemainingSeconds(ts) {
-  const now = Math.floor(Date.now() / 1000);
-  return Math.max(0, ts - now);
-}
-
-function formatTime(sec) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
   return `${m}m ${s}s`;
 }
 
-// ================= EMBED PANEL =================
+// ================= EMBED =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
-  const seconds = getRemainingSeconds(next.timestamp);
-
   const currentData = EVENT_DATA[current];
-  const nextData = EVENT_DATA[next.type];
+  const nextData = EVENT_DATA[next];
 
   return new EmbedBuilder()
     .setColor(currentData.color)
@@ -140,7 +124,7 @@ function panelEmbed() {
 
 ⏭️ **NEXT**
 > **${nextData.name}**
-> ⏳ \`${formatTime(seconds)}\`
+> ⏳ \`${getCountdown()}\`
 
 ━━━━━━━━━━━━━━━━━━`
     )
@@ -236,7 +220,7 @@ async function deleteMsg(channel, id) {
 
 setInterval(async () => {
 
-  const now = getNowPL();
+  const now = new Date();
   const min = now.getMinutes();
   const hour = now.getHours();
 
@@ -251,7 +235,7 @@ setInterval(async () => {
     lastPing = `${hour}-before`;
 
     const msg = await channel.send({
-      content: `<@&${ROLES[next.type]}> ⚠️ Event za 5 minut!`
+      content: `<@&${ROLES[next]}> ⚠️ Event za 5 minut!`
     });
 
     db.beforePingId = msg.id;
@@ -333,7 +317,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 BOT FINAL WORKING");
+  console.log("🔥 BOT DZIAŁA");
   await startPanel();
 });
 
