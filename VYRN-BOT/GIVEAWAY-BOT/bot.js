@@ -15,7 +15,6 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 const ms = require('ms');
 
-// ===== CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
@@ -23,7 +22,7 @@ const client = new Client({
 // ===== MONGO =====
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB connected"))
-  .catch(err => console.error(err));
+  .catch(console.error);
 
 // ===== SCHEMA =====
 const giveawaySchema = new mongoose.Schema({
@@ -38,8 +37,6 @@ const giveawaySchema = new mongoose.Schema({
 });
 
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
-
-// ===== ROLE BONUS =====
 const roleEntries = new Map();
 
 // ===== READY =====
@@ -49,26 +46,49 @@ client.once('clientReady', async () => {
   const commands = [
     new SlashCommandBuilder()
       .setName('giveaway-create')
-      .setDescription('Create giveaway')
-      .addStringOption(o => o.setName('time').setRequired(true))
-      .addStringOption(o => o.setName('reward').setRequired(true))
-      .addIntegerOption(o => o.setName('winners').setRequired(true))
-      .addRoleOption(o => o.setName('role')),
+      .setDescription('Create a giveaway')
+      .addStringOption(o =>
+        o.setName('time')
+          .setDescription('Time e.g. 1m, 1h')
+          .setRequired(true))
+      .addStringOption(o =>
+        o.setName('reward')
+          .setDescription('Reward name')
+          .setRequired(true))
+      .addIntegerOption(o =>
+        o.setName('winners')
+          .setDescription('Number of winners')
+          .setRequired(true))
+      .addRoleOption(o =>
+        o.setName('role')
+          .setDescription('Required role')),
 
     new SlashCommandBuilder()
       .setName('giveaway-role')
       .setDescription('Set bonus entries')
-      .addRoleOption(o => o.setName('role').setRequired(true))
-      .addIntegerOption(o => o.setName('entries').setRequired(true))
+      .addRoleOption(o =>
+        o.setName('role')
+          .setDescription('Role')
+          .setRequired(true))
+      .addIntegerOption(o =>
+        o.setName('entries')
+          .setDescription('Bonus entries')
+          .setRequired(true))
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-  await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+
+  await rest.put(
+    Routes.applicationCommands(client.user.id),
+    { body: commands }
+  );
+
+  console.log("✅ Commands loaded");
 
   restore();
 });
 
-// ===== EMBED (GIVEAWAYBOT STYLE) =====
+// ===== EMBED =====
 function buildEmbed(data) {
   let extra = 'No extra entries';
 
@@ -95,11 +115,10 @@ ${data.requiredRole ? `<@&${data.requiredRole}>` : 'None'}`
     );
 }
 
-// ===== INTERACTIONS =====
+// ===== INTERACTION =====
 client.on('interactionCreate', async interaction => {
   try {
 
-    // ===== COMMANDS =====
     if (interaction.isChatInputCommand()) {
 
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -107,21 +126,17 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'giveaway-create') {
-        const time = interaction.options.getString('time');
-        const reward = interaction.options.getString('reward');
-        const winners = interaction.options.getInteger('winners');
-        const role = interaction.options.getRole('role');
 
-        const duration = ms(time);
+        const duration = ms(interaction.options.getString('time'));
         if (!duration) {
           return interaction.reply({ content: '❌ Invalid time', ephemeral: true });
         }
 
         const data = {
-          reward,
-          winners,
+          reward: interaction.options.getString('reward'),
+          winners: interaction.options.getInteger('winners'),
           endTime: Date.now() + duration,
-          requiredRole: role?.id || null,
+          requiredRole: interaction.options.getRole('role')?.id || null,
           participants: [],
           ended: false
         };
@@ -150,22 +165,21 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'giveaway-role') {
-        const role = interaction.options.getRole('role');
-        const entries = interaction.options.getInteger('entries');
+        roleEntries.set(
+          interaction.options.getRole('role').id,
+          interaction.options.getInteger('entries')
+        );
 
-        roleEntries.set(role.id, entries);
-
-        interaction.reply({ content: '✅ Bonus entries set', ephemeral: true });
+        interaction.reply({ content: '✅ Bonus set', ephemeral: true });
       }
     }
 
-    // ===== BUTTON =====
     if (interaction.isButton()) {
       const data = await Giveaway.findOne({ messageId: interaction.message.id });
       if (!data) return;
 
       if (data.ended) {
-        return interaction.reply({ content: '❌ Giveaway ended', ephemeral: true });
+        return interaction.reply({ content: '❌ Ended', ephemeral: true });
       }
 
       if (data.requiredRole && !interaction.member.roles.cache.has(data.requiredRole)) {
@@ -187,7 +201,7 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// ===== END GIVEAWAY =====
+// ===== END =====
 async function endGiveaway(id) {
   const data = await Giveaway.findOne({ messageId: id });
   if (!data || data.ended) return;
@@ -197,7 +211,7 @@ async function endGiveaway(id) {
 
   const channel = await client.channels.fetch(data.channelId);
 
-  if (data.participants.length === 0) {
+  if (!data.participants.length) {
     return channel.send('❌ No participants');
   }
 
@@ -208,18 +222,14 @@ async function endGiveaway(id) {
 
 // ===== RESTORE =====
 async function restore() {
-  const giveaways = await Giveaway.find();
+  const all = await Giveaway.find();
 
-  for (const g of giveaways) {
-    const remaining = g.endTime - Date.now();
+  for (const g of all) {
+    const left = g.endTime - Date.now();
 
-    if (remaining > 0) {
-      setTimeout(() => endGiveaway(g.messageId), remaining);
-    } else {
-      endGiveaway(g.messageId);
-    }
+    if (left > 0) setTimeout(() => endGiveaway(g.messageId), left);
+    else endGiveaway(g.messageId);
   }
 }
 
-// ===== LOGIN =====
 client.login(process.env.TOKEN);
