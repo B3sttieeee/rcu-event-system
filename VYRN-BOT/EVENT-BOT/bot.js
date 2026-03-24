@@ -92,16 +92,16 @@ function getNextEvent() {
 }
 
 // ================= TIMER =================
-function getSharedCountdown() {
+function getCountdown() {
   const now = getNowPL();
 
-  let m = 59 - now.getMinutes();
-  let s = 60 - now.getSeconds();
+  let minutes = 59 - now.getMinutes();
+  let seconds = 60 - now.getSeconds();
 
-  if (s === 60) s = 0;
-  else m--;
+  if (seconds === 60) seconds = 0;
+  else minutes--;
 
-  return `${m}m ${s}s`;
+  return `${minutes}m ${seconds}s`;
 }
 
 // ================= EMBED =================
@@ -112,20 +112,29 @@ function panelEmbed() {
   const currentData = EVENT_DATA[current];
   const nextData = EVENT_DATA[next];
 
-  const time = getSharedCountdown();
+  const time = getCountdown();
 
   return new EmbedBuilder()
     .setColor(currentData.color)
-    .setTitle("✨ **EVENT PANEL**")
+    .setTitle("✨ EVENT PANEL")
+    .setDescription("🎮 **Live Event Tracking System**\n\n━━━━━━━━━━━━━━━━━━")
     .addFields(
       {
         name: "🟢 **CURRENT EVENT**",
-        value: `**${currentData.name}**\n⏳ \`${time}\``,
+        value:
+`**${currentData.name}**
+
+⏳ **Time left**
+\`${time}\``,
         inline: true
       },
       {
         name: "⏭️ **NEXT EVENT**",
-        value: `**${nextData.name}**\n⏱️ \`${time}\``,
+        value:
+`**${nextData.name}**
+
+⏱️ **Starts in**
+\`${time}\``,
         inline: true
       }
     )
@@ -150,6 +159,7 @@ function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
+      .setPlaceholder("Select roles")
       .setMinValues(0)
       .setMaxValues(3)
       .addOptions([
@@ -164,6 +174,7 @@ function dmMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
+      .setPlaceholder("Select DM notifications")
       .setMinValues(0)
       .setMaxValues(3)
       .addOptions([
@@ -254,6 +265,7 @@ setInterval(async () => {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
+  // 5 min before
   if (min === 55 && lastPing !== `${hour}-before`) {
     lastPing = `${hour}-before`;
 
@@ -265,6 +277,7 @@ setInterval(async () => {
     saveDB(db);
   }
 
+  // START EVENT
   if (min === 0 && lastPing !== `${hour}-start`) {
     lastPing = `${hour}-start`;
 
@@ -298,9 +311,65 @@ setInterval(async () => {
 
 }, 10000);
 
+// ================= INTERACTIONS =================
+client.on("interactionCreate", async (i) => {
+
+  if (i.isButton()) {
+
+    if (i.customId === "refresh") {
+      return i.update({
+        embeds: [panelEmbed()],
+        components: getPanel()
+      });
+    }
+
+    if (i.customId === "roles") {
+      return i.reply({
+        content: "🎭 Select your roles:",
+        components: [rolesMenu()],
+        ephemeral: true
+      });
+    }
+
+    if (i.customId === "dm") {
+      return i.reply({
+        content: "📩 Select DM notifications:",
+        components: [dmMenu()],
+        ephemeral: true
+      });
+    }
+  }
+
+  if (i.isStringSelectMenu()) {
+
+    const db = loadDB();
+
+    if (i.customId === "roles_menu") {
+      const member = await i.guild.members.fetch(i.user.id);
+
+      for (const key in ROLES) {
+        await member.roles.remove(ROLES[key]).catch(()=>{});
+      }
+
+      for (const val of i.values) {
+        await member.roles.add(ROLES[val]).catch(()=>{});
+      }
+
+      return i.reply({ content: "✅ Roles updated", ephemeral: true });
+    }
+
+    if (i.customId === "dm_menu") {
+      db.dm[i.user.id] = i.values;
+      saveDB(db);
+
+      return i.reply({ content: "✅ DM settings saved", ephemeral: true });
+    }
+  }
+});
+
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 FINAL CLEAN UI");
+  console.log("🔥 FULL FIXED VERSION");
   await startPanel();
 });
 
