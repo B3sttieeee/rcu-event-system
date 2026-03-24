@@ -14,13 +14,14 @@ const client = new Client({
 // mongo
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ Mongo connected"))
-  .catch(err => console.log(err));
+  .catch(err => console.log("❌ Mongo error:", err));
 
-// events loader
+// load events
 const eventFiles = fs.readdirSync('./events');
 
 for (const file of eventFiles) {
   const event = require(`./events/${file}`);
+
   if (event.once) {
     client.once(event.name, (...args) => event.execute(...args, client));
   } else {
