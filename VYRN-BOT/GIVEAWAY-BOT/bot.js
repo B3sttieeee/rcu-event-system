@@ -16,21 +16,22 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const ms = require('ms');
 
-// ================= CLIENT =================
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// ================= CONFIG =================
+// ===== CONFIG =====
+const PANEL_CHANNEL = "1475558248487583805";
+const CATEGORY_ID = "1475985874385899530";
 const OFFICER_ROLE = "1475572271446884535";
-const TICKET_GIF = "https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif";
 
-// ================= DB =================
+const IMAGE = "https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif";
+
+// ===== DB =====
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ Mongo connected"))
-  .catch(err => console.log("❌ Mongo error:", err));
+  .then(() => console.log("✅ Mongo connected"));
 
-// ================= SCHEMA =================
+// ===== GIVEAWAY DB =====
 const giveawaySchema = new mongoose.Schema({
   messageId: String,
   channelId: String,
@@ -40,10 +41,16 @@ const giveawaySchema = new mongoose.Schema({
   participants: [String],
   ended: Boolean
 });
-
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
 
-// ================= READY =================
+// ===== PANEL DB =====
+const panelSchema = new mongoose.Schema({
+  guildId: String,
+  messageId: String
+});
+const Panel = mongoose.model('Panel', panelSchema);
+
+// ===== READY =====
 client.once('clientReady', async () => {
   console.log(`🔥 ${client.user.tag} READY`);
 
@@ -51,31 +58,68 @@ client.once('clientReady', async () => {
     new SlashCommandBuilder()
       .setName('giveaway-create')
       .setDescription('Create giveaway')
-      .addStringOption(o => o.setName('time').setDescription('1m / 1h').setRequired(true))
-      .addStringOption(o => o.setName('reward').setDescription('Reward').setRequired(true))
-      .addIntegerOption(o => o.setName('winners').setDescription('Winners').setRequired(true)),
-
-    new SlashCommandBuilder()
-      .setName('ticket-panel')
-      .setDescription('Create ticket panel')
-      .addChannelOption(o => o.setName('channel').setDescription('Where panel').setRequired(true))
-      .addChannelOption(o => o.setName('category').setDescription('Category').setRequired(true))
-      .addStringOption(o => o.setName('title').setDescription('Title').setRequired(true))
-      .addStringOption(o => o.setName('description').setDescription('Description').setRequired(true))
+      .addStringOption(o => o.setName('time').setRequired(true))
+      .addStringOption(o => o.setName('reward').setRequired(true))
+      .addIntegerOption(o => o.setName('winners').setRequired(true))
   ].map(c => c.toJSON());
 
   const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
   await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
 
-  restore();
+  createPanel();
+  restoreGiveaways();
 });
 
-// ================= EMBED =================
-function createGiveawayEmbed(data) {
+// ===== PANEL =====
+async function createPanel() {
+  const channel = await client.channels.fetch(PANEL_CHANNEL);
+  let data = await Panel.findOne({ guildId: channel.guild.id });
+
+  const embed = new EmbedBuilder()
+    .setColor('#2b2d31')
+    .setTitle('🎟 Clan TICKET')
+    .setDescription(`
+📌 **The Join Clan ticket is used to review your application and verify your account before you become a member.**
+
+📋 **Requirement:**
+• Good Gamepasses for Eggs!!
+• 1.5N+ Rebirth
+• Min 3-5H Active.
+• Min 15M Eggs
+`)
+    .setImage(IMAGE);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('open_ticket')
+      .setLabel('🔥 Open Ticket')
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  try {
+    const msg = await channel.messages.fetch(data?.messageId);
+    await msg.edit({ embeds: [embed], components: [row] });
+  } catch {
+    const msg = await channel.send({ embeds: [embed], components: [row] });
+
+    if (!data) {
+      await Panel.create({
+        guildId: channel.guild.id,
+        messageId: msg.id
+      });
+    } else {
+      data.messageId = msg.id;
+      await data.save();
+    }
+  }
+}
+
+// ===== GIVEAWAY EMBED =====
+function giveawayEmbed(data) {
   return new EmbedBuilder()
     .setColor('#2b2d31')
     .setTitle('🎉 GIVEAWAY')
-    .setDescription(`🎁 **${data.reward}**\nKliknij 🎉 aby dołączyć!`)
+    .setDescription(`🎁 **${data.reward}**\nKliknij 🎉 aby dołączyć`)
     .addFields(
       { name: '👥 Uczestnicy', value: `${data.participants.length}`, inline: true },
       { name: '🏆 Zwycięzcy', value: `${data.winners}`, inline: true },
@@ -83,32 +127,24 @@ function createGiveawayEmbed(data) {
     );
 }
 
-// ================= EVENTS =================
+// ===== EVENTS =====
 client.on('interactionCreate', async interaction => {
   try {
 
-    // ===== COMMANDS =====
+    // ===== COMMAND =====
     if (interaction.isChatInputCommand()) {
 
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
         return interaction.reply({ content: '❌ Admin only', ephemeral: true });
       }
 
-      // ===== GIVEAWAY =====
       if (interaction.commandName === 'giveaway-create') {
 
         const time = interaction.options.getString('time');
         const reward = interaction.options.getString('reward');
         const winners = interaction.options.getInteger('winners');
 
-        if (!time || !reward || !winners) {
-          return interaction.reply({ content: '❌ Missing data', ephemeral: true });
-        }
-
         const duration = ms(time);
-        if (!duration) {
-          return interaction.reply({ content: '❌ Invalid time', ephemeral: true });
-        }
 
         const data = {
           reward,
@@ -119,7 +155,7 @@ client.on('interactionCreate', async interaction => {
         };
 
         const msg = await interaction.channel.send({
-          embeds: [createGiveawayEmbed(data)],
+          embeds: [giveawayEmbed(data)],
           components: [
             new ActionRowBuilder().addComponents(
               new ButtonBuilder()
@@ -140,45 +176,12 @@ client.on('interactionCreate', async interaction => {
 
         interaction.reply({ content: '✅ Giveaway created', ephemeral: true });
       }
-
-      // ===== TICKET PANEL =====
-      if (interaction.commandName === 'ticket-panel') {
-
-        const channel = interaction.options.getChannel('channel');
-        const category = interaction.options.getChannel('category');
-        const title = interaction.options.getString('title');
-        const desc = interaction.options.getString('description');
-
-        if (!channel || !category || !title || !desc) {
-          return interaction.reply({ content: '❌ Missing data', ephemeral: true });
-        }
-
-        const embed = new EmbedBuilder()
-          .setColor('#2b2d31')
-          .setTitle(`🎟 ${title}`)
-          .setDescription(desc)
-          .setImage(TICKET_GIF);
-
-        const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`ticket_${category.id}`)
-            .setLabel('🔥 Open Ticket')
-            .setStyle(ButtonStyle.Primary)
-        );
-
-        await channel.send({
-          embeds: [embed],
-          components: [row]
-        });
-
-        interaction.reply({ content: '✅ Panel created', ephemeral: true });
-      }
     }
 
     // ===== BUTTONS =====
     if (interaction.isButton()) {
 
-      // JOIN
+      // GIVEAWAY JOIN
       if (interaction.customId === 'join') {
         const data = await Giveaway.findOne({ messageId: interaction.message.id });
         if (!data || data.ended) return;
@@ -193,14 +196,12 @@ client.on('interactionCreate', async interaction => {
       }
 
       // OPEN TICKET
-      if (interaction.customId.startsWith('ticket_')) {
-
-        const categoryId = interaction.customId.split('_')[1];
+      if (interaction.customId === 'open_ticket') {
 
         const ticket = await interaction.guild.channels.create({
           name: `ticket-${interaction.user.username}`,
           type: ChannelType.GuildText,
-          parent: categoryId,
+          parent: CATEGORY_ID,
           permissionOverwrites: [
             { id: interaction.guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] },
             { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel] },
@@ -210,12 +211,11 @@ client.on('interactionCreate', async interaction => {
 
         const embed = new EmbedBuilder()
           .setColor('#ff9900')
-          .setTitle('🎟 Ticket')
-          .setDescription(`👤 ${interaction.user}\nPodaj informacje.`)
-          .setImage(TICKET_GIF);
+          .setTitle('🌍 Select Language / Wybierz język');
 
         const row = new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('close').setLabel('🔒 Close').setStyle(ButtonStyle.Danger)
+          new ButtonBuilder().setCustomId('en').setLabel('🇬🇧 English').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('pl').setLabel('🇵🇱 Polski').setStyle(ButtonStyle.Secondary)
         );
 
         await ticket.send({
@@ -227,9 +227,48 @@ client.on('interactionCreate', async interaction => {
         interaction.reply({ content: '✅ Ticket created', ephemeral: true });
       }
 
-      if (interaction.customId === 'close') {
-        interaction.channel.delete();
+      // ENGLISH
+      if (interaction.customId === 'en') {
+        await interaction.update({
+          embeds: [
+            new EmbedBuilder()
+              .setColor('#2b2d31')
+              .setTitle('VYRN')
+              .setDescription(`
+Hello,
+
+Please send us all the required information, such as:
+• Screenshot of your inventory  
+• Gamepasses you own  
+• Stats (time played, rebirths, eggs opened)
+`)
+              .setImage(IMAGE)
+          ],
+          components: []
+        });
       }
+
+      // POLISH
+      if (interaction.customId === 'pl') {
+        await interaction.update({
+          embeds: [
+            new EmbedBuilder()
+              .setColor('#2b2d31')
+              .setTitle('VYRN')
+              .setDescription(`
+Cześć,
+
+Wyślij wszystkie wymagane informacje:
+• Screenshot ekwipunku  
+• Gamepassy  
+• Statystyki (czas gry, rebirth, jajka)
+`)
+              .setImage(IMAGE)
+          ],
+          components: []
+        });
+      }
+
     }
 
   } catch (err) {
@@ -237,7 +276,7 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// ================= END GIVEAWAY =================
+// ===== END GIVEAWAY =====
 async function endGiveaway(id) {
   const data = await Giveaway.findOne({ messageId: id });
   if (!data || data.ended) return;
@@ -252,12 +291,11 @@ async function endGiveaway(id) {
   }
 
   const winner = data.participants[Math.floor(Math.random() * data.participants.length)];
-
   channel.send(`🎉 Winner: <@${winner}>`);
 }
 
-// ================= RESTORE =================
-async function restore() {
+// ===== RESTORE =====
+async function restoreGiveaways() {
   const all = await Giveaway.find();
 
   for (const g of all) {
@@ -267,5 +305,5 @@ async function restore() {
   }
 }
 
-// ================= LOGIN =================
+// ===== LOGIN =====
 client.login(process.env.TOKEN);
