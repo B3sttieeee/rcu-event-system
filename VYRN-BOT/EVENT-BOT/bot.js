@@ -149,28 +149,32 @@ function getPanel() {
 }
 
 // ================= MENUS =================
-function rolesMenu() {
+function rolesMenu(selected = []) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
-      .setPlaceholder("Pick roles")
+      .setPlaceholder("🎭 Choose your event roles")
+      .setMinValues(0)
+      .setMaxValues(3)
       .addOptions([
-        { label: "RNG EGG", value: "egg" },
-        { label: "MERCHANT", value: "merchant" },
-        { label: "DEV SPIN", value: "spin" }
+        { label: "RNG EGG", value: "egg", default: selected.includes("egg") },
+        { label: "MERCHANT", value: "merchant", default: selected.includes("merchant") },
+        { label: "DEV SPIN", value: "spin", default: selected.includes("spin") }
       ])
   );
 }
 
-function dmMenu() {
+function dmMenu(selected = []) {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
-      .setPlaceholder("DM notifications")
+      .setPlaceholder("📩 Select DM notifications")
+      .setMinValues(0)
+      .setMaxValues(3)
       .addOptions([
-        { label: "RNG EGG", value: "egg" },
-        { label: "MERCHANT", value: "merchant" },
-        { label: "DEV SPIN", value: "spin" }
+        { label: "RNG EGG", value: "egg", default: selected.includes("egg") },
+        { label: "MERCHANT", value: "merchant", default: selected.includes("merchant") },
+        { label: "DEV SPIN", value: "spin", default: selected.includes("spin") }
       ])
   );
 }
@@ -231,7 +235,6 @@ setInterval(async () => {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
-  // 5 min before
   if (min === 55 && lastPing !== `${hour}-before`) {
     lastPing = `${hour}-before`;
 
@@ -243,7 +246,6 @@ setInterval(async () => {
     saveDB(db);
   }
 
-  // START EVENT
   if (min === 0 && lastPing !== `${hour}-start`) {
     lastPing = `${hour}-start`;
 
@@ -288,11 +290,19 @@ client.on("interactionCreate", async (i) => {
     }
 
     if (i.customId === "roles") {
-      return i.reply({ content: "🎭 Roles:", components: [rolesMenu()], ephemeral: true });
+      return i.reply({
+        content: "🎭 Choose roles:",
+        components: [rolesMenu()],
+        ephemeral: true
+      });
     }
 
     if (i.customId === "dm") {
-      return i.reply({ content: "📩 Notifications:", components: [dmMenu()], ephemeral: true });
+      return i.reply({
+        content: "📩 Choose notifications:",
+        components: [dmMenu()],
+        ephemeral: true
+      });
     }
   }
 
@@ -304,21 +314,21 @@ client.on("interactionCreate", async (i) => {
       const member = await i.guild.members.fetch(i.user.id);
 
       for (const key in ROLES) {
-        await member.roles.remove(ROLES[key]).catch(()=>{});
+        if (i.values.includes(key)) {
+          await member.roles.add(ROLES[key]).catch(()=>{});
+        } else {
+          await member.roles.remove(ROLES[key]).catch(()=>{});
+        }
       }
 
-      for (const val of i.values) {
-        await member.roles.add(ROLES[val]).catch(()=>{});
-      }
-
-      return i.reply({ content: "✅ Roles updated", ephemeral: true });
+      return i.reply({ content: "✅ Roles updated!", ephemeral: true });
     }
 
     if (i.customId === "dm_menu") {
       db.dm[i.user.id] = i.values;
       saveDB(db);
 
-      return i.reply({ content: "✅ DM saved", ephemeral: true });
+      return i.reply({ content: "✅ DM settings saved!", ephemeral: true });
     }
   }
 });
