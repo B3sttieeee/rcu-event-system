@@ -1,5 +1,7 @@
+js
 const fs = require('fs');
 const path = require('path');
+const { handleTicket } = require('./ticketSystem');
 
 const commands = new Map();
 
@@ -13,25 +15,25 @@ for (const file of commandFiles) {
 
 module.exports = {
   name: 'interactionCreate',
+
   async execute(interaction, client) {
+    try {
 
-    // COMMANDS
-    if (interaction.isChatInputCommand()) {
-      const command = commands.get(interaction.commandName);
-      if (!command) return;
+      // ===== COMMANDS =====
+      if (interaction.isChatInputCommand()) {
+        const command = commands.get(interaction.commandName);
+        if (!command) return;
 
-      try {
         await command.execute(interaction);
-      } catch (err) {
-        console.log(err);
       }
-    }
 
-    // BUTTONS (ticket close)
-    if (interaction.isButton()) {
-      if (interaction.customId === 'close_ticket') {
-        await interaction.channel.delete();
+      // ===== BUTTONS =====
+      if (interaction.isButton()) {
+        await handleTicket(interaction);
       }
+
+    } catch (err) {
+      console.log("❌ INTERACTION ERROR:", err);
     }
   }
 };
