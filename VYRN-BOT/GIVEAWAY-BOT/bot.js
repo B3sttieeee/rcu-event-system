@@ -31,7 +31,7 @@ mongoose.connect(process.env.MONGO_URI).catch(console.error);
 mongoose.connection.on('connected', () => {
   console.log('✅ MongoDB connected');
 });
-
+ 
 // ===== SCHEMA =====
 const giveawaySchema = new mongoose.Schema({
   messageId: String,
