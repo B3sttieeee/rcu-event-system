@@ -50,14 +50,6 @@ const ROLES = {
   spin: "1484911421903999127"
 };
 
-// ROTACJA
-const ROTATION = [
-  "egg","merchant","spin","egg","merchant","spin",
-  "egg","merchant","spin","egg","merchant","spin",
-  "egg","merchant","spin","egg","merchant","spin",
-  "egg","merchant","spin","egg","merchant","spin"
-];
-
 // ================= DB =================
 const DB_PATH = "./data.json";
 
@@ -77,18 +69,24 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= EVENT =================
+// ================= EVENT LOGIC =================
+function getEventByHour(hour) {
+  if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
+  if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
+  return "spin";
+}
+
 function getCurrentEvent() {
-  return ROTATION[new Date().getHours()];
+  return getEventByHour(new Date().getHours());
 }
 
 function getNextEvent() {
   const nextHour = (new Date().getHours() + 1) % 24;
-  return ROTATION[nextHour];
+  return getEventByHour(nextHour);
 }
 
-// ================= COUNTDOWN (PROSTY FIX) =================
-function getCountdown() {
+// ================= COUNTDOWN =================
+function getCountdownToNext() {
   const now = new Date();
 
   let m = 59 - now.getMinutes();
@@ -100,6 +98,14 @@ function getCountdown() {
     m -= 1;
   }
 
+  return `${m}m ${s}s`;
+}
+
+// ile minęło od startu aktualnego eventu
+function getElapsedCurrent() {
+  const now = new Date();
+  const m = now.getMinutes();
+  const s = now.getSeconds();
   return `${m}m ${s}s`;
 }
 
@@ -117,16 +123,13 @@ function panelEmbed() {
     .setDescription(
 `🎮 **Live Event Tracking**
 
-━━━━━━━━━━━━━━━━━━
+\`\`\`
+🟢 CURRENT        ⏭️ NEXT
+${currentData.name.padEnd(14)} ${nextData.name}
 
-🟢 **CURRENT**
-> **${currentData.name}**
-
-⏭️ **NEXT**
-> **${nextData.name}**
-> ⏳ \`${getCountdown()}\`
-
-━━━━━━━━━━━━━━━━━━`
+⏱️ ${getElapsedCurrent().padEnd(14)} ⏳ ${getCountdownToNext()}
+\`\`\`
+`
     )
     .setImage(PANEL_IMAGE)
     .setFooter({ text: "By B3sttiee • refresh 10s" })
@@ -207,73 +210,6 @@ async function startPanel() {
   }, 10000);
 }
 
-// ================= PING SYSTEM =================
-let lastPing = "";
-
-async function deleteMsg(channel, id) {
-  if (!id) return;
-  try {
-    const msg = await channel.messages.fetch(id);
-    await msg.delete();
-  } catch {}
-}
-
-setInterval(async () => {
-
-  const now = new Date();
-  const min = now.getMinutes();
-  const hour = now.getHours();
-
-  const channel = await client.channels.fetch(CHANNEL_ID);
-  const db = loadDB();
-
-  const current = getCurrentEvent();
-  const next = getNextEvent();
-
-  // 5 min before
-  if (min === 55 && lastPing !== `${hour}-before`) {
-    lastPing = `${hour}-before`;
-
-    const msg = await channel.send({
-      content: `<@&${ROLES[next]}> ⚠️ Event za 5 minut!`
-    });
-
-    db.beforePingId = msg.id;
-    saveDB(db);
-  }
-
-  // start
-  if (min === 0 && lastPing !== `${hour}-start`) {
-    lastPing = `${hour}-start`;
-
-    await deleteMsg(channel, db.beforePingId);
-
-    const data = EVENT_DATA[current];
-
-    const msg = await channel.send({
-      content: `<@&${ROLES[current]}>`,
-      embeds: [
-        new EmbedBuilder()
-          .setColor(data.color)
-          .setTitle("🚀 EVENT START")
-          .setDescription(`**${data.name}** wystartował!\n${data.tip}`)
-          .setImage(data.image)
-      ]
-    });
-
-    db.startPingId = msg.id;
-    saveDB(db);
-
-    setTimeout(async () => {
-      const fresh = loadDB();
-      await deleteMsg(channel, fresh.startPingId);
-      fresh.startPingId = null;
-      saveDB(fresh);
-    }, 15 * 60 * 1000);
-  }
-
-}, 10000);
-
 // ================= INTERACTIONS =================
 client.on("interactionCreate", async (i) => {
 
@@ -317,7 +253,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 BOT DZIAŁA");
+  console.log("🔥 FINAL PERFECT");
   await startPanel();
 });
 
