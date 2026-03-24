@@ -21,7 +21,7 @@ const client = new Client({
 
 const CHANNEL_ID = "1484937784283369502";
 
-// ================= OBRAZY =================
+// ================= CONFIG =================
 const PANEL_IMAGE = "https://imgur.com/sOU3JWV.png";
 
 const EVENT_DATA = {
@@ -51,9 +51,21 @@ const ROLES = {
   spin: "1484911421903999127"
 };
 
-const DB_PATH = "./data.json";
+// 🔥 TWOJA ROTACJA 1:1
+const ROTATION = [
+  "egg","merchant","spin",
+  "egg","merchant","spin",
+  "egg","merchant","spin",
+  "egg","merchant","spin",
+  "egg","merchant","spin",
+  "egg","merchant","spin",
+  "egg","merchant","spin",
+  "egg","merchant","spin"
+];
 
 // ================= DB =================
+const DB_PATH = "./data.json";
+
 function loadDB() {
   if (!fs.existsSync(DB_PATH)) {
     fs.writeFileSync(DB_PATH, JSON.stringify({
@@ -75,50 +87,30 @@ function getNowPL() {
   return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
 }
 
-// ================= EVENTS =================
-const EVENTS = {
-  egg: [0,3,6,9,12,15,18,21],
-  merchant: [1,4,7,10,13,16,19,22],
-  spin: [2,5,8,11,14,17,20,23]
-};
-
-function getEventByHour(hour) {
-  if (EVENTS.egg.includes(hour)) return "egg";
-  if (EVENTS.merchant.includes(hour)) return "merchant";
-  return "spin";
+// ================= EVENT SYSTEM =================
+function getCurrentEvent() {
+  const hour = getNowPL().getHours();
+  return ROTATION[hour];
 }
 
-// ================= 🔥 PERFECT NEXT EVENT =================
 function getNextEvent() {
   const now = getNowPL();
-  const nowTs = Math.floor(now.getTime() / 1000);
 
-  let closest = null;
+  let nextHour = (now.getMinutes() === 0 && now.getSeconds() === 0)
+    ? now.getHours()
+    : (now.getHours() + 1) % 24;
 
-  for (let dayOffset = 0; dayOffset < 2; dayOffset++) {
-    for (let hour = 0; hour < 24; hour++) {
+  const date = new Date(now);
+  date.setHours(nextHour, 0, 0, 0);
 
-      const type = getEventByHour(hour);
-
-      const date = new Date(now);
-      date.setDate(now.getDate() + dayOffset);
-      date.setHours(hour, 0, 0, 0);
-
-      const ts = Math.floor(date.getTime() / 1000);
-
-      if (ts <= nowTs) continue;
-
-      if (!closest || ts < closest.timestamp) {
-        closest = { type, timestamp: ts };
-      }
-    }
+  if (nextHour <= now.getHours()) {
+    date.setDate(date.getDate() + 1);
   }
 
-  return closest;
-}
-
-function getCurrentEvent() {
-  return getEventByHour(getNowPL().getHours());
+  return {
+    type: ROTATION[nextHour],
+    timestamp: Math.floor(date.getTime() / 1000)
+  };
 }
 
 // ================= COUNTDOWN =================
@@ -149,11 +141,10 @@ function panelEmbed() {
 
 🟢 **CURRENT EVENT**
 > **${currentData.name}**
-> ⏳ Ends in: \`${formatTime(seconds)}\`
 
 ⏭️ **NEXT EVENT**
 > **${nextData.name}**
-> 🕒 Starts in: \`${formatTime(seconds)}\`
+> ⏳ Starts in: \`${formatTime(seconds)}\`
 
 ━━━━━━━━━━━━━━━━━━`
     )
@@ -167,8 +158,8 @@ function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Refresh").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("pick_roles").setLabel("🎭 Roles").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("pick_dm").setLabel("📩 Notifications").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("roles").setLabel("🎭 Roles").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("dm").setLabel("📩 Notifications").setStyle(ButtonStyle.Secondary)
     )
   ];
 }
@@ -208,7 +199,7 @@ async function startPanel() {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 PERFECT BOT READY (NO BUGS)");
+  console.log("🔥 ROTATION PERFECT");
   await startPanel();
 });
 
