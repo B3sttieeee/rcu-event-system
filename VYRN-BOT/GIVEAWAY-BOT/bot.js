@@ -1,36 +1,75 @@
 js
 require('dotenv').config();
+
 const fs = require('fs');
 const mongoose = require('mongoose');
 const { Client, GatewayIntentBits } = require('discord.js');
 
-console.log("🚀 START BOT");
+console.log("🚀 STARTING BOT...");
 
-// client
+// ===== ENV CHECK =====
+if (!process.env.TOKEN) {
+  console.log("❌ ERROR: TOKEN not found");
+  process.exit(1);
+}
+
+if (!process.env.MONGO_URI) {
+  console.log("❌ ERROR: MONGO_URI not found");
+  process.exit(1);
+}
+
+// ===== CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// mongo
+// ===== MONGO =====
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("✅ Mongo connected"))
-  .catch(err => console.log("❌ Mongo error:", err));
+  .then(() => console.log("✅ MongoDB connected"))
+  .catch(err => {
+    console.log("❌ MongoDB ERROR:", err);
+    process.exit(1);
+  });
 
-// load events
-const eventFiles = fs.readdirSync('./events');
+// ===== LOAD EVENTS =====
+try {
+  const eventFiles = fs.readdirSync('./events');
 
-for (const file of eventFiles) {
-  const event = require(`./events/${file}`);
+  console.log("📂 EVENTS:", eventFiles);
 
-  if (event.once) {
-    client.once(event.name, (...args) => event.execute(...args, client));
-  } else {
-    client.on(event.name, (...args) => event.execute(...args, client));
+  for (const file of eventFiles) {
+    console.log(`➡️ Loading event: ${file}`);
+
+    const event = require(`./events/${file}`);
+
+    if (!event.name || !event.execute) {
+      console.log(`❌ Invalid event file: ${file}`);
+      continue;
+    }
+
+    if (event.once) {
+      client.once(event.name, (...args) => event.execute(...args, client));
+    } else {
+      client.on(event.name, (...args) => event.execute(...args, client));
+    }
   }
+
+} catch (err) {
+  console.log("❌ ERROR LOADING EVENTS:", err);
 }
 
-// anti crash
-process.on("unhandledRejection", console.error);
-process.on("uncaughtException", console.error);
+// ===== LOGIN =====
+client.login(process.env.TOKEN)
+  .then(() => console.log("✅ Logged in"))
+  .catch(err => {
+    console.log("❌ LOGIN ERROR:", err);
+  });
 
-client.login(process.env.TOKEN);
+// ===== ANTI CRASH =====
+process.on("unhandledRejection", err => {
+  console.log("❌ UNHANDLED REJECTION:", err);
+});
+
+process.on("uncaughtException", err => {
+  console.log("❌ UNCAUGHT EXCEPTION:", err);
+});
