@@ -107,36 +107,35 @@ function getNextEvent() {
   };
 }
 
-// ================= COUNTDOWN =================
-function getCountdown(ts) {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = ts - now;
-
-  const m = Math.floor((diff % 3600) / 60);
-  const s = diff % 60;
-
-  return `${m}m ${s}s`;
-}
-
-// ================= EMBED PANEL =================
+// ================= EMBED PANEL (NOWY DESIGN) =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
+  const currentData = EVENT_DATA[current];
+  const nextData = EVENT_DATA[next.type];
+
   return new EmbedBuilder()
-    .setColor("#5865F2")
+    .setColor(currentData.color)
     .setTitle("✨ Event Panel")
-    .setDescription("Live event tracking")
+    .setDescription("🎮 Live event tracking system")
 
     .setImage(PANEL_IMAGE)
 
     .addFields(
-      { name: "🟢 Current", value: `**${EVENT_DATA[current].name}**`, inline: true },
-      { name: "⏭️ Next", value: `**${EVENT_DATA[next.type].name}**`, inline: true },
-      { name: "⏳ Starts In", value: `${getCountdown(next.timestamp)}` }
+      {
+        name: "🟢 CURRENT EVENT",
+        value: `**${currentData.name}**\n⏳ Ends: <t:${next.timestamp}:R>`,
+        inline: true
+      },
+      {
+        name: "⏭️ NEXT EVENT",
+        value: `**${nextData.name}**\n🕒 Starts: <t:${next.timestamp}:R>`,
+        inline: true
+      }
     )
 
-    .setFooter({ text: "By B3sttiee • Auto 10s" })
+    .setFooter({ text: "By B3sttiee • Auto refresh 10s" })
     .setTimestamp();
 }
 
@@ -334,7 +333,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 FINAL BOT READY");
+  console.log("🔥 FINAL CLEAN BOT READY");
   await startPanel();
 });
 
