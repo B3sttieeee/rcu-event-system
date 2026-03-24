@@ -40,7 +40,7 @@ const EVENT_DATA = {
     name: "DEV SPIN",
     color: "#ff0000",
     image: "https://imgur.com/blg4iD8.png",
-    tip: "Zakręć kołem!"
+    tip: "Zakreć kołem!"
   }
 };
 
@@ -69,7 +69,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= EVENT LOGIC =================
+// ================= EVENT GODZINY =================
 function getEventByHour(hour) {
   if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
   if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
@@ -81,31 +81,19 @@ function getCurrentEvent() {
 }
 
 function getNextEvent() {
-  const nextHour = (new Date().getHours() + 1) % 24;
-  return getEventByHour(nextHour);
+  return getEventByHour((new Date().getHours() + 1) % 24);
 }
 
-// ================= COUNTDOWN =================
-function getCountdownToNext() {
+// ================= TIMER =================
+function getSharedCountdown() {
   const now = new Date();
 
   let m = 59 - now.getMinutes();
   let s = 60 - now.getSeconds();
 
-  if (s === 60) {
-    s = 0;
-  } else {
-    m -= 1;
-  }
+  if (s === 60) s = 0;
+  else m--;
 
-  return `${m}m ${s}s`;
-}
-
-// ile minęło od startu aktualnego eventu
-function getElapsedCurrent() {
-  const now = new Date();
-  const m = now.getMinutes();
-  const s = now.getSeconds();
   return `${m}m ${s}s`;
 }
 
@@ -117,19 +105,25 @@ function panelEmbed() {
   const currentData = EVENT_DATA[current];
   const nextData = EVENT_DATA[next];
 
+  const time = getSharedCountdown();
+
   return new EmbedBuilder()
     .setColor(currentData.color)
     .setTitle("✨ Event Panel")
     .setDescription(
 `🎮 **Live Event Tracking**
 
-\`\`\`
-🟢 CURRENT        ⏭️ NEXT
-${currentData.name.padEnd(14)} ${nextData.name}
+━━━━━━━━━━━━━━━━━━
 
-⏱️ ${getElapsedCurrent().padEnd(14)} ⏳ ${getCountdownToNext()}
-\`\`\`
-`
+🟢 **CURRENT EVENT**
+> **${currentData.name}**
+> ⏳ Ends in: \`${time}\`
+
+⏭️ **NEXT EVENT**
+> **${nextData.name}**
+> ⏱️ Starts in: \`${time}\`
+
+━━━━━━━━━━━━━━━━━━`
     )
     .setImage(PANEL_IMAGE)
     .setFooter({ text: "By B3sttiee • refresh 10s" })
@@ -141,7 +135,7 @@ function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("roles").setLabel("🎭 Roles").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("dm").setLabel("📩 DM").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("dm").setLabel("📩 Notifications").setStyle(ButtonStyle.Secondary)
     )
   ];
 }
@@ -210,6 +204,74 @@ async function startPanel() {
   }, 10000);
 }
 
+// ================= PING SYSTEM =================
+let lastPing = "";
+
+async function deleteMsg(channel, id) {
+  if (!id) return;
+  try {
+    const msg = await channel.messages.fetch(id);
+    await msg.delete();
+  } catch {}
+}
+
+setInterval(async () => {
+
+  const now = new Date();
+  const min = now.getMinutes();
+  const hour = now.getHours();
+
+  const channel = await client.channels.fetch(CHANNEL_ID);
+  const db = loadDB();
+
+  const current = getCurrentEvent();
+  const next = getNextEvent();
+
+  // 5 min before
+  if (min === 55 && lastPing !== `${hour}-before`) {
+    lastPing = `${hour}-before`;
+
+    const msg = await channel.send({
+      content: `<@&${ROLES[next]}> ⚠️ Event za 5 minut!`
+    });
+
+    db.beforePingId = msg.id;
+    saveDB(db);
+  }
+
+  // start event
+  if (min === 0 && lastPing !== `${hour}-start`) {
+    lastPing = `${hour}-start`;
+
+    await deleteMsg(channel, db.beforePingId);
+
+    const data = EVENT_DATA[current];
+
+    const msg = await channel.send({
+      content: `<@&${ROLES[current]}>`,
+      embeds: [
+        new EmbedBuilder()
+          .setColor(data.color)
+          .setTitle("🚀 EVENT START")
+          .setDescription(`**${data.name}** wystartował!\n${data.tip}`)
+          .setImage(data.image)
+      ]
+    });
+
+    db.startPingId = msg.id;
+    saveDB(db);
+
+    // usuń po 15 min
+    setTimeout(async () => {
+      const fresh = loadDB();
+      await deleteMsg(channel, fresh.startPingId);
+      fresh.startPingId = null;
+      saveDB(fresh);
+    }, 15 * 60 * 1000);
+  }
+
+}, 10000);
+
 // ================= INTERACTIONS =================
 client.on("interactionCreate", async (i) => {
 
@@ -220,7 +282,7 @@ client.on("interactionCreate", async (i) => {
     }
 
     if (i.customId === "dm") {
-      return i.reply({ content: "📩 DM:", components: [dmMenu()], ephemeral: true });
+      return i.reply({ content: "📩 Notifications:", components: [dmMenu()], ephemeral: true });
     }
   }
 
@@ -253,7 +315,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 FINAL PERFECT");
+  console.log("🔥 FINAL 100% WORKING");
   await startPanel();
 });
 
