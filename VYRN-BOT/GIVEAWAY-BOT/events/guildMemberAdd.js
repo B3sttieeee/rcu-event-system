@@ -1,8 +1,9 @@
 const { EmbedBuilder } = require('discord.js');
 const config = require('../config');
 
-// ===== CHANNEL IDS =====
-const WELCOME_CHANNEL = config.PANEL_CHANNEL; // kanał gdzie ma wysyłać (ten co podałeś)
+// ===== CONFIG =====
+const WELCOME_CHANNEL = "1475559296594084007";
+const AUTO_ROLE = "1475572275095929022";
 
 const RULES_CHANNEL = "1475526080361140344";
 const VERIFY_CHANNEL = "1475970436650237962";
@@ -13,9 +14,18 @@ module.exports = {
 
   async execute(member) {
 
+    // ===== AUTO ROLE =====
+    try {
+      await member.roles.add(AUTO_ROLE);
+    } catch (err) {
+      console.log("❌ AUTO ROLE ERROR:", err);
+    }
+
+    // ===== CHANNEL =====
     const channel = member.guild.channels.cache.get(WELCOME_CHANNEL);
     if (!channel) return;
 
+    // ===== EMBED =====
     const embed = new EmbedBuilder()
       .setColor('#2b2d31')
       .setAuthor({ name: 'VYRN - SYSTEM' })
@@ -32,7 +42,8 @@ module.exports = {
 
 **Administrations | VYRN**
 `)
-      .setImage(config.IMAGE);
+      .setImage(config.IMAGE)
+      .setFooter({ text: `User ID: ${member.id}` });
 
     channel.send({ embeds: [embed] });
   }
