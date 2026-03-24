@@ -1,4 +1,3 @@
-js
 const { REST, Routes } = require('discord.js');
 const fs = require('fs');
 
