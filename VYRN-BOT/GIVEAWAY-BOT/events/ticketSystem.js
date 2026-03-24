@@ -42,7 +42,7 @@ async function createPanel(client) {
   await channel.send({ embeds: [embed], components: [row] });
 }
 
-// ===== EXPORT EVENT =====
+// ===== READY EVENT =====
 module.exports = {
   name: 'ready',
   once: true,
@@ -51,11 +51,11 @@ module.exports = {
   }
 };
 
-// ===== INTERACTIONS =====
+// ===== HANDLER =====
 module.exports.handle = async (interaction) => {
 
   // ===== OPEN MODAL =====
-  if (interaction.customId === 'ticket_open') {
+  if (interaction.isButton() && interaction.customId === 'ticket_open') {
 
     const modal = new ModalBuilder()
       .setCustomId('ticket_modal')
@@ -68,7 +68,6 @@ module.exports.handle = async (interaction) => {
       .setRequired(true);
 
     const row = new ActionRowBuilder().addComponents(nick);
-
     modal.addComponents(row);
 
     return interaction.showModal(modal);
@@ -96,7 +95,7 @@ module.exports.handle = async (interaction) => {
     });
   }
 
-  // ===== LANGUAGE PICK =====
+  // ===== LANGUAGE SELECT =====
   if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_lang') {
 
     const lang = interaction.values[0];
@@ -113,14 +112,38 @@ module.exports.handle = async (interaction) => {
       ]
     });
 
+    // ===== LANGUAGE TEXT =====
+    let description;
+
+    if (lang === 'pl') {
+      description = `
+👋 **Cześć!**
+
+📸 Wyślij screen swoich **statystyk / gamepassów oraz teamu**,  
+abyśmy mogli rozpatrzyć Twoją aplikację do klanu.
+
+⏳ Odpowiedź otrzymasz wkrótce.
+`;
+    } else {
+      description = `
+👋 **Hello!**
+
+📸 Please send a screenshot of your **stats / gamepasses and team**,  
+so we can review your application to the clan.
+
+⏳ Staff will respond shortly.
+`;
+    }
+
     const embed = new EmbedBuilder()
       .setColor('#2b2d31')
-      .setTitle('🎫 Ticket Opened')
-      .setDescription(`
-👤 User: ${interaction.user}
-🎮 Nick: **${nick}**
-🌍 Language: ${lang.toUpperCase()}
-`);
+      .setTitle('🎫 Clan Application')
+      .setDescription(description)
+      .addFields(
+        { name: '👤 User', value: `${interaction.user}`, inline: true },
+        { name: '🎮 Nick', value: `**${nick}**`, inline: true },
+        { name: '🌍 Language', value: lang.toUpperCase(), inline: true }
+      );
 
     const closeBtn = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -139,6 +162,7 @@ module.exports.handle = async (interaction) => {
     interaction.user.send({
       embeds: [
         new EmbedBuilder()
+          .setColor('#2b2d31')
           .setTitle('🎫 Ticket Created')
           .setDescription(`Your ticket has been opened: ${channel}`)
       ]
@@ -147,10 +171,24 @@ module.exports.handle = async (interaction) => {
     interaction.update({ content: '✅ Ticket created', components: [] });
   }
 
-  // ===== CLOSE =====
-  if (interaction.customId === 'ticket_close') {
+  // ===== CLOSE TICKET =====
+  if (interaction.isButton() && interaction.customId === 'ticket_close') {
 
-    await interaction.reply({ content: '🔒 Closing...', ephemeral: true });
+    // 🔥 PERMISSIONS CHECK
+    if (
+      !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) &&
+      !interaction.member.roles.cache.has(config.OFFICER_ROLE)
+    ) {
+      return interaction.reply({
+        content: '❌ Only staff can close this ticket',
+        ephemeral: true
+      });
+    }
+
+    await interaction.reply({
+      content: '🔒 Closing ticket...',
+      ephemeral: true
+    });
 
     setTimeout(() => {
       interaction.channel.delete().catch(() => {});
