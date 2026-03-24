@@ -95,16 +95,25 @@ function panelEmbed() {
 
   return new EmbedBuilder()
     .setColor("#5865F2")
-    .setTitle("🎮 EVENT PANEL")
-    .setDescription(
-`🟢 **AKTUALNY EVENT**
-> **${current.toUpperCase()}**
-
-⏭️ **NASTĘPNY EVENT**
-> **${next.type.toUpperCase()}**
-${getCountdown(next.timestamp)}`
+    .setTitle("✨ Event Panel")
+    .setDescription("**Automated Event System**")
+    .addFields(
+      {
+        name: "🟢 Current Event",
+        value: `> **${current.toUpperCase()}**`,
+        inline: true
+      },
+      {
+        name: "⏭️ Next Event",
+        value: `> **${next.type.toUpperCase()}**\n${getCountdown(next.timestamp)}`,
+        inline: true
+      }
     )
-    .setFooter({ text: "By B3sttiee" })
+    .addFields({
+      name: "⠀",
+      value: "━━━━━━━━━━━━━━━━━━━━━━",
+    })
+    .setFooter({ text: "By B3sttiee • Auto Refresh 10s" })
     .setTimestamp();
 }
 
@@ -112,12 +121,13 @@ ${getCountdown(next.timestamp)}`
 function dmEmbed(type, status) {
   return new EmbedBuilder()
     .setColor(status === "start" ? "#00ff99" : "#ffaa00")
-    .setTitle(status === "start" ? "🚀 EVENT START" : "⏳ EVENT SOON")
+    .setTitle(status === "start" ? "🚀 Event Started" : "⏳ Event Incoming")
     .setDescription(
-      `🔔 Event **${type.toUpperCase()}** ${
-        status === "start" ? "STARTED!" : "starts in 5 minutes!"
-      }`
+      status === "start"
+        ? `> Event **${type.toUpperCase()}** has just started!`
+        : `> Event **${type.toUpperCase()}** starts in **5 minutes**`
     )
+    .setFooter({ text: "Event Notification" })
     .setTimestamp();
 }
 
@@ -126,8 +136,8 @@ function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Refresh").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("pick_roles").setLabel("🎭 Pick Roles").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("pick_dm").setLabel("📩 Pick DM Notifications").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("pick_roles").setLabel("🎭 Roles").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("pick_dm").setLabel("📩 Notifications").setStyle(ButtonStyle.Secondary)
     )
   ];
 }
@@ -137,7 +147,7 @@ function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
-      .setPlaceholder("Select event roles")
+      .setPlaceholder("Choose event roles")
       .addOptions([
         { label: "Egg Event", value: "egg" },
         { label: "Merchant Event", value: "merchant" },
@@ -150,7 +160,7 @@ function dmMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
-      .setPlaceholder("Select DM notifications")
+      .setPlaceholder("Choose notifications")
       .addOptions([
         { label: "Egg", value: "egg" },
         { label: "Merchant", value: "merchant" },
@@ -230,17 +240,15 @@ setInterval(async () => {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
-  // ===== 5 MIN BEFORE =====
   if (min === 55 && lastNotify !== `${hour}-5`) {
     lastNotify = `${hour}-5`;
 
     await sendPing(
       channel,
-      `⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** za 5 minut!`,
+      `⏳ <@&${ROLES[next.type]}> Event **${next.type.toUpperCase()}** in 5 minutes!`,
       db
     );
 
-    // DM
     for (const userId in db.dm) {
       if (db.dm[userId].includes(next.type)) {
         try {
@@ -254,7 +262,6 @@ setInterval(async () => {
     }
   }
 
-  // ===== START =====
   if (min === 0 && lastNotify !== `${hour}-start`) {
     lastNotify = `${hour}-start`;
 
@@ -264,7 +271,6 @@ setInterval(async () => {
       db
     );
 
-    // DM
     for (const userId in db.dm) {
       if (db.dm[userId].includes(current)) {
         try {
@@ -277,7 +283,6 @@ setInterval(async () => {
       }
     }
 
-    // usuń po 15 min
     setTimeout(async () => {
       await deleteOldPing(channel, loadDB());
     }, 15 * 60 * 1000);
@@ -298,7 +303,7 @@ client.on("interactionCreate", async (i) => {
 
     if (i.customId === "pick_roles") {
       return i.reply({
-        content: "🎭 Choose your roles:",
+        content: "🎭 Select your event roles:",
         components: [rolesMenu()],
         ephemeral: true
       });
@@ -306,7 +311,7 @@ client.on("interactionCreate", async (i) => {
 
     if (i.customId === "pick_dm") {
       return i.reply({
-        content: "📩 Choose DM notifications:",
+        content: "📩 Select DM notifications:",
         components: [dmMenu()],
         ephemeral: true
       });
@@ -339,7 +344,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 BOT FULL FIX READY");
+  console.log("🔥 BOT PREMIUM READY");
   await startPanel();
 });
 
