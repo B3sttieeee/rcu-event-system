@@ -83,39 +83,53 @@ client.once('clientReady', async () => {
   restore();
 });
 
-// ===== CLEAN EMBED =====
+// ===== 🔥 PREMIUM EMBED =====
 function buildEmbed(data) {
-  let bonus = 'Brak bonusów';
-
+  let bonus = 'Brak';
   if (roleEntries.size > 0) {
     bonus = [...roleEntries.entries()]
-      .map(([id, val]) => `<@&${id}> (+${val})`)
-      .join(', ');
+      .map(([id, val]) => `<@&${id}> +${val}`)
+      .join('\n');
   }
 
   return new EmbedBuilder()
     .setColor('#5865F2')
+    .setAuthor({
+      name: 'Giveaway',
+      iconURL: client.user.displayAvatarURL()
+    })
     .setTitle(`🎉 ${data.reward}`)
-    .setDescription(
-      `Kliknij **Join**, aby wziąć udział!\n\n` +
-      `👥 **Uczestnicy:** ${data.participants.length}\n` +
-      `🏆 **Zwycięzcy:** ${data.winners}\n` +
-      `⏳ **Koniec:** <t:${Math.floor(data.endTime / 1000)}:R>\n`
-    )
+    .setDescription(`Kliknij **Join**, aby wziąć udział`)
     .addFields(
       {
-        name: '🎟 Bonusowe szanse',
-        value: bonus
+        name: '👥 Uczestnicy',
+        value: `**${data.participants.length}**`,
+        inline: true
       },
       {
-        name: '🔒 Wymagana rola',
-        value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak'
+        name: '🏆 Zwycięzcy',
+        value: `**${data.winners}**`,
+        inline: true
+      },
+      {
+        name: '⏳ Koniec',
+        value: `<t:${Math.floor(data.endTime / 1000)}:R>`,
+        inline: true
+      },
+      {
+        name: '🎟 Bonus',
+        value: bonus,
+        inline: false
+      },
+      {
+        name: '🔒 Rola',
+        value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak',
+        inline: false
       }
     )
     .setFooter({
-      text: `ID: ${data.messageId || '—'}`
-    })
-    .setTimestamp();
+      text: 'Kliknij przycisk poniżej'
+    });
 }
 
 // ===== INTERACTION =====
@@ -146,14 +160,15 @@ client.on('interactionCreate', async interaction => {
           ended: false
         };
 
-        const embed = buildEmbed(data);
-
         const row = new ActionRowBuilder().addComponents(
           new ButtonBuilder().setCustomId('join').setLabel('Join').setStyle(ButtonStyle.Success),
           new ButtonBuilder().setCustomId('leave').setLabel('Leave').setStyle(ButtonStyle.Secondary)
         );
 
-        const msg = await interaction.channel.send({ embeds: [embed], components: [row] });
+        const msg = await interaction.channel.send({
+          embeds: [buildEmbed(data)],
+          components: [row]
+        });
 
         await Giveaway.create({ ...data, messageId: msg.id, channelId: msg.channel.id });
 
@@ -189,12 +204,12 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (data.requiredRole && !interaction.member.roles.cache.has(data.requiredRole)) {
-        return interaction.reply({ content: '❌ Brak wymaganej roli', ephemeral: true });
+        return interaction.reply({ content: '❌ Brak roli', ephemeral: true });
       }
 
       if (interaction.customId === 'join') {
         if (data.participants.includes(interaction.user.id)) {
-          return interaction.reply({ content: '❌ Już bierzesz udział', ephemeral: true });
+          return interaction.reply({ content: '❌ Już jesteś', ephemeral: true });
         }
 
         data.participants.push(interaction.user.id);
@@ -211,7 +226,7 @@ client.on('interactionCreate', async interaction => {
 
         interaction.message.edit({ embeds: [buildEmbed(data)] });
 
-        interaction.reply({ content: '❌ Opuściłeś giveaway', ephemeral: true });
+        interaction.reply({ content: '❌ Opuściłeś', ephemeral: true });
       }
     }
 
