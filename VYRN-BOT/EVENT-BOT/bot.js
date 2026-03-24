@@ -107,7 +107,19 @@ function getNextEvent() {
   };
 }
 
-// ================= EMBED PANEL (NOWY DESIGN) =================
+// ================= COUNTDOWN (NOWY) =================
+function formatTime(seconds) {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}m ${s}s`;
+}
+
+function getRemainingSeconds(timestamp) {
+  const now = Math.floor(Date.now() / 1000);
+  return Math.max(0, timestamp - now);
+}
+
+// ================= EMBED PANEL =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
@@ -115,22 +127,24 @@ function panelEmbed() {
   const currentData = EVENT_DATA[current];
   const nextData = EVENT_DATA[next.type];
 
+  const secondsLeft = getRemainingSeconds(next.timestamp);
+
   return new EmbedBuilder()
     .setColor(currentData.color)
     .setTitle("✨ Event Panel")
-    .setDescription("🎮 Live event tracking system")
+    .setDescription("🎮 Live event tracking system\n")
 
     .setImage(PANEL_IMAGE)
 
     .addFields(
       {
         name: "🟢 CURRENT EVENT",
-        value: `**${currentData.name}**\n⏳ Ends: <t:${next.timestamp}:R>`,
+        value: `**${currentData.name}**\n⏳ Ends in: \`${formatTime(secondsLeft)}\``,
         inline: true
       },
       {
         name: "⏭️ NEXT EVENT",
-        value: `**${nextData.name}**\n🕒 Starts: <t:${next.timestamp}:R>`,
+        value: `**${nextData.name}**\n🕒 Starts in: \`${formatTime(secondsLeft)}\``,
         inline: true
       }
     )
@@ -239,7 +253,6 @@ setInterval(async () => {
   const current = getCurrentEvent();
   const next = getNextEvent();
 
-  // ===== 5 MIN BEFORE =====
   if (min === 55 && lastNotify !== `${hour}-5`) {
     lastNotify = `${hour}-5`;
 
@@ -253,7 +266,6 @@ setInterval(async () => {
     saveDB(db);
   }
 
-  // ===== START =====
   if (min === 0 && lastNotify !== `${hour}-start`) {
     lastNotify = `${hour}-start`;
 
@@ -333,7 +345,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 FINAL CLEAN BOT READY");
+  console.log("🔥 BOT READY (COUNTDOWN FIXED)");
   await startPanel();
 });
 
