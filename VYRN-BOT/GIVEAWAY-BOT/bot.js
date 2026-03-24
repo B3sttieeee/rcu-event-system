@@ -234,7 +234,6 @@ async function endGiveaway(id) {
     return channel.send('❌ Brak uczestników');
   }
 
-  // 🎯 LOSOWANIE
   const winners = [];
   const pool = [...data.participants];
 
@@ -244,6 +243,9 @@ async function endGiveaway(id) {
     winners.push(pool[index]);
     pool.splice(index, 1);
   }
+
+  // 🔥 PUBLIC MESSAGE (NOWOŚĆ)
+  channel.send(`🎉 **Zwycięzcy giveaway (${data.reward})**:\n<@${winners.join('>\n<@')}>`);
 
   // 🔒 PRIVATE CHANNEL
   const cleanName = data.reward.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(0, 20);
