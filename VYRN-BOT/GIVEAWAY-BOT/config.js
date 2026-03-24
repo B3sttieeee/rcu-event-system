@@ -1,0 +1,6 @@
+module.exports = {
+  PANEL_CHANNEL: "1475558248487583805",
+  CATEGORY_ID: "1475985874385899530",
+  OFFICER_ROLE: "1475572271446884535",
+  IMAGE: "https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif"
+};
