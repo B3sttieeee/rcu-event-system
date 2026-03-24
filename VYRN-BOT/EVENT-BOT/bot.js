@@ -114,27 +114,20 @@ function panelEmbed() {
 
   const time = getSharedCountdown();
 
-  const leftTitle = "**🟢 CURRENT EVENT**";
-  const rightTitle = "**⏭️ NEXT EVENT**";
-
-  const leftName = `**${currentData.name}**`.padEnd(25, " ");
-  const rightName = `**${nextData.name}**`;
-
-  const leftTime = `\`${time}\``.padEnd(25, " ");
-  const rightTime = `\`${time}\``;
-
   return new EmbedBuilder()
     .setColor(currentData.color)
     .setTitle("✨ **EVENT PANEL**")
-    .setDescription(
-`\`\`\`
-${leftTitle}        ${rightTitle}
-
-${leftName} ${rightName}
-
-${leftTime} ${rightTime}
-\`\`\`
-`
+    .addFields(
+      {
+        name: "🟢 **CURRENT EVENT**",
+        value: `**${currentData.name}**\n⏳ \`${time}\``,
+        inline: true
+      },
+      {
+        name: "⏭️ **NEXT EVENT**",
+        value: `**${nextData.name}**\n⏱️ \`${time}\``,
+        inline: true
+      }
     )
     .setImage(PANEL_IMAGE)
     .setFooter({ text: "By B3sttiee • refresh 10s" })
@@ -305,57 +298,9 @@ setInterval(async () => {
 
 }, 10000);
 
-// ================= INTERACTIONS =================
-client.on("interactionCreate", async (i) => {
-
-  if (i.isButton()) {
-
-    if (i.customId === "refresh") {
-      return i.update({
-        embeds: [panelEmbed()],
-        components: getPanel()
-      });
-    }
-
-    if (i.customId === "roles") {
-      return i.reply({ content: "🎭 Roles:", components: [rolesMenu()], ephemeral: true });
-    }
-
-    if (i.customId === "dm") {
-      return i.reply({ content: "📩 Notifications:", components: [dmMenu()], ephemeral: true });
-    }
-  }
-
-  if (i.isStringSelectMenu()) {
-
-    const db = loadDB();
-
-    if (i.customId === "roles_menu") {
-      const member = await i.guild.members.fetch(i.user.id);
-
-      for (const key in ROLES) {
-        if (i.values.includes(key)) {
-          await member.roles.add(ROLES[key]).catch(()=>{});
-        } else {
-          await member.roles.remove(ROLES[key]).catch(()=>{});
-        }
-      }
-
-      return i.reply({ content: "✅ Roles updated!", ephemeral: true });
-    }
-
-    if (i.customId === "dm_menu") {
-      db.dm[i.user.id] = i.values;
-      saveDB(db);
-
-      return i.reply({ content: "✅ DM saved!", ephemeral: true });
-    }
-  }
-});
-
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 FINAL PERFECT");
+  console.log("🔥 FINAL CLEAN UI");
   await startPanel();
 });
 
