@@ -1,4 +1,4 @@
-```js
+js
 const {
   Client,
   GatewayIntentBits,
@@ -306,4 +306,3 @@ process.on("uncaughtException", console.error);
 
 // ===== LOGIN =====
 client.login(process.env.TOKEN);
-```
