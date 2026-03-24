@@ -1,4 +1,15 @@
-js
+// ===== 🔥 DEBUG (NA SAMEJ GÓRZE) =====
+console.log("🚀 START BOT");
+
+process.on("unhandledRejection", err => {
+  console.log("UNHANDLED REJECTION:", err);
+});
+
+process.on("uncaughtException", err => {
+  console.log("UNCAUGHT EXCEPTION:", err);
+});
+
+// ===== IMPORTY =====
 const {
   Client,
   GatewayIntentBits,
@@ -17,7 +28,6 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const ms = require('ms');
 
-// ===== IMPORTY =====
 const config = require('./config');
 const Giveaway = require('./models/Giveaway');
 const Panel = require('./models/Panel');
@@ -27,83 +37,115 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
+// ===== SPRAWDZ ENV =====
+if (!process.env.TOKEN) {
+  console.log("❌ BRAK TOKENA W .env");
+  process.exit(1);
+}
+
+if (!process.env.MONGO_URI) {
+  console.log("❌ BRAK MONGO_URI W .env");
+  process.exit(1);
+}
+
 // ===== DB =====
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ Mongo connected"))
-  .catch(err => console.log(err));
+  .catch(err => console.log("❌ Mongo error:", err));
+
+mongoose.connection.on("connected", () => {
+  console.log("📦 Mongo READY");
+});
+
+mongoose.connection.on("error", err => {
+  console.log("❌ Mongo ERROR:", err);
+});
 
 // ===== READY =====
 client.once('clientReady', async () => {
   console.log(`🔥 ${client.user.tag} READY`);
 
-  const commands = [
-    new SlashCommandBuilder()
-      .setName('giveaway-create')
-      .setDescription('Create giveaway')
-      .addStringOption(o =>
-        o.setName('time')
-          .setDescription('Time e.g. 1m / 1h')
-          .setRequired(true))
-      .addStringOption(o =>
-        o.setName('reward')
-          .setDescription('Reward')
-          .setRequired(true))
-      .addIntegerOption(o =>
-        o.setName('winners')
-          .setDescription('Number of winners')
-          .setRequired(true))
-  ].map(c => c.toJSON());
+  try {
+    const commands = [
+      new SlashCommandBuilder()
+        .setName('giveaway-create')
+        .setDescription('Create giveaway')
+        .addStringOption(o =>
+          o.setName('time')
+            .setDescription('Time e.g. 1m / 1h')
+            .setRequired(true))
+        .addStringOption(o =>
+          o.setName('reward')
+            .setDescription('Reward')
+            .setRequired(true))
+        .addIntegerOption(o =>
+          o.setName('winners')
+            .setDescription('Number of winners')
+            .setRequired(true))
+    ].map(c => c.toJSON());
 
-  const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
-  await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
+    const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+    await rest.put(Routes.applicationCommands(client.user.id), { body: commands });
 
-  createPanel();
-  restoreGiveaways();
+    console.log("✅ Commands deployed");
+
+    await createPanel();
+    await restoreGiveaways();
+
+  } catch (err) {
+    console.log("❌ READY ERROR:", err);
+  }
 });
 
 // ===== PANEL =====
 async function createPanel() {
-  const channel = await client.channels.fetch(config.PANEL_CHANNEL).catch(() => null);
-  if (!channel) return;
+  try {
+    const channel = await client.channels.fetch(config.PANEL_CHANNEL).catch(() => null);
+    if (!channel) return console.log("❌ PANEL CHANNEL NOT FOUND");
 
-  let data = await Panel.findOne({ guildId: channel.guild.id });
+    let data = await Panel.findOne({ guildId: channel.guild.id });
 
-  const embed = new EmbedBuilder()
-    .setColor('#2b2d31')
-    .setTitle('🎟 Clan TICKET')
-    .setDescription(`
-📌 **The Join Clan ticket is used to review your application and verify your account before you become a member.**
+    const embed = new EmbedBuilder()
+      .setColor('#2b2d31')
+      .setTitle('🎟 Clan TICKET')
+      .setDescription(`
+📌 **Join Clan ticket**
 
 📋 **Requirement:**
-• Good Gamepasses for Eggs!!
+• Gamepasses
 • 1.5N+ Rebirth
-• Min 3-5H Active
-• Min 15M Eggs
+• Active
 `)
-    .setImage(config.IMAGE);
+      .setImage(config.IMAGE);
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('open_ticket')
-      .setLabel('🔥 Open Ticket')
-      .setStyle(ButtonStyle.Primary)
-  );
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('open_ticket')
+        .setLabel('🔥 Open Ticket')
+        .setStyle(ButtonStyle.Primary)
+    );
 
-  try {
-    const msg = await channel.messages.fetch(data?.messageId);
-    await msg.edit({ embeds: [embed], components: [row] });
-  } catch {
-    const msg = await channel.send({ embeds: [embed], components: [row] });
+    try {
+      const msg = await channel.messages.fetch(data?.messageId);
+      await msg.edit({ embeds: [embed], components: [row] });
+    } catch {
+      const msg = await channel.send({ embeds: [embed], components: [row] });
 
-    if (!data) {
-      await Panel.create({
-        guildId: channel.guild.id,
-        messageId: msg.id
-      });
-    } else {
-      data.messageId = msg.id;
-      await data.save();
+      if (!data) {
+        await Panel.create({
+          guildId: channel.guild.id,
+          messageId: msg.id
+        });
+      } else {
+        data.messageId = msg.id;
+        await data.save();
+      }
     }
+
+    console.log("✅ PANEL READY");
+
+  } catch (err) {
+    console.log("❌ PANEL ERROR:", err);
   }
 }
 
@@ -124,7 +166,6 @@ function giveawayEmbed(data) {
 client.on('interactionCreate', async interaction => {
   try {
 
-    // ===== SLASH COMMAND =====
     if (interaction.isChatInputCommand()) {
 
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -136,10 +177,6 @@ client.on('interactionCreate', async interaction => {
         const time = interaction.options.getString('time');
         const reward = interaction.options.getString('reward');
         const winners = interaction.options.getInteger('winners');
-
-        if (!time || !reward || !winners) {
-          return interaction.reply({ content: '❌ Missing data', ephemeral: true });
-        }
 
         const duration = ms(time);
         if (!duration) {
@@ -178,10 +215,8 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    // ===== BUTTONS =====
     if (interaction.isButton()) {
 
-      // JOIN GIVEAWAY
       if (interaction.customId === 'join') {
         const data = await Giveaway.findOne({ messageId: interaction.message.id });
         if (!data || data.ended) return;
@@ -190,7 +225,6 @@ client.on('interactionCreate', async interaction => {
           data.participants.push(interaction.user.id);
           await data.save();
 
-          // update embed
           await interaction.message.edit({
             embeds: [giveawayEmbed(data)]
           });
@@ -201,7 +235,6 @@ client.on('interactionCreate', async interaction => {
         }
       }
 
-      // OPEN TICKET
       if (interaction.customId === 'open_ticket') {
 
         const existing = interaction.guild.channels.cache.find(
@@ -241,7 +274,6 @@ client.on('interactionCreate', async interaction => {
         interaction.reply({ content: '✅ Ticket created', ephemeral: true });
       }
 
-      // LANGUAGE EN
       if (interaction.customId === 'en') {
         await interaction.update({
           embeds: [new EmbedBuilder()
@@ -253,7 +285,6 @@ client.on('interactionCreate', async interaction => {
         });
       }
 
-      // LANGUAGE PL
       if (interaction.customId === 'pl') {
         await interaction.update({
           embeds: [new EmbedBuilder()
@@ -267,42 +298,50 @@ client.on('interactionCreate', async interaction => {
     }
 
   } catch (err) {
-    console.log("❌ ERROR:", err);
+    console.log("❌ INTERACTION ERROR:", err);
   }
 });
 
 // ===== END GIVEAWAY =====
 async function endGiveaway(id) {
-  const data = await Giveaway.findOne({ messageId: id });
-  if (!data || data.ended) return;
+  try {
+    const data = await Giveaway.findOne({ messageId: id });
+    if (!data || data.ended) return;
 
-  data.ended = true;
-  await data.save();
+    data.ended = true;
+    await data.save();
 
-  const channel = await client.channels.fetch(data.channelId);
+    const channel = await client.channels.fetch(data.channelId);
 
-  if (!data.participants.length) {
-    return channel.send('❌ Brak uczestników');
+    if (!data.participants.length) {
+      return channel.send('❌ Brak uczestników');
+    }
+
+    const winner = data.participants[Math.floor(Math.random() * data.participants.length)];
+    channel.send(`🎉 Winner: <@${winner}>`);
+
+  } catch (err) {
+    console.log("❌ END GIVEAWAY ERROR:", err);
   }
-
-  const winner = data.participants[Math.floor(Math.random() * data.participants.length)];
-  channel.send(`🎉 Winner: <@${winner}>`);
 }
 
 // ===== RESTORE =====
 async function restoreGiveaways() {
-  const all = await Giveaway.find();
+  try {
+    const all = await Giveaway.find();
 
-  for (const g of all) {
-    const left = g.endTime - Date.now();
-    if (left > 0) setTimeout(() => endGiveaway(g.messageId), left);
-    else endGiveaway(g.messageId);
+    for (const g of all) {
+      const left = g.endTime - Date.now();
+      if (left > 0) setTimeout(() => endGiveaway(g.messageId), left);
+      else endGiveaway(g.messageId);
+    }
+
+    console.log("✅ GIVEAWAYS RESTORED");
+
+  } catch (err) {
+    console.log("❌ RESTORE ERROR:", err);
   }
 }
-
-// ===== ANTI CRASH =====
-process.on("unhandledRejection", console.error);
-process.on("uncaughtException", console.error);
 
 // ===== LOGIN =====
 client.login(process.env.TOKEN);
