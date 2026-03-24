@@ -1,3 +1,4 @@
+```js
 const {
   Client,
   GatewayIntentBits,
@@ -16,38 +17,20 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const ms = require('ms');
 
+// ===== IMPORTY =====
+const config = require('./config');
+const Giveaway = require('./models/Giveaway');
+const Panel = require('./models/Panel');
+
+// ===== CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
-
-// ===== CONFIG =====
-const PANEL_CHANNEL = "1475558248487583805";
-const CATEGORY_ID = "1475985874385899530";
-const OFFICER_ROLE = "1475572271446884535";
-const IMAGE = "https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif";
 
 // ===== DB =====
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ Mongo connected"))
   .catch(err => console.log(err));
-
-// ===== SCHEMA =====
-const giveawaySchema = new mongoose.Schema({
-  messageId: String,
-  channelId: String,
-  reward: String,
-  winners: Number,
-  endTime: Number,
-  participants: [String],
-  ended: Boolean
-});
-const Giveaway = mongoose.model('Giveaway', giveawaySchema);
-
-const panelSchema = new mongoose.Schema({
-  guildId: String,
-  messageId: String
-});
-const Panel = mongoose.model('Panel', panelSchema);
 
 // ===== READY =====
 client.once('clientReady', async () => {
@@ -80,7 +63,7 @@ client.once('clientReady', async () => {
 
 // ===== PANEL =====
 async function createPanel() {
-  const channel = await client.channels.fetch(PANEL_CHANNEL).catch(() => null);
+  const channel = await client.channels.fetch(config.PANEL_CHANNEL).catch(() => null);
   if (!channel) return;
 
   let data = await Panel.findOne({ guildId: channel.guild.id });
@@ -97,7 +80,7 @@ async function createPanel() {
 • Min 3-5H Active
 • Min 15M Eggs
 `)
-    .setImage(IMAGE);
+    .setImage(config.IMAGE);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -124,7 +107,7 @@ async function createPanel() {
   }
 }
 
-// ===== GIVEAWAY =====
+// ===== GIVEAWAY EMBED =====
 function giveawayEmbed(data) {
   return new EmbedBuilder()
     .setColor('#2b2d31')
@@ -141,6 +124,7 @@ function giveawayEmbed(data) {
 client.on('interactionCreate', async interaction => {
   try {
 
+    // ===== SLASH COMMAND =====
     if (interaction.isChatInputCommand()) {
 
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -194,8 +178,10 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
+    // ===== BUTTONS =====
     if (interaction.isButton()) {
 
+      // JOIN GIVEAWAY
       if (interaction.customId === 'join') {
         const data = await Giveaway.findOne({ messageId: interaction.message.id });
         if (!data || data.ended) return;
@@ -203,22 +189,37 @@ client.on('interactionCreate', async interaction => {
         if (!data.participants.includes(interaction.user.id)) {
           data.participants.push(interaction.user.id);
           await data.save();
+
+          // update embed
+          await interaction.message.edit({
+            embeds: [giveawayEmbed(data)]
+          });
+
           interaction.reply({ content: '🎉 Joined!', ephemeral: true });
         } else {
           interaction.reply({ content: '❌ Already joined', ephemeral: true });
         }
       }
 
+      // OPEN TICKET
       if (interaction.customId === 'open_ticket') {
+
+        const existing = interaction.guild.channels.cache.find(
+          c => c.name === `ticket-${interaction.user.username}`
+        );
+
+        if (existing) {
+          return interaction.reply({ content: "❌ Masz już ticket", ephemeral: true });
+        }
 
         const ticket = await interaction.guild.channels.create({
           name: `ticket-${interaction.user.username}`,
           type: ChannelType.GuildText,
-          parent: CATEGORY_ID,
+          parent: config.CATEGORY_ID,
           permissionOverwrites: [
             { id: interaction.guild.roles.everyone, deny: [PermissionsBitField.Flags.ViewChannel] },
             { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel] },
-            { id: OFFICER_ROLE, allow: [PermissionsBitField.Flags.ViewChannel] }
+            { id: config.OFFICER_ROLE, allow: [PermissionsBitField.Flags.ViewChannel] }
           ]
         });
 
@@ -232,7 +233,7 @@ client.on('interactionCreate', async interaction => {
         );
 
         await ticket.send({
-          content: `<@${interaction.user.id}> <@&${OFFICER_ROLE}>`,
+          content: `<@${interaction.user.id}> <@&${config.OFFICER_ROLE}>`,
           embeds: [embed],
           components: [row]
         });
@@ -240,6 +241,7 @@ client.on('interactionCreate', async interaction => {
         interaction.reply({ content: '✅ Ticket created', ephemeral: true });
       }
 
+      // LANGUAGE EN
       if (interaction.customId === 'en') {
         await interaction.update({
           embeds: [new EmbedBuilder()
@@ -251,6 +253,7 @@ client.on('interactionCreate', async interaction => {
         });
       }
 
+      // LANGUAGE PL
       if (interaction.customId === 'pl') {
         await interaction.update({
           embeds: [new EmbedBuilder()
@@ -268,7 +271,7 @@ client.on('interactionCreate', async interaction => {
   }
 });
 
-// ===== END =====
+// ===== END GIVEAWAY =====
 async function endGiveaway(id) {
   const data = await Giveaway.findOne({ messageId: id });
   if (!data || data.ended) return;
@@ -297,4 +300,10 @@ async function restoreGiveaways() {
   }
 }
 
+// ===== ANTI CRASH =====
+process.on("unhandledRejection", console.error);
+process.on("uncaughtException", console.error);
+
+// ===== LOGIN =====
 client.login(process.env.TOKEN);
+```
