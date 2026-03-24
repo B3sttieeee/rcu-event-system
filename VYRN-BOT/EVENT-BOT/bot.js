@@ -20,7 +20,7 @@ const client = new Client({
   ]
 });
 
-// ================= CZAS PL =================
+// ================= CZAS =================
 function getNowPL() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
@@ -104,7 +104,7 @@ function getSharedCountdown() {
   return `${m}m ${s}s`;
 }
 
-// ================= EMBED (🔥 NOWY UI) =================
+// ================= EMBED =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
@@ -114,26 +114,27 @@ function panelEmbed() {
 
   const time = getSharedCountdown();
 
+  const leftTitle = "**🟢 CURRENT EVENT**";
+  const rightTitle = "**⏭️ NEXT EVENT**";
+
+  const leftName = `**${currentData.name}**`.padEnd(25, " ");
+  const rightName = `**${nextData.name}**`;
+
+  const leftTime = `\`${time}\``.padEnd(25, " ");
+  const rightTime = `\`${time}\``;
+
   return new EmbedBuilder()
     .setColor(currentData.color)
-    .setTitle("✨ Event Panel")
-    .setDescription("🎮 **Live Event Tracking System**")
-    .addFields(
-      {
-        name: "🟢 CURRENT EVENT",
-        value: `**${currentData.name}**\n⏳ Ends in: \`${time}\``,
-        inline: true
-      },
-      {
-        name: "⏭️ NEXT EVENT",
-        value: `**${nextData.name}**\n⏱️ Starts in: \`${time}\``,
-        inline: true
-      },
-      {
-        name: "\u200B",
-        value: "━━━━━━━━━━━━━━━━━━",
-        inline: false
-      }
+    .setTitle("✨ **EVENT PANEL**")
+    .setDescription(
+`\`\`\`
+${leftTitle}        ${rightTitle}
+
+${leftName} ${rightName}
+
+${leftTime} ${rightTime}
+\`\`\`
+`
     )
     .setImage(PANEL_IMAGE)
     .setFooter({ text: "By B3sttiee • refresh 10s" })
@@ -156,7 +157,6 @@ function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
-      .setPlaceholder("🎭 Choose your roles")
       .setMinValues(0)
       .setMaxValues(3)
       .addOptions([
@@ -171,7 +171,6 @@ function dmMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
-      .setPlaceholder("📩 Choose DM notifications")
       .setMinValues(0)
       .setMaxValues(3)
       .addOptions([
@@ -182,7 +181,7 @@ function dmMenu() {
   );
 }
 
-// ================= PANEL SYSTEM =================
+// ================= PANEL =================
 let panelMessage;
 
 async function startPanel() {
@@ -215,7 +214,31 @@ async function startPanel() {
   }, 10000);
 }
 
-// ================= PING SYSTEM =================
+// ================= DM =================
+async function sendDM(eventKey) {
+  const db = loadDB();
+
+  for (const userId in db.dm) {
+    if (db.dm[userId].includes(eventKey)) {
+      try {
+        const user = await client.users.fetch(userId);
+        const data = EVENT_DATA[eventKey];
+
+        await user.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor(data.color)
+              .setTitle("📩 EVENT START")
+              .setDescription(`**${data.name}** wystartował!\n${data.tip}`)
+              .setImage(data.image)
+          ]
+        });
+      } catch {}
+    }
+  }
+}
+
+// ================= PING =================
 let lastPing = "";
 
 async function deleteMsg(channel, id) {
@@ -269,6 +292,8 @@ setInterval(async () => {
 
     db.startPingId = msg.id;
     saveDB(db);
+
+    await sendDM(current);
 
     setTimeout(async () => {
       const fresh = loadDB();
@@ -330,7 +355,7 @@ client.on("interactionCreate", async (i) => {
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 ULTRA PANEL READY");
+  console.log("🔥 FINAL PERFECT");
   await startPanel();
 });
 
