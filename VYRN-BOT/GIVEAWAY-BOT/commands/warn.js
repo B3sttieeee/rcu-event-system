@@ -4,9 +4,15 @@ const Warn = require('../models/Warn');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('warn')
-    .setDescription('Warn user')
-    .addUserOption(o => o.setName('user').setRequired(true))
-    .addStringOption(o => o.setName('reason').setRequired(true))
+    .setDescription('Warn a user')
+    .addUserOption(option =>
+      option.setName('user')
+        .setDescription('User to warn')
+        .setRequired(true))
+    .addStringOption(option =>
+      option.setName('reason')
+        .setDescription('Reason for warn')
+        .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
@@ -27,12 +33,14 @@ module.exports = {
     }
 
     data.warns.push({
-      reason,
+      reason: reason,
       date: Date.now()
     });
 
     await data.save();
 
-    interaction.reply(`⚠️ ${user.tag} warned (${data.warns.length})`);
+    await interaction.reply({
+      content: `⚠️ ${user.tag} has been warned\nReason: ${reason}\nTotal warns: ${data.warns.length}`
+    });
   }
 };
