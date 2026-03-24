@@ -104,7 +104,7 @@ function getSharedCountdown() {
   return `${m}m ${s}s`;
 }
 
-// ================= EMBED =================
+// ================= EMBED (🔥 NOWY UI) =================
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
@@ -117,20 +117,23 @@ function panelEmbed() {
   return new EmbedBuilder()
     .setColor(currentData.color)
     .setTitle("✨ Event Panel")
-    .setDescription(
-`🎮 **Live Event Tracking**
-
-━━━━━━━━━━━━━━━━━━
-
-🟢 **CURRENT EVENT**
-> **${currentData.name}**
-> ⏳ Ends in: \`${time}\`
-
-⏭️ **NEXT EVENT**
-> **${nextData.name}**
-> ⏱️ Starts in: \`${time}\`
-
-━━━━━━━━━━━━━━━━━━`
+    .setDescription("🎮 **Live Event Tracking System**")
+    .addFields(
+      {
+        name: "🟢 CURRENT EVENT",
+        value: `**${currentData.name}**\n⏳ Ends in: \`${time}\``,
+        inline: true
+      },
+      {
+        name: "⏭️ NEXT EVENT",
+        value: `**${nextData.name}**\n⏱️ Starts in: \`${time}\``,
+        inline: true
+      },
+      {
+        name: "\u200B",
+        value: "━━━━━━━━━━━━━━━━━━",
+        inline: false
+      }
     )
     .setImage(PANEL_IMAGE)
     .setFooter({ text: "By B3sttiee • refresh 10s" })
@@ -149,32 +152,32 @@ function getPanel() {
 }
 
 // ================= MENUS =================
-function rolesMenu(selected = []) {
+function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
-      .setPlaceholder("🎭 Choose your event roles")
+      .setPlaceholder("🎭 Choose your roles")
       .setMinValues(0)
       .setMaxValues(3)
       .addOptions([
-        { label: "RNG EGG", value: "egg", default: selected.includes("egg") },
-        { label: "MERCHANT", value: "merchant", default: selected.includes("merchant") },
-        { label: "DEV SPIN", value: "spin", default: selected.includes("spin") }
+        { label: "RNG EGG", value: "egg" },
+        { label: "MERCHANT", value: "merchant" },
+        { label: "DEV SPIN", value: "spin" }
       ])
   );
 }
 
-function dmMenu(selected = []) {
+function dmMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
-      .setPlaceholder("📩 Select DM notifications")
+      .setPlaceholder("📩 Choose DM notifications")
       .setMinValues(0)
       .setMaxValues(3)
       .addOptions([
-        { label: "RNG EGG", value: "egg", default: selected.includes("egg") },
-        { label: "MERCHANT", value: "merchant", default: selected.includes("merchant") },
-        { label: "DEV SPIN", value: "spin", default: selected.includes("spin") }
+        { label: "RNG EGG", value: "egg" },
+        { label: "MERCHANT", value: "merchant" },
+        { label: "DEV SPIN", value: "spin" }
       ])
   );
 }
@@ -290,19 +293,11 @@ client.on("interactionCreate", async (i) => {
     }
 
     if (i.customId === "roles") {
-      return i.reply({
-        content: "🎭 Choose roles:",
-        components: [rolesMenu()],
-        ephemeral: true
-      });
+      return i.reply({ content: "🎭 Roles:", components: [rolesMenu()], ephemeral: true });
     }
 
     if (i.customId === "dm") {
-      return i.reply({
-        content: "📩 Choose notifications:",
-        components: [dmMenu()],
-        ephemeral: true
-      });
+      return i.reply({ content: "📩 Notifications:", components: [dmMenu()], ephemeral: true });
     }
   }
 
@@ -328,14 +323,14 @@ client.on("interactionCreate", async (i) => {
       db.dm[i.user.id] = i.values;
       saveDB(db);
 
-      return i.reply({ content: "✅ DM settings saved!", ephemeral: true });
+      return i.reply({ content: "✅ DM saved!", ephemeral: true });
     }
   }
 });
 
 // ================= READY =================
 client.once("clientReady", async () => {
-  console.log("🔥 DZIAŁA IDEALNIE");
+  console.log("🔥 ULTRA PANEL READY");
   await startPanel();
 });
 
