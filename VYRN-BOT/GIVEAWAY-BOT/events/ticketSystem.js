@@ -4,47 +4,103 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
-  PermissionsBitField
+  PermissionsBitField,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  StringSelectMenuBuilder
 } = require('discord.js');
 
 const config = require('../config');
 
-// ===== PANEL CREATE =====
-async function createTicketPanel(client) {
+// ===== PANEL =====
+async function createPanel(client) {
   const channel = await client.channels.fetch(config.PANEL_CHANNEL).catch(() => null);
-  if (!channel) return console.log("❌ PANEL CHANNEL NOT FOUND");
+  if (!channel) return;
 
   const embed = new EmbedBuilder()
     .setColor('#2b2d31')
-    .setTitle('🎟 Ticket Panel')
-    .setDescription('Kliknij przycisk aby otworzyć ticket')
+    .setTitle('🎫 Clan TICKET')
+    .setDescription(`
+📌 **Join Clan ticket is used to review your application.**
+
+📋 **Requirements:**
+• Good Gamepasses  
+• 1.5N+ Rebirth  
+• 3-5H Active  
+• 15M Eggs  
+`)
     .setImage(config.IMAGE);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('open_ticket')
+      .setCustomId('ticket_open')
       .setLabel('🔥 Open Ticket')
       .setStyle(ButtonStyle.Primary)
   );
 
   await channel.send({ embeds: [embed], components: [row] });
-
-  console.log("✅ PANEL CREATED");
 }
 
-// ===== HANDLE INTERACTIONS =====
-async function handleTicket(interaction) {
+// ===== EXPORT EVENT =====
+module.exports = {
+  name: 'ready',
+  once: true,
+  async execute(client) {
+    createPanel(client);
+  }
+};
 
-  // ===== OPEN =====
-  if (interaction.customId === 'open_ticket') {
+// ===== INTERACTIONS =====
+module.exports.handle = async (interaction) => {
 
-    const existing = interaction.guild.channels.cache.find(
-      c => c.name === `ticket-${interaction.user.username}`
-    );
+  // ===== OPEN MODAL =====
+  if (interaction.customId === 'ticket_open') {
 
-    if (existing) {
-      return interaction.reply({ content: "❌ Masz już ticket", ephemeral: true });
-    }
+    const modal = new ModalBuilder()
+      .setCustomId('ticket_modal')
+      .setTitle('🎫 Ticket Setup');
+
+    const nick = new TextInputBuilder()
+      .setCustomId('nick')
+      .setLabel('Your in-game nickname')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    const row = new ActionRowBuilder().addComponents(nick);
+
+    modal.addComponents(row);
+
+    return interaction.showModal(modal);
+  }
+
+  // ===== MODAL SUBMIT =====
+  if (interaction.isModalSubmit() && interaction.customId === 'ticket_modal') {
+
+    const nick = interaction.fields.getTextInputValue('nick');
+
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId('ticket_lang')
+      .setPlaceholder('Select language')
+      .addOptions([
+        { label: '🇵🇱 Polish Ticket', value: 'pl' },
+        { label: '🇬🇧 English Ticket', value: 'en' }
+      ]);
+
+    const row = new ActionRowBuilder().addComponents(menu);
+
+    return interaction.reply({
+      content: `Nick: **${nick}**`,
+      components: [row],
+      ephemeral: true
+    });
+  }
+
+  // ===== LANGUAGE PICK =====
+  if (interaction.isStringSelectMenu() && interaction.customId === 'ticket_lang') {
+
+    const lang = interaction.values[0];
+    const nick = interaction.message.content.split('**')[1];
 
     const channel = await interaction.guild.channels.create({
       name: `ticket-${interaction.user.username}`,
@@ -58,75 +114,46 @@ async function handleTicket(interaction) {
     });
 
     const embed = new EmbedBuilder()
-      .setColor('#ff9900')
-      .setTitle('🌍 Select Language');
+      .setColor('#2b2d31')
+      .setTitle('🎫 Ticket Opened')
+      .setDescription(`
+👤 User: ${interaction.user}
+🎮 Nick: **${nick}**
+🌍 Language: ${lang.toUpperCase()}
+`);
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('ticket_en').setLabel('🇬🇧 English').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('ticket_pl').setLabel('🇵🇱 Polski').setStyle(ButtonStyle.Secondary)
+    const closeBtn = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('ticket_close')
+        .setLabel('🔒 Close Ticket')
+        .setStyle(ButtonStyle.Danger)
     );
 
     await channel.send({
       content: `<@${interaction.user.id}> <@&${config.OFFICER_ROLE}>`,
       embeds: [embed],
-      components: [row]
+      components: [closeBtn]
     });
 
-    interaction.reply({ content: "✅ Ticket created", ephemeral: true });
-  }
-
-  // ===== LANGUAGE EN =====
-  if (interaction.customId === 'ticket_en') {
-    await interaction.update({
+    // DM USER
+    interaction.user.send({
       embeds: [
         new EmbedBuilder()
-          .setColor('#2b2d31')
-          .setTitle('Support Ticket')
-          .setDescription('Send screenshot, gamepasses and stats.')
-      ],
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('close_ticket')
-            .setLabel('🔒 Close Ticket')
-            .setStyle(ButtonStyle.Danger)
-        )
+          .setTitle('🎫 Ticket Created')
+          .setDescription(`Your ticket has been opened: ${channel}`)
       ]
-    });
-  }
+    }).catch(() => {});
 
-  // ===== LANGUAGE PL =====
-  if (interaction.customId === 'ticket_pl') {
-    await interaction.update({
-      embeds: [
-        new EmbedBuilder()
-          .setColor('#2b2d31')
-          .setTitle('Ticket Support')
-          .setDescription('Wyślij screenshot, gamepassy i statystyki.')
-      ],
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('close_ticket')
-            .setLabel('🔒 Zamknij Ticket')
-            .setStyle(ButtonStyle.Danger)
-        )
-      ]
-    });
+    interaction.update({ content: '✅ Ticket created', components: [] });
   }
 
   // ===== CLOSE =====
-  if (interaction.customId === 'close_ticket') {
+  if (interaction.customId === 'ticket_close') {
 
-    await interaction.reply({ content: "🔒 Zamykam ticket...", ephemeral: true });
+    await interaction.reply({ content: '🔒 Closing...', ephemeral: true });
 
     setTimeout(() => {
       interaction.channel.delete().catch(() => {});
-    }, 2000);
+    }, 3000);
   }
-}
-
-module.exports = {
-  createTicketPanel,
-  handleTicket
 };
