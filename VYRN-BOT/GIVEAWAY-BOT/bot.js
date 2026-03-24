@@ -16,23 +16,15 @@ const mongoose = require('mongoose');
 require('dotenv').config();
 const ms = require('ms');
 
-// ===== ANTI CRASH =====
 process.on('unhandledRejection', console.error);
 process.on('uncaughtException', console.error);
 
-// ===== CLIENT =====
 const client = new Client({
   intents: [GatewayIntentBits.Guilds]
 });
 
-// ===== MONGO =====
 mongoose.connect(process.env.MONGO_URI).catch(console.error);
 
-mongoose.connection.on('connected', () => {
-  console.log('✅ MongoDB connected');
-});
- 
-// ===== SCHEMA =====
 const giveawaySchema = new mongoose.Schema({
   messageId: String,
   channelId: String,
@@ -45,18 +37,14 @@ const giveawaySchema = new mongoose.Schema({
 });
 
 const Giveaway = mongoose.model('Giveaway', giveawaySchema);
-
-// ===== ROLE BONUS =====
 const roleEntries = new Map();
 
-// ===== READY =====
 client.once('clientReady', async () => {
   console.log(`🔥 ${client.user.tag} READY`);
 
   const commands = [
     new SlashCommandBuilder()
       .setName('giveaway-create')
-      .setDescription('Create giveaway')
       .addStringOption(o => o.setName('time').setRequired(true))
       .addStringOption(o => o.setName('reward').setRequired(true))
       .addIntegerOption(o => o.setName('winners').setRequired(true))
@@ -64,7 +52,6 @@ client.once('clientReady', async () => {
 
     new SlashCommandBuilder()
       .setName('giveaway-role')
-      .setDescription('Bonus entries')
       .addRoleOption(o => o.setName('role').setRequired(true))
       .addIntegerOption(o => o.setName('entries').setRequired(true)),
 
@@ -83,59 +70,34 @@ client.once('clientReady', async () => {
   restore();
 });
 
-// ===== 🔥 PREMIUM EMBED =====
+// ===== 🔥 PREMIUM CLEAN EMBED =====
 function buildEmbed(data) {
   let bonus = 'Brak';
   if (roleEntries.size > 0) {
     bonus = [...roleEntries.entries()]
       .map(([id, val]) => `<@&${id}> +${val}`)
-      .join('\n');
+      .join(', ');
   }
 
   return new EmbedBuilder()
     .setColor('#5865F2')
-    .setAuthor({
-      name: 'Giveaway',
-      iconURL: client.user.displayAvatarURL()
-    })
     .setTitle(`🎉 ${data.reward}`)
-    .setDescription(`Kliknij **Join**, aby wziąć udział`)
+    .setDescription(
+      `👥 **${data.participants.length}**  •  🏆 **${data.winners}**  •  ⏳ <t:${Math.floor(data.endTime / 1000)}:R>`
+    )
     .addFields(
-      {
-        name: '👥 Uczestnicy',
-        value: `**${data.participants.length}**`,
-        inline: true
-      },
-      {
-        name: '🏆 Zwycięzcy',
-        value: `**${data.winners}**`,
-        inline: true
-      },
-      {
-        name: '⏳ Koniec',
-        value: `<t:${Math.floor(data.endTime / 1000)}:R>`,
-        inline: true
-      },
-      {
-        name: '🎟 Bonus',
-        value: bonus,
-        inline: false
-      },
+      { name: '🎟 Bonus', value: bonus, inline: true },
       {
         name: '🔒 Rola',
         value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak',
-        inline: false
+        inline: true
       }
-    )
-    .setFooter({
-      text: 'Kliknij przycisk poniżej'
-    });
+    );
 }
 
-// ===== INTERACTION =====
+// ===== LOGIC =====
 client.on('interactionCreate', async interaction => {
   try {
-
     if (interaction.isChatInputCommand()) {
 
       if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -143,19 +105,16 @@ client.on('interactionCreate', async interaction => {
       }
 
       if (interaction.commandName === 'giveaway-create') {
-        const time = interaction.options.getString('time');
+        const duration = ms(interaction.options.getString('time'));
         const reward = interaction.options.getString('reward');
         const winners = interaction.options.getInteger('winners');
         const role = interaction.options.getRole('role');
-
-        const duration = ms(time);
-        if (!duration) return interaction.reply({ content: '❌ Zły czas', ephemeral: true });
 
         const data = {
           reward,
           winners,
           endTime: Date.now() + duration,
-          requiredRole: role ? role.id : null,
+          requiredRole: role?.id || null,
           participants: [],
           ended: false
         };
@@ -172,7 +131,7 @@ client.on('interactionCreate', async interaction => {
 
         await Giveaway.create({ ...data, messageId: msg.id, channelId: msg.channel.id });
 
-        interaction.reply({ content: '✅ Giveaway utworzony', ephemeral: true });
+        interaction.reply({ content: '✅ Created', ephemeral: true });
 
         setTimeout(() => end(msg.id), duration);
       }
@@ -182,12 +141,12 @@ client.on('interactionCreate', async interaction => {
           interaction.options.getRole('role').id,
           interaction.options.getInteger('entries')
         );
-        interaction.reply({ content: '✅ Bonus ustawiony', ephemeral: true });
+        interaction.reply({ content: '✅ Bonus set', ephemeral: true });
       }
 
       if (interaction.commandName === 'giveaway-end') {
         end(interaction.options.getString('id'));
-        interaction.reply({ content: '⏹ Zakończono', ephemeral: true });
+        interaction.reply({ content: '⏹ Ended', ephemeral: true });
       }
 
       if (interaction.commandName === 'giveaway-reroll') {
@@ -199,9 +158,7 @@ client.on('interactionCreate', async interaction => {
       const data = await Giveaway.findOne({ messageId: interaction.message.id });
       if (!data) return;
 
-      if (data.ended) {
-        return interaction.reply({ content: '❌ Giveaway zakończony', ephemeral: true });
-      }
+      if (data.ended) return interaction.reply({ content: '❌ Zakończony', ephemeral: true });
 
       if (data.requiredRole && !interaction.member.roles.cache.has(data.requiredRole)) {
         return interaction.reply({ content: '❌ Brak roli', ephemeral: true });
@@ -216,7 +173,6 @@ client.on('interactionCreate', async interaction => {
         await data.save();
 
         interaction.message.edit({ embeds: [buildEmbed(data)] });
-
         interaction.reply({ content: '✅ Dołączono', ephemeral: true });
       }
 
@@ -225,7 +181,6 @@ client.on('interactionCreate', async interaction => {
         await data.save();
 
         interaction.message.edit({ embeds: [buildEmbed(data)] });
-
         interaction.reply({ content: '❌ Opuściłeś', ephemeral: true });
       }
     }
@@ -237,38 +192,21 @@ client.on('interactionCreate', async interaction => {
 
 // ===== END =====
 async function end(id) {
-  try {
-    const data = await Giveaway.findOne({ messageId: id });
-    if (!data || data.ended) return;
+  const data = await Giveaway.findOne({ messageId: id });
+  if (!data || data.ended) return;
 
-    data.ended = true;
-    await data.save();
+  data.ended = true;
+  await data.save();
 
-    const channel = await client.channels.fetch(data.channelId);
+  const channel = await client.channels.fetch(data.channelId);
 
-    if (!data.participants.length) {
-      return channel.send('❌ Brak uczestników');
-    }
-
-    const winner = data.participants[Math.floor(Math.random() * data.participants.length)];
-
-    channel.send(`🎉 Winner: <@${winner}>`);
-
-    const safe = data.reward.toLowerCase().replace(/[^a-z0-9]/g, '-').slice(0, 20);
-
-    const ch = await channel.guild.channels.create({
-      name: `🎉-${safe}`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        { id: channel.guild.roles.everyone.id, deny: ['ViewChannel'] },
-        { id: winner, allow: ['ViewChannel', 'SendMessages'] }
-      ]
-    });
-
-    ch.send(`🎉 Gratulacje <@${winner}>`);
-  } catch (err) {
-    console.error(err);
+  if (!data.participants.length) {
+    return channel.send('❌ Brak uczestników');
   }
+
+  const winner = data.participants[Math.floor(Math.random() * data.participants.length)];
+
+  channel.send(`🎉 Winner: <@${winner}>`);
 }
 
 // ===== REROLL =====
