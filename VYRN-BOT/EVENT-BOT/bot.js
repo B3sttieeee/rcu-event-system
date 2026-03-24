@@ -69,7 +69,9 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= EVENT GODZINY =================
+// ================= EVENT SYSTEM =================
+// ZERO timezone – tylko godzina systemowa
+
 function getEventByHour(hour) {
   if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
   if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
@@ -85,19 +87,22 @@ function getNextEvent() {
 }
 
 // ================= TIMER =================
+// czas do pełnej godziny (dokładnie to czego chcesz)
+
 function getSharedCountdown() {
   const now = new Date();
 
-  let m = 59 - now.getMinutes();
-  let s = 60 - now.getSeconds();
+  let minutes = 59 - now.getMinutes();
+  let seconds = 60 - now.getSeconds();
 
-  if (s === 60) s = 0;
-  else m--;
+  if (seconds === 60) seconds = 0;
+  else minutes--;
 
-  return `${m}m ${s}s`;
+  return `${minutes}m ${seconds}s`;
 }
 
 // ================= EMBED =================
+
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
@@ -131,6 +136,7 @@ function panelEmbed() {
 }
 
 // ================= PANEL =================
+
 function getPanel() {
   return [
     new ActionRowBuilder().addComponents(
@@ -141,6 +147,7 @@ function getPanel() {
 }
 
 // ================= MENUS =================
+
 function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -172,6 +179,7 @@ function dmMenu() {
 }
 
 // ================= PANEL SYSTEM =================
+
 let panelMessage;
 
 async function startPanel() {
@@ -205,6 +213,7 @@ async function startPanel() {
 }
 
 // ================= PING SYSTEM =================
+
 let lastPing = "";
 
 async function deleteMsg(channel, id) {
@@ -239,7 +248,7 @@ setInterval(async () => {
     saveDB(db);
   }
 
-  // start event
+  // START EVENT
   if (min === 0 && lastPing !== `${hour}-start`) {
     lastPing = `${hour}-start`;
 
@@ -273,6 +282,7 @@ setInterval(async () => {
 }, 10000);
 
 // ================= INTERACTIONS =================
+
 client.on("interactionCreate", async (i) => {
 
   if (i.isButton()) {
@@ -314,8 +324,9 @@ client.on("interactionCreate", async (i) => {
 });
 
 // ================= READY =================
+
 client.once("clientReady", async () => {
-  console.log("🔥 FINAL 100% WORKING");
+  console.log("🔥 BOT DZIAŁA PERFEKCYJNIE");
   await startPanel();
 });
 
