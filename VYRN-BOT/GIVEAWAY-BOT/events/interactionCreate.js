@@ -1,14 +1,34 @@
 const ticketSystem = require('./ticketSystem');
 const fs = require('fs');
 
+const commands = new Map();
+
+// 🔥 Ładujemy komendy tylko RAZ (lepiej niż za każdym interaction)
+const commandFiles = fs.readdirSync('./commands');
+
+for (const file of commandFiles) {
+  try {
+    const cmd = require(`../commands/${file}`);
+    if (cmd.data && cmd.execute) {
+      commands.set(cmd.data.name, cmd);
+      console.log(`✅ Loaded command: ${cmd.data.name}`);
+    } else {
+      console.log(`⚠️ Invalid command file: ${file}`);
+    }
+  } catch (err) {
+    console.log("❌ COMMAND LOAD ERROR:", file, err);
+  }
+}
+
 module.exports = {
   name: 'interactionCreate',
 
   async execute(interaction, client) {
-
     try {
 
-      // ===== TICKET SYSTEM (BUTTONS / MODALS / SELECT) =====
+      // =========================
+      // 🎫 TICKET SYSTEM
+      // =========================
       if (
         interaction.isButton() ||
         interaction.isModalSubmit() ||
@@ -17,36 +37,26 @@ module.exports = {
         await ticketSystem.handle(interaction);
       }
 
-      // ===== SLASH COMMANDS =====
+      // =========================
+      // 🎮 SLASH COMMANDS
+      // =========================
       if (!interaction.isChatInputCommand()) return;
-
-      const commandFiles = fs.readdirSync('./commands');
-      const commands = new Map();
-
-      for (const file of commandFiles) {
-        try {
-          const cmd = require(`../commands/${file}`);
-          commands.set(cmd.data.name, cmd);
-        } catch (err) {
-          console.log("❌ COMMAND LOAD ERROR:", file, err);
-        }
-      }
 
       const command = commands.get(interaction.commandName);
       if (!command) return;
 
-      await command.execute(interaction);
+      await command.execute(interaction, client);
 
     } catch (err) {
       console.log("❌ INTERACTION ERROR:", err);
 
       if (interaction.replied || interaction.deferred) {
-        interaction.followUp({
+        await interaction.followUp({
           content: '❌ Error occurred',
           ephemeral: true
         }).catch(() => {});
       } else {
-        interaction.reply({
+        await interaction.reply({
           content: '❌ Error occurred',
           ephemeral: true
         }).catch(() => {});
