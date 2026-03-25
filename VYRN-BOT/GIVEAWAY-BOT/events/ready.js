@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const { REST, Routes } = require("discord.js");
-const { createTicketPanel } = require("./utils/ticketSystem");
+const { createTicketPanel } = require("../utils/ticketSystem");
 
 module.exports = {
   name: "clientReady",
