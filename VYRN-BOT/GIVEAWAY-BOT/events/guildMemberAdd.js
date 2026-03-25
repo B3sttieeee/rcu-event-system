@@ -1,50 +1,51 @@
-const { EmbedBuilder } = require('discord.js');
-const config = require('../config');
+const { EmbedBuilder } = require("discord.js");
 
-// ===== CONFIG =====
 const WELCOME_CHANNEL = "1475559296594084007";
 const AUTO_ROLE = "1475572275095929022";
 
-const RULES_CHANNEL = "1475526080361140344";
-const VERIFY_CHANNEL = "1475970436650237962";
-const CLAN_CHANNEL = "1475558248487583805";
-
 module.exports = {
-  name: 'guildMemberAdd',
-
+  name: "guildMemberAdd",
   async execute(member) {
 
-    // ===== AUTO ROLE =====
     try {
-      await member.roles.add(AUTO_ROLE);
+
+      // ===== AUTO ROLE =====
+      const role = member.guild.roles.cache.get(AUTO_ROLE);
+      if (role) await member.roles.add(role).catch(() => {});
+
+      // ===== CHANNEL =====
+      const channel = member.guild.channels.cache.get(WELCOME_CHANNEL);
+      if (!channel) return;
+
+      // ===== EMBED =====
+      const embed = new EmbedBuilder()
+        .setColor("#ff6600")
+        .setAuthor({
+          name: "VYRN SYSTEM",
+          iconURL: member.guild.iconURL()
+        })
+        .setDescription(
+`🎉 **Welcome ${member}**
+
+📌 **1. Check rules**
+<#1475526080361140344>
+
+🔗 **2. Connect your account**
+<#1475970436650237962>
+
+🎟 **3. Join clan ticket**
+<#1475558248487583805>
+
+🔥 Good Luck!`
+        )
+        .setImage("https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif")
+        .setFooter({ text: "Administrations | VYRN" });
+
+      channel.send({ embeds: [embed] });
+
     } catch (err) {
-      console.log("❌ AUTO ROLE ERROR:", err);
+      console.log("❌ WELCOME ERROR:", err);
     }
 
-    // ===== CHANNEL =====
-    const channel = member.guild.channels.cache.get(WELCOME_CHANNEL);
-    if (!channel) return;
-
-    // ===== EMBED =====
-    const embed = new EmbedBuilder()
-      .setColor('#2b2d31')
-      .setAuthor({ name: 'VYRN - SYSTEM' })
-      .setDescription(`
-🎉 **Welcome ${member}!**
-
-📌 **1. Check <#${RULES_CHANNEL}> to familiarize yourself with the server rules.**
-
-🔗 **2. Connect your account in <#${VERIFY_CHANNEL}> using command \`/verify\`**
-
-👥 **3. If you want join clan check <#${CLAN_CHANNEL}>**
-
-✨ Good Luck ${member}
-
-**Administrations | VYRN**
-`)
-      .setImage(config.IMAGE)
-      .setFooter({ text: `User ID: ${member.id}` });
-
-    channel.send({ embeds: [embed] });
   }
 };
