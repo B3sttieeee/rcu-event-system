@@ -3,8 +3,9 @@ const fs = require("fs");
 
 // ===== CONFIG =====
 const PREFIX = ".";
-
 const LEVEL_CHANNEL = "1475999590716018719";
+const BOOST_ROLE = "1476000398107217980";
+const BOOST_MULTIPLIER = 1.75;
 
 // ===== DB =====
 const DB_PATH = "./data.json";
@@ -13,7 +14,7 @@ function loadDB() {
   try {
     return JSON.parse(fs.readFileSync(DB_PATH));
   } catch {
-    return { xp: {}, messages: {} };
+    return { xp: {} };
   }
 }
 
@@ -26,6 +27,10 @@ function neededXP(level) {
   return 50 + level * 25;
 }
 
+function getMultiplier(member) {
+  return member.roles.cache.has(BOOST_ROLE) ? BOOST_MULTIPLIER : 1;
+}
+
 // ===== EVENT =====
 module.exports = {
   name: "messageCreate",
@@ -35,13 +40,15 @@ module.exports = {
 
     const db = loadDB();
 
-    // ===== INIT USER =====
     if (!db.xp[message.author.id]) {
       db.xp[message.author.id] = { xp: 0, level: 0 };
     }
 
-    // ===== ADD XP =====
-    db.xp[message.author.id].xp += 5;
+    const member = message.member;
+
+    // ===== XP =====
+    const gained = Math.floor(5 * getMultiplier(member));
+    db.xp[message.author.id].xp += gained;
 
     let leveledUp = false;
 
@@ -56,49 +63,61 @@ module.exports = {
 
     saveDB(db);
 
-    // ===== LEVEL UP EMBED =====
+    // ===== LEVEL UP =====
     if (leveledUp) {
       const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
+      if (!channel) return;
 
-      if (channel) {
-        const embed = new EmbedBuilder()
-          .setColor("#facc15")
-          .setAuthor({
-            name: `${message.author.username} • Level Up`,
-            iconURL: message.author.displayAvatarURL()
-          })
-          .setDescription(
-            `🎉 **Congratulations!**\n\n` +
-            `🏆 You reached **Level ${db.xp[message.author.id].level}**\n\n` +
-            `🚀 Keep chatting!`
-          )
-          .setThumbnail(message.author.displayAvatarURL());
+      const embed = new EmbedBuilder()
+        .setColor("#facc15")
+        .setAuthor({
+          name: `${message.author.username} • Level Up`,
+          iconURL: message.author.displayAvatarURL()
+        })
+        .setDescription(
+          `🏆 **New Level Achieved!**\n\n` +
+          `🎯 You are now **Level ${db.xp[message.author.id].level}**\n\n` +
+          `🚀 Keep chatting to earn more XP!`
+        )
+        .setThumbnail(message.author.displayAvatarURL())
+        .setFooter({ text: "VYRN Level System • by B3sttiee" });
 
-        channel.send({ embeds: [embed] });
-      }
+      channel.send({
+        content: `🎉 ${message.author}`,
+        embeds: [embed]
+      });
     }
 
-    // ===== PREFIX COMMANDS =====
+    // ===== PREFIX =====
     if (!message.content.startsWith(PREFIX)) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const cmd = args.shift().toLowerCase();
 
-    const userData = db.xp[message.author.id];
+    const data = db.xp[message.author.id];
 
-    // ===== RANK =====
+    // ===== RANK (DOKŁADNIE JAK CHCIAŁEŚ) =====
     if (cmd === "rank" || cmd === "r") {
+      const needed = neededXP(data.level);
+      const hasBoost = member.roles.cache.has(BOOST_ROLE);
+
       const embed = new EmbedBuilder()
-        .setColor("#22c55e")
+        .setColor("#111111")
         .setAuthor({
           name: `${message.author.username} • Profile`,
           iconURL: message.author.displayAvatarURL()
         })
+        .setThumbnail(message.author.displayAvatarURL())
         .setDescription(
-          `🏆 **Level:** ${userData.level}\n` +
-          `⭐ **XP:** ${userData.xp}/${neededXP(userData.level)}`
+          `🏆 **Level Information**\n` +
+          `▶ Level: **${data.level}**\n` +
+          `▶ XP: **${data.xp}/${needed}**\n\n` +
+
+          `⚡ **XP Boost Status**\n` +
+          `▶ ${hasBoost ? "Activated Booster Role" : "No Active Boost"}\n` +
+          `▶ **${BOOST_MULTIPLIER}x More XP**`
         )
-        .setThumbnail(message.author.displayAvatarURL());
+        .setFooter({ text: "VYRN System • by B3sttiee" });
 
       return message.reply({ embeds: [embed] });
     }
