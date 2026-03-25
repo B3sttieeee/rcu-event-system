@@ -11,14 +11,12 @@ const {
 } = require("discord.js");
 
 // ===== CONFIG =====
-const REQUIRED_ROLE = "1475998527191519302"; // kto może otworzyć
-const ADMIN_ROLE = "1475998527191519302"; // kto może zamknąć
+const REQUIRED_ROLE = "1475998527191519302";
+const ADMIN_ROLE = "1475998527191519302";
 
 async function handle(interaction) {
 
-  // =========================
-  // 🔘 OPEN BUTTON
-  // =========================
+  // ===== OPEN BUTTON =====
   if (interaction.isButton() && interaction.customId === "open_ticket") {
 
     if (!interaction.member.roles.cache.has(REQUIRED_ROLE)) {
@@ -32,42 +30,38 @@ async function handle(interaction) {
       .setCustomId("ticket_modal")
       .setTitle("🎫 Create Ticket");
 
-    const nickInput = new TextInputBuilder()
+    const nick = new TextInputBuilder()
       .setCustomId("nick")
-      .setLabel("Twój nick / Your nickname")
+      .setLabel("Nick")
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
-    const langInput = new TextInputBuilder()
+    const lang = new TextInputBuilder()
       .setCustomId("lang")
-      .setLabel("Język (pl/en)")
+      .setLabel("Language (pl/en)")
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
     modal.addComponents(
-      new ActionRowBuilder().addComponents(nickInput),
-      new ActionRowBuilder().addComponents(langInput)
+      new ActionRowBuilder().addComponents(nick),
+      new ActionRowBuilder().addComponents(lang)
     );
 
     return interaction.showModal(modal);
   }
 
-  // =========================
-  // 📝 MODAL SUBMIT
-  // =========================
+  // ===== MODAL =====
   if (interaction.isModalSubmit() && interaction.customId === "ticket_modal") {
 
     const nick = interaction.fields.getTextInputValue("nick");
     const lang = interaction.fields.getTextInputValue("lang").toLowerCase();
 
-    const guild = interaction.guild;
-
-    const channel = await guild.channels.create({
+    const channel = await interaction.guild.channels.create({
       name: `ticket-${nick}`,
       type: ChannelType.GuildText,
       permissionOverwrites: [
         {
-          id: guild.id,
+          id: interaction.guild.id,
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
         {
@@ -87,22 +81,20 @@ async function handle(interaction) {
       ]
     });
 
-    // ===== EMBED =====
     const embed = new EmbedBuilder()
       .setColor("#22c55e")
       .setTitle("🎫 Ticket Opened")
       .setThumbnail(interaction.user.displayAvatarURL())
       .setDescription(
         lang === "en"
-          ? `👤 **User:** ${interaction.user}\n📝 **Nickname:** ${nick}\n\n📸 Please send screenshots of your stats, gamepasses and your team.\nOur staff will review your application.`
-          : `👤 **Użytkownik:** ${interaction.user}\n📝 **Nick:** ${nick}\n\n📸 Wyślij screeny statystyk, gamepassów oraz teamu.\nAdministracja sprawdzi twoją aplikację.`
-      )
-      .setFooter({ text: "VYRN Ticket System" });
+          ? `👤 **User:** ${interaction.user}\n📝 **Nickname:** ${nick}\n\n📸 Send screenshots of your stats, gamepasses and team.`
+          : `👤 **Użytkownik:** ${interaction.user}\n📝 **Nick:** ${nick}\n\n📸 Wyślij screeny statystyk, gamepassów i teamu.`
+      );
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("close_ticket")
-        .setLabel("🔒 Close Ticket")
+        .setLabel("🔒 Close")
         .setStyle(ButtonStyle.Danger)
     );
 
@@ -118,31 +110,25 @@ async function handle(interaction) {
     });
   }
 
-  // =========================
-  // 🔒 CLOSE BUTTON
-  // =========================
+  // ===== CLOSE =====
   if (interaction.isButton() && interaction.customId === "close_ticket") {
 
     if (!interaction.member.roles.cache.has(ADMIN_ROLE)) {
       return interaction.reply({
-        content: "❌ Tylko Admin może zamknąć ticket",
+        content: "❌ Only admin can close ticket",
         ephemeral: true
       });
     }
 
-    const embed = new EmbedBuilder()
-      .setColor("#ef4444")
-      .setTitle("🗑️ Ticket Closing")
-      .setDescription("Ticket will be deleted in 3 seconds...");
-
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply({
+      content: "🗑️ Closing ticket...",
+      ephemeral: true
+    });
 
     setTimeout(() => {
       interaction.channel.delete().catch(() => {});
-    }, 3000);
+    }, 2000);
   }
 }
 
-module.exports = {
-  handle
-};
+module.exports = { handle };
