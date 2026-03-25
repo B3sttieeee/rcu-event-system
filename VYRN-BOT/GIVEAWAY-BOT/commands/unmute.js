@@ -4,8 +4,6 @@ const {
   PermissionFlagsBits
 } = require("discord.js");
 
-const { createCase } = require("../utils/moderation");
-
 const MUTE_ROLE = "1476000458240819301";
 
 module.exports = {
@@ -18,30 +16,63 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-    const user = interaction.options.getUser("user");
-    const member = interaction.guild.members.cache.get(user.id);
-    const muteRole = interaction.guild.roles.cache.get(MUTE_ROLE);
+    try {
 
-    if (!member || !muteRole) {
-      return interaction.reply({ content: "❌ Error", ephemeral: true });
+      const user = interaction.options.getUser("user");
+      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      const muteRole = interaction.guild.roles.cache.get(MUTE_ROLE);
+
+      if (!member || !muteRole) {
+        return interaction.reply({
+          content: "❌ User or role not found",
+          ephemeral: true
+        });
+      }
+
+      if (!member.roles.cache.has(muteRole.id)) {
+        return interaction.reply({
+          content: "❌ User is not muted",
+          ephemeral: true
+        });
+      }
+
+      // ===== REMOVE ROLE =====
+      await member.roles.remove(muteRole).catch(() => {});
+
+      // ===== EMBED =====
+      const embed = new EmbedBuilder()
+        .setColor("#22c55e")
+        .setTitle("🔊 User Unmuted")
+        .setThumbnail(user.displayAvatarURL())
+        .setDescription(
+          `👤 ${user}\n\n` +
+          `🛠 Moderator: ${interaction.user}\n` +
+          `📌 Status: **Unmuted**`
+        )
+        .setFooter({ text: `ID: ${user.id}` })
+        .setTimestamp();
+
+      await interaction.reply({ embeds: [embed] });
+
+      // ===== DM =====
+      try {
+        await user.send({
+          embeds: [
+            new EmbedBuilder()
+              .setColor("#22c55e")
+              .setTitle("🔊 You have been unmuted")
+              .setDescription(`Server: **${interaction.guild.name}**`)
+          ]
+        });
+      } catch {}
+
+    } catch (err) {
+      console.log("❌ UNMUTE ERROR:", err);
+
+      interaction.reply({
+        content: "❌ Error",
+        ephemeral: true
+      }).catch(() => {});
     }
-
-    await member.roles.remove(muteRole).catch(() => {});
-
-    const caseData = createCase({
-      userId: user.id,
-      moderatorId: interaction.user.id,
-      type: "UNMUTE",
-      reason: "Manual unmute"
-    });
-
-    const embed = new EmbedBuilder()
-      .setColor("#22c55e")
-      .setTitle("🔊 User Unmuted")
-      .setDescription(
-        `👤 ${user}\n\n🆔 Case: **#${caseData.id}**`
-      );
-
-    interaction.reply({ embeds: [embed] });
   }
 };
