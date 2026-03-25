@@ -1,46 +1,50 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const Warn = require('../models/Warn');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
+const fs = require("fs");
+
+const PATH = "./models/warnings.json";
+
+function load() {
+  return JSON.parse(fs.readFileSync(PATH));
+}
+
+function save(data) {
+  fs.writeFileSync(PATH, JSON.stringify(data, null, 2));
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('warn')
-    .setDescription('Warn a user')
-    .addUserOption(option =>
-      option.setName('user')
-        .setDescription('User to warn')
-        .setRequired(true))
-    .addStringOption(option =>
-      option.setName('reason')
-        .setDescription('Reason for warn')
-        .setRequired(true))
-    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+    .setName("warn")
+    .setDescription("Warn user")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    .addUserOption(o => o.setName("user").setRequired(true).setDescription("User"))
+    .addStringOption(o => o.setName("reason").setRequired(true).setDescription("Reason")),
 
   async execute(interaction) {
-    const user = interaction.options.getUser('user');
-    const reason = interaction.options.getString('reason');
+    const user = interaction.options.getUser("user");
+    const reason = interaction.options.getString("reason");
 
-    let data = await Warn.findOne({
-      userId: user.id,
-      guildId: interaction.guild.id
-    });
+    const db = load();
 
-    if (!data) {
-      data = await Warn.create({
-        userId: user.id,
-        guildId: interaction.guild.id,
-        warns: []
-      });
-    }
+    db.cases++;
 
-    data.warns.push({
-      reason: reason,
+    if (!db.warnings[user.id]) db.warnings[user.id] = [];
+
+    db.warnings[user.id].push({
+      case: db.cases,
+      reason,
+      moderator: interaction.user.id,
       date: Date.now()
     });
 
-    await data.save();
+    save(db);
 
-    await interaction.reply({
-      content: `⚠️ ${user.tag} has been warned\nReason: ${reason}\nTotal warns: ${data.warns.length}`
-    });
+    const embed = new EmbedBuilder()
+      .setColor("Orange")
+      .setTitle("⚠️ Warning")
+      .setDescription(
+        `👤 ${user}\n📌 ${reason}\n🆔 Case #${db.cases}`
+      );
+
+    interaction.reply({ embeds: [embed] });
   }
 };
