@@ -6,7 +6,7 @@ const fs = require("fs");
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers, // 🔥 REQUIRED FOR WELCOME
+    GatewayIntentBits.GuildMembers, // ✅ welcome + role
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent
   ]
@@ -19,7 +19,7 @@ for (const file of eventFiles) {
   try {
     const event = require(`./events/${file}`);
 
-    if (!event.name) {
+    if (!event.name || typeof event.execute !== "function") {
       console.log(`⚠️ Invalid event file: ${file}`);
       continue;
     }
@@ -37,7 +37,7 @@ for (const file of eventFiles) {
   }
 }
 
-// ===== READY LOG =====
+// ===== READY (fallback log) =====
 client.once("ready", () => {
   console.log(`🔥 Logged in as ${client.user.tag}`);
 });
