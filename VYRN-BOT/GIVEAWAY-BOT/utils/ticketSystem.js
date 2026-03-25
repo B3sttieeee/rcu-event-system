@@ -23,7 +23,7 @@ async function createTicketPanel(client) {
 
     const embed = new EmbedBuilder()
       .setColor("#ff6600")
-      .setTitle("📌 Clan Ticket")
+      .setTitle("📌 Clan VYRN - TICKET")
       .setDescription(
 `📌 Open a ticket to apply for clan
 
