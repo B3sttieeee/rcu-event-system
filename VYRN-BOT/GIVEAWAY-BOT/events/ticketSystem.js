@@ -13,7 +13,6 @@ const {
 const Panel = require("../models/Panel");
 const config = require("../config");
 
-// 🔒 ROLA WYMAGANA DO TICKETA
 const REQUIRED_ROLE = "1475998527191519302";
 
 // ===== PANEL =====
@@ -64,46 +63,44 @@ async function createTicketPanel(client) {
   }
 }
 
-// ===== EVENTS =====
+// ===== INTERACTION HANDLER =====
 async function handleInteraction(interaction) {
 
-  // ===== OPEN BUTTON =====
+  // ===== OPEN TICKET =====
   if (interaction.isButton() && interaction.customId === "open_ticket") {
 
-    // ❌ SPRAWDZANIE ROLI
     if (!interaction.member.roles.cache.has(REQUIRED_ROLE)) {
       return interaction.reply({
-        content: "❌ You don't have required role to open ticket!",
+        content: "❌ You don't have required role!",
         ephemeral: true
       });
     }
 
-    // ===== MODAL =====
     const modal = new ModalBuilder()
       .setCustomId("ticket_modal")
       .setTitle("🎟 Create Ticket");
 
-    const nickInput = new TextInputBuilder()
+    const nick = new TextInputBuilder()
       .setCustomId("nick")
-      .setLabel("Your Nick / IGN")
+      .setLabel("Your Nick")
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
-    const langInput = new TextInputBuilder()
+    const lang = new TextInputBuilder()
       .setCustomId("lang")
       .setLabel("Language (PL / EN)")
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
     modal.addComponents(
-      new ActionRowBuilder().addComponents(nickInput),
-      new ActionRowBuilder().addComponents(langInput)
+      new ActionRowBuilder().addComponents(nick),
+      new ActionRowBuilder().addComponents(lang)
     );
 
     return interaction.showModal(modal);
   }
 
-  // ===== MODAL SUBMIT =====
+  // ===== MODAL =====
   if (interaction.isModalSubmit() && interaction.customId === "ticket_modal") {
 
     const nick = interaction.fields.getTextInputValue("nick");
@@ -120,21 +117,20 @@ async function handleInteraction(interaction) {
       ]
     });
 
-    // ===== EMBED =====
     let desc;
 
     if (lang === "pl") {
       desc = `Cześć ${interaction.user}
 
-📸 Wyślij screen swoich statystyk oraz gamepassów,
-abyśmy mogli rozpatrzyć twoją aplikację do klanu.
+📸 Wyślij screen statystyk i gamepassów,
+abyśmy mogli rozpatrzyć twoją aplikację.
 
 👤 Nick: **${nick}**`;
     } else {
       desc = `Hello ${interaction.user}
 
-📸 Send screenshot of your stats and gamepasses,
-so we can review your clan application.
+📸 Send screenshot of stats and gamepasses,
+so we can review your application.
 
 👤 Nick: **${nick}**`;
     }
@@ -163,13 +159,12 @@ so we can review your clan application.
     });
   }
 
-  // ===== CLOSE TICKET =====
+  // ===== CLOSE =====
   if (interaction.isButton() && interaction.customId === "close_ticket") {
 
-    // ❗ TYLKO ADMIN
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
       return interaction.reply({
-        content: "❌ Only admin can close ticket!",
+        content: "❌ Only admin can close!",
         ephemeral: true
       });
     }
@@ -182,9 +177,7 @@ so we can review your clan application.
   }
 }
 
-// ===== EXPORT =====
 module.exports = {
-  name: "interactionCreate",
-  execute: handleInteraction,
-  createTicketPanel
+  createTicketPanel,
+  handleInteraction
 };
