@@ -8,17 +8,17 @@ const {
 
 const fs = require("fs");
 
-// ================= CONFIG =================
+// ===== CONFIG =====
 const CHANNEL_ID = "1484937784283369502";
 
-// ================= TIME =================
+// ===== TIME =====
 function getNowPL() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
   );
 }
 
-// ================= DATA =================
+// ===== DATA =====
 const EVENT_DATA = {
   egg: {
     name: "RNG EGG",
@@ -27,7 +27,7 @@ const EVENT_DATA = {
     tip: "Znajdź serwer i farm Tier!"
   },
   merchant: {
-    name: "MERCHANT",
+    name: "BOSS / HONEY MERCHANT",
     color: "#ff3300",
     image: "https://imgur.com/ft4q1bC.png",
     tip: "Przygotuj walutę!"
@@ -46,7 +46,7 @@ const ROLES = {
   spin: "1484911421903999127"
 };
 
-// ================= DB =================
+// ===== DB =====
 const DB_PATH = "./eventDB.json";
 
 function loadDB() {
@@ -65,7 +65,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= EVENTS =================
+// ===== EVENTS =====
 function getEventByHour(hour) {
   if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
   if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
@@ -80,7 +80,7 @@ function getNextEvent() {
   return getEventByHour((getNowPL().getHours() + 1) % 24);
 }
 
-// ================= TIMER =================
+// ===== TIMER =====
 function getCountdown() {
   const now = getNowPL();
   let minutes = 59 - now.getMinutes();
@@ -92,7 +92,7 @@ function getCountdown() {
   return `${minutes}m ${seconds}s`;
 }
 
-// ================= EMBED =================
+// ===== EMBED (TU BYŁ BŁĄD — POPRAWIONY OPIS 1:1) =====
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
@@ -109,21 +109,29 @@ function panelEmbed() {
     .addFields(
       {
         name: "🟢 CURRENT EVENT",
-        value: `**${currentData.name}**\n⏳ \`${time}\``,
+        value:
+`**${currentData.name}**
+
+⏳ Time left
+\`${time}\``,
         inline: true
       },
       {
         name: "⏭️ NEXT EVENT",
-        value: `**${nextData.name}**\n⏱️ \`${time}\``,
+        value:
+`**${nextData.name}**
+
+⏱️ Starts in
+\`${time}\``,
         inline: true
       }
     )
     .setImage("https://imgur.com/sOU3JWV.png")
-    .setFooter({ text: "Auto refresh 10s" })
+    .setFooter({ text: "By B3sttiee • refresh 10s" })
     .setTimestamp();
 }
 
-// ================= BUTTONS =================
+// ===== BUTTONS =====
 function getPanelButtons() {
   return [
     new ActionRowBuilder().addComponents(
@@ -145,14 +153,12 @@ function getPanelButtons() {
   ];
 }
 
-// ================= MENUS =================
+// ===== MENUS =====
 function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
       .setPlaceholder("Select roles")
-      .setMinValues(0)
-      .setMaxValues(3)
       .addOptions([
         { label: "RNG EGG", value: "egg" },
         { label: "MERCHANT", value: "merchant" },
@@ -166,8 +172,6 @@ function dmMenu() {
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
       .setPlaceholder("Select DM notifications")
-      .setMinValues(0)
-      .setMaxValues(3)
       .addOptions([
         { label: "RNG EGG", value: "egg" },
         { label: "MERCHANT", value: "merchant" },
@@ -176,12 +180,12 @@ function dmMenu() {
   );
 }
 
-// ================= PANEL =================
-let panelMessage;
-
+// ===== PANEL + PING SYSTEM =====
 async function startPanel(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
   const db = loadDB();
+
+  let panelMessage;
 
   if (db.panelMessageId) {
     try {
@@ -209,9 +213,8 @@ async function startPanel(client) {
     } catch {}
   }, 10000);
 
-  // ================= PING SYSTEM =================
-  let lastBeforeHour = null;
-  let lastStartHour = null;
+  let lastBefore = null;
+  let lastStart = null;
 
   setInterval(async () => {
     const now = getNowPL();
@@ -222,9 +225,8 @@ async function startPanel(client) {
     const current = getCurrentEvent();
     const next = getNextEvent();
 
-    // 5 min before
-    if (min === 55 && lastBeforeHour !== hour) {
-      lastBeforeHour = hour;
+    if (min === 55 && lastBefore !== hour) {
+      lastBefore = hour;
 
       const msg = await channel.send({
         content: `<@&${ROLES[next]}> ⚠️ Event za 5 minut!`
@@ -234,9 +236,8 @@ async function startPanel(client) {
       saveDB(db);
     }
 
-    // START
-    if (min === 0 && lastStartHour !== hour) {
-      lastStartHour = hour;
+    if (min === 0 && lastStart !== hour) {
+      lastStart = hour;
 
       try {
         if (db.beforePingId) {
@@ -253,31 +254,26 @@ async function startPanel(client) {
           new EmbedBuilder()
             .setColor(data.color)
             .setTitle("🚀 EVENT START")
-            .setDescription(`**${data.name}** wystartował!\n${data.tip}`)
+            .setDescription(
+`**${data.name}**
+
+${data.tip}`
+            )
             .setImage(data.image)
         ]
       });
 
       db.startPingId = msg.id;
       saveDB(db);
-
-      setTimeout(async () => {
-        try {
-          const fresh = loadDB();
-          if (fresh.startPingId) {
-            const m = await channel.messages.fetch(fresh.startPingId);
-            await m.delete();
-          }
-        } catch {}
-      }, 15 * 60 * 1000);
     }
 
   }, 10000);
 }
 
-// ================= EXPORT =================
 module.exports = {
   startPanel,
+  panelEmbed,
+  getPanelButtons,
   rolesMenu,
   dmMenu
 };
