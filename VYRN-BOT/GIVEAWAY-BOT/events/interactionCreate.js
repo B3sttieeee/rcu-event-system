@@ -1,25 +1,15 @@
-const fs = require('fs');
+const fs = require("fs");
 
-// ===== SYSTEMY =====
-const ticketSystem = require('../utils/ticketSystem');
-const { handleGiveaway } = require('../utils/giveawaySystem');
+// SYSTEMY
+const ticketSystem = require("../utils/ticketSystem");
+const { handleEventInteraction } = require("../utils/eventSystem");
+const giveawaySystem = require("../utils/giveawaySystem");
 
 module.exports = {
-  name: 'interactionCreate',
+  name: "interactionCreate",
 
   async execute(interaction, client) {
     try {
-
-      // =========================
-      // 🎉 GIVEAWAY BUTTONS
-      // =========================
-      if (interaction.isButton()) {
-        try {
-          await handleGiveaway(interaction);
-        } catch (err) {
-          console.log("❌ GIVEAWAY BUTTON ERROR:", err);
-        }
-      }
 
       // =========================
       // 🎫 TICKET SYSTEM
@@ -30,11 +20,28 @@ module.exports = {
         interaction.isStringSelectMenu()
       ) {
         if (ticketSystem && typeof ticketSystem.handle === "function") {
-          try {
-            await ticketSystem.handle(interaction, client);
-          } catch (err) {
-            console.log("❌ TICKET ERROR:", err);
-          }
+          await ticketSystem.handle(interaction, client);
+        }
+      }
+
+      // =========================
+      // 🎉 EVENT SYSTEM (BUTTONS + MENUS)
+      // =========================
+      if (
+        interaction.isButton() ||
+        interaction.isStringSelectMenu()
+      ) {
+        if (handleEventInteraction) {
+          await handleEventInteraction(interaction);
+        }
+      }
+
+      // =========================
+      // 🎁 GIVEAWAY BUTTONS
+      // =========================
+      if (interaction.isButton()) {
+        if (giveawaySystem && typeof giveawaySystem.handleInteraction === "function") {
+          await giveawaySystem.handleInteraction(interaction);
         }
       }
 
@@ -43,7 +50,7 @@ module.exports = {
       // =========================
       if (!interaction.isChatInputCommand()) return;
 
-      const commandFiles = fs.readdirSync('./commands');
+      const commandFiles = fs.readdirSync("./commands");
       const commands = new Map();
 
       for (const file of commandFiles) {
@@ -68,12 +75,12 @@ module.exports = {
       try {
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp({
-            content: '❌ Wystąpił błąd',
+            content: "❌ Wystąpił błąd",
             ephemeral: true
           });
         } else {
           await interaction.reply({
-            content: '❌ Wystąpił błąd',
+            content: "❌ Wystąpił błąd",
             ephemeral: true
           });
         }
