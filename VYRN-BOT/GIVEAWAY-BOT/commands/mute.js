@@ -4,6 +4,8 @@ const {
   PermissionFlagsBits
 } = require("discord.js");
 
+const { createCase } = require("../utils/moderation");
+
 const MUTE_ROLE = "1476000458240819301";
 
 module.exports = {
@@ -11,13 +13,19 @@ module.exports = {
     .setName("mute")
     .setDescription("Mute user")
     .addUserOption(opt =>
-      opt.setName("user").setDescription("User").setRequired(true)
+      opt.setName("user")
+        .setDescription("User")
+        .setRequired(true)
     )
     .addStringOption(opt =>
-      opt.setName("time").setDescription("Time (e.g. 10m, 1h)").setRequired(true)
+      opt.setName("time")
+        .setDescription("Time (10m, 1h, 1d)")
+        .setRequired(true)
     )
     .addStringOption(opt =>
-      opt.setName("reason").setDescription("Reason").setRequired(false)
+      opt.setName("reason")
+        .setDescription("Reason")
+        .setRequired(false)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
@@ -31,19 +39,30 @@ module.exports = {
     const muteRole = interaction.guild.roles.cache.get(MUTE_ROLE);
 
     if (!member || !muteRole) {
-      return interaction.reply({ content: "❌ Error", ephemeral: true });
+      return interaction.reply({
+        content: "❌ User or role not found",
+        ephemeral: true
+      });
     }
 
     // ===== PARSE TIME =====
-    const ms =
-      time.endsWith("m") ? parseInt(time) * 60000 :
-      time.endsWith("h") ? parseInt(time) * 3600000 :
-      time.endsWith("d") ? parseInt(time) * 86400000 :
-      null;
+    let ms;
+    let prettyTime;
 
-    if (!ms) {
+    if (time.endsWith("m")) {
+      ms = parseInt(time) * 60000;
+      prettyTime = `${parseInt(time)} min`;
+    } else if (time.endsWith("h")) {
+      ms = parseInt(time) * 3600000;
+      prettyTime = `${parseInt(time)} h`;
+    } else if (time.endsWith("d")) {
+      ms = parseInt(time) * 86400000;
+      prettyTime = `${parseInt(time)} d`;
+    }
+
+    if (!ms || isNaN(ms)) {
       return interaction.reply({
-        content: "❌ Wrong time format (use 10m / 1h / 1d)",
+        content: "❌ Use correct format: 10m / 1h / 1d",
         ephemeral: true
       });
     }
@@ -51,38 +70,59 @@ module.exports = {
     // ===== ADD ROLE =====
     await member.roles.add(muteRole).catch(() => {});
 
+    // ===== CREATE CASE =====
+    const caseData = createCase({
+      userId: user.id,
+      moderatorId: interaction.user.id,
+      type: "MUTE",
+      reason,
+      duration: prettyTime
+    });
+
     // ===== DM =====
     try {
-      const dm = new EmbedBuilder()
+      const dmEmbed = new EmbedBuilder()
         .setColor("#ef4444")
         .setTitle("🔇 You have been muted")
         .setDescription(
-          `📌 **Server:** ${interaction.guild.name}\n\n` +
-          `⏱ **Time:** ${time}\n` +
-          `📝 **Reason:** ${reason}`
+          `📌 Server: **${interaction.guild.name}**\n\n` +
+          `🆔 Case: **#${caseData.id}**\n` +
+          `⏱ Time: **${prettyTime}**\n` +
+          `📝 Reason: **${reason}**`
         );
 
-      await user.send({ embeds: [dm] });
+      await user.send({ embeds: [dmEmbed] });
     } catch {}
 
     // ===== RESPONSE =====
     const embed = new EmbedBuilder()
       .setColor("#ef4444")
       .setTitle("🔇 User Muted")
+      .setThumbnail(user.displayAvatarURL())
       .setDescription(
         `👤 ${user}\n\n` +
-        `⏱ **Time:** ${time}\n` +
-        `📝 **Reason:** ${reason}`
+        `🆔 Case: **#${caseData.id}**\n` +
+        `⏱ Time: **${prettyTime}**\n` +
+        `📝 Reason: **${reason}**`
       )
-      .setFooter({ text: `By ${interaction.user.tag}` });
+      .setFooter({ text: `Moderator: ${interaction.user.tag}` });
 
     await interaction.reply({ embeds: [embed] });
 
     // ===== AUTO UNMUTE =====
     setTimeout(async () => {
-      if (member.roles.cache.has(muteRole.id)) {
-        await member.roles.remove(muteRole).catch(() => {});
-      }
+      try {
+        if (member.roles.cache.has(muteRole.id)) {
+          await member.roles.remove(muteRole);
+
+          createCase({
+            userId: user.id,
+            moderatorId: interaction.client.user.id,
+            type: "AUTO_UNMUTE",
+            reason: "Mute expired"
+          });
+        }
+      } catch {}
     }, ms);
   }
 };
