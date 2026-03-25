@@ -3,74 +3,96 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  PermissionsBitField,
-  ChannelType
+  ChannelType,
+  PermissionsBitField
 } = require("discord.js");
 
-const fs = require("fs");
+const giveaways = new Map();
 
-const DB = "./giveaways.json";
+// ===== TWOJE BONUS ROLE =====
+const BONUS_ROLES = {
+  "1476000458987278397": 1,
+  "1476000995501670534": 2,
+  "1476000459595448442": 4,
+  "1476000991206707221": 6,
+  "1476000991823532032": 10,
+  "1476000992351879229": 15
+};
 
-// ===== LOAD DB =====
-function load() {
-  if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({}));
-  return JSON.parse(fs.readFileSync(DB));
-}
-
-function save(data) {
-  fs.writeFileSync(DB, JSON.stringify(data, null, 2));
-}
-
-// ===== PARSE TIME (FIXED 🔥) =====
+// ===== PARSE TIME =====
 function parseTime(time) {
-  const match = time.match(/^(\d+)(s|m|h|d)$/);
+  const num = parseInt(time);
 
-  if (!match) return null;
+  if (time.endsWith("s")) return num * 1000;
+  if (time.endsWith("m")) return num * 60000;
+  if (time.endsWith("h")) return num * 3600000;
+  if (time.endsWith("d")) return num * 86400000;
 
-  const value = parseInt(match[1]);
-  const unit = match[2];
-
-  const map = {
-    s: 1000,
-    m: 60000,
-    h: 3600000,
-    d: 86400000
-  };
-
-  return value * map[unit];
+  return null;
 }
 
 // ===== FORMAT TIME =====
 function formatTime(ms) {
-  if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
-  if (ms < 3600000) return `${Math.floor(ms / 60000)}m`;
-  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`;
-  return `${Math.floor(ms / 86400000)}d`;
+  const total = Math.floor(ms / 1000);
+
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+// ===== BONUS TEXT =====
+function getBonusText() {
+  return Object.entries(BONUS_ROLES)
+    .map(([id, val]) => `<@&${id}> ➜ +${val} wejść`)
+    .join("\n");
+}
+
+// ===== EMBED =====
+function buildEmbed(data) {
+  const now = Date.now();
+  const left = data.end - now;
+
+  const time = left > 0 ? formatTime(left) : "Zakończono";
+
+  return new EmbedBuilder()
+    .setColor("#ff8800")
+    .setTitle("🎉 Giveaway")
+    .setDescription(
+`🎁 **${data.prize}**
+
+👉 Kliknij **Join**, aby wziąć udział!
+
+👥 **Uczestnicy:** ${data.users.length}
+🏆 **Zwycięzcy:** ${data.winners}
+⏳ **Koniec za:** ${time}
+
+🎟 **Bonusowe wejścia**
+${getBonusText()}`
+    )
+    .setFooter({ text: "VYRN Giveaway System" })
+    .setTimestamp();
 }
 
 // ===== CREATE =====
 async function createGiveaway(interaction, data) {
 
   const duration = parseTime(data.time);
-
   if (!duration) throw new Error("Bad time");
 
   const end = Date.now() + duration;
 
-  const embed = new EmbedBuilder()
-    .setColor("#ff8800")
-    .setTitle("🎉 Giveaway")
-    .setDescription(
-`🎁 **Prize:** ${data.prize}
+  const giveawayData = {
+    prize: data.prize,
+    winners: data.winners,
+    end,
+    users: []
+  };
 
-👥 **Participants:** 0
-🏆 **Winners:** ${data.winners}
-⏳ **Ends in:** ${formatTime(duration)}
-
-👉 Kliknij **Join** aby wziąć udział!`
-    )
-    .setFooter({ text: "VYRN Giveaway System" })
-    .setTimestamp(end);
+  const embed = buildEmbed(giveawayData);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -89,134 +111,128 @@ async function createGiveaway(interaction, data) {
     components: [row]
   });
 
-  const db = load();
+  giveawayData.messageId = msg.id;
+  giveaways.set(msg.id, giveawayData);
 
-  db[msg.id] = {
-    prize: data.prize,
-    winners: data.winners,
-    end,
-    users: [],
-    channelId: interaction.channel.id,
-    guildId: interaction.guild.id
-  };
+  // ===== LIVE COUNTDOWN =====
+  const interval = setInterval(async () => {
+    const data = giveaways.get(msg.id);
+    if (!data) return clearInterval(interval);
 
-  save(db);
+    const updated = buildEmbed(data);
+    await msg.edit({ embeds: [updated] }).catch(()=>{});
 
-  // ===== END TIMER =====
-  setTimeout(() => endGiveaway(msg.id, interaction.client), duration);
-}
+    if (Date.now() >= data.end) {
+      clearInterval(interval);
+      endGiveaway(msg, data);
+    }
 
-// ===== JOIN =====
-async function join(interaction) {
-  const db = load();
-  const gw = db[interaction.message.id];
-  if (!gw) return;
-
-  if (!gw.users.includes(interaction.user.id)) {
-    gw.users.push(interaction.user.id);
-  }
-
-  save(db);
-
-  updateEmbed(interaction.message, gw);
-
-  return interaction.reply({ content: "✅ Dołączyłeś!", ephemeral: true });
-}
-
-// ===== LEAVE =====
-async function leave(interaction) {
-  const db = load();
-  const gw = db[interaction.message.id];
-  if (!gw) return;
-
-  gw.users = gw.users.filter(u => u !== interaction.user.id);
-
-  save(db);
-
-  updateEmbed(interaction.message, gw);
-
-  return interaction.reply({ content: "❌ Opuściłeś giveaway", ephemeral: true });
-}
-
-// ===== UPDATE EMBED =====
-async function updateEmbed(message, gw) {
-
-  const embed = EmbedBuilder.from(message.embeds[0])
-    .setDescription(
-`🎁 **Prize:** ${gw.prize}
-
-👥 **Participants:** ${gw.users.length}
-🏆 **Winners:** ${gw.winners}
-
-👉 Kliknij **Join** aby wziąć udział!`
-    );
-
-  await message.edit({ embeds: [embed] });
+  }, 5000);
 }
 
 // ===== END =====
-async function endGiveaway(id, client) {
-  const db = load();
-  const gw = db[id];
-  if (!gw) return;
+async function endGiveaway(message, data) {
 
-  const channel = await client.channels.fetch(gw.channelId);
+  const winners = [];
+  const pool = [];
 
-  let winners = [];
+  for (const id of data.users) {
+    const member = await message.guild.members.fetch(id).catch(()=>null);
+    if (!member) continue;
 
-  if (gw.users.length > 0) {
-    winners = gw.users.sort(() => 0.5 - Math.random()).slice(0, gw.winners);
-  }
+    let entries = 1;
 
-  const winnerMentions = winners.map(id => `<@${id}>`).join(", ") || "Brak";
+    for (const roleId in BONUS_ROLES) {
+      if (member.roles.cache.has(roleId)) {
+        entries += BONUS_ROLES[roleId];
+      }
+    }
 
-  await channel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setColor("#22c55e")
-        .setTitle("🎉 Giveaway Ended")
-        .setDescription(
-`🎁 **Prize:** ${gw.prize}
-
-🏆 **Winners:**
-${winnerMentions}`
-        )
-    ]
-  });
-
-  // ===== PRIVATE CHANNEL =====
-  if (winners.length > 0) {
-    for (const id of winners) {
-      await channel.guild.channels.create({
-        name: `win-${id}`,
-        type: ChannelType.GuildText,
-        permissionOverwrites: [
-          {
-            id: channel.guild.id,
-            deny: [PermissionsBitField.Flags.ViewChannel]
-          },
-          {
-            id,
-            allow: [PermissionsBitField.Flags.ViewChannel]
-          }
-        ]
-      });
+    for (let i = 0; i < entries; i++) {
+      pool.push(id);
     }
   }
 
-  delete db[id];
-  save(db);
+  for (let i = 0; i < data.winners; i++) {
+    if (pool.length === 0) break;
+
+    const winner = pool[Math.floor(Math.random() * pool.length)];
+    winners.push(winner);
+
+    for (let j = pool.length - 1; j >= 0; j--) {
+      if (pool[j] === winner) pool.splice(j, 1);
+    }
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor("#22c55e")
+    .setTitle("🎉 Giveaway Zakończony")
+    .setDescription(
+`🎁 **${data.prize}**
+
+🏆 **Wygrani:**
+${winners.length ? winners.map(w => `<@${w}>`).join("\n") : "Brak"}
+
+👥 Uczestnicy: ${data.users.length}`
+    );
+
+  await message.edit({ embeds: [embed], components: [] });
+
+  // ===== PRIVATE CHANNEL =====
+  if (winners.length) {
+    const channel = await message.guild.channels.create({
+      name: `giveaway-win`,
+      type: ChannelType.GuildText,
+      permissionOverwrites: [
+        {
+          id: message.guild.id,
+          deny: [PermissionsBitField.Flags.ViewChannel]
+        },
+        ...winners.map(id => ({
+          id,
+          allow: [PermissionsBitField.Flags.ViewChannel]
+        }))
+      ]
+    });
+
+    channel.send(`🎉 Gratulacje ${winners.map(w => `<@${w}>`).join(", ")}`);
+  }
+
+  giveaways.delete(message.id);
 }
 
-// ===== HANDLE =====
-async function handle(interaction) {
-  if (!interaction.isButton()) return;
+// ===== BUTTONS =====
+async function handleGiveaway(interaction) {
 
-  if (interaction.customId === "gw_join") return join(interaction);
-  if (interaction.customId === "gw_leave") return leave(interaction);
+  const data = giveaways.get(interaction.message.id);
+  if (!data) return;
+
+  const userId = interaction.user.id;
+
+  if (interaction.customId === "gw_join") {
+
+    if (!data.users.includes(userId)) {
+      data.users.push(userId);
+    }
+
+    return interaction.reply({
+      content: "✅ Dołączyłeś do giveaway!",
+      ephemeral: true
+    });
+  }
+
+  if (interaction.customId === "gw_leave") {
+
+    data.users = data.users.filter(id => id !== userId);
+
+    return interaction.reply({
+      content: "❌ Opuściłeś giveaway",
+      ephemeral: true
+    });
+  }
 }
 
 module.exports = {
   createGiveaway,
-  handle
+  handleGiveaway
 };
