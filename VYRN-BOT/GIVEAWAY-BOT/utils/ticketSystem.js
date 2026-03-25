@@ -28,9 +28,10 @@ async function createTicketPanel(client) {
 `📌 Open a ticket to apply for clan
 
 📋 **Requirements:**
-• Good Gamepasses  
-• Active player  
-• High stats`
+• Good Team
+• Good GamePass
+• 🔄️ 1.5N Rebirth + 
+• 3-8H AFK
       )
       .setImage("https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif")
       .setFooter({ text: "VYRN SYSTEM" });
