@@ -13,7 +13,43 @@ const {
 // ===== CONFIG =====
 const REQUIRED_ROLE = "1475998527191519302";
 const ADMIN_ROLE = "1475998527191519302";
+const PANEL_CHANNEL_ID = "1475558248487583805";
 
+// ================= PANEL =================
+async function createTicketPanel(client) {
+  try {
+    const channel = await client.channels.fetch(PANEL_CHANNEL_ID);
+    if (!channel) return console.log("❌ Ticket channel not found");
+
+    const embed = new EmbedBuilder()
+      .setColor("#ff6600")
+      .setTitle("🎫 Ticket System")
+      .setDescription(
+        "Kliknij przycisk poniżej aby stworzyć ticket\n\n" +
+        "📌 Wymagana rola do otwarcia ticketa"
+      )
+      .setFooter({ text: "VYRN SYSTEM" });
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("open_ticket")
+        .setLabel("🎫 Create Ticket")
+        .setStyle(ButtonStyle.Primary)
+    );
+
+    await channel.send({
+      embeds: [embed],
+      components: [row]
+    });
+
+    console.log("✅ Ticket panel sent");
+
+  } catch (err) {
+    console.log("❌ PANEL ERROR:", err);
+  }
+}
+
+// ================= HANDLE =================
 async function handle(interaction) {
 
   // ===== OPEN BUTTON =====
@@ -110,10 +146,14 @@ async function handle(interaction) {
     });
   }
 
-  // ===== CLOSE =====
+  // ===== CLOSE BUTTON =====
   if (interaction.isButton() && interaction.customId === "close_ticket") {
 
-    if (!interaction.member.roles.cache.has(ADMIN_ROLE)) {
+    const isAdmin =
+      interaction.member.roles.cache.has(ADMIN_ROLE) ||
+      interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+
+    if (!isAdmin) {
       return interaction.reply({
         content: "❌ Only admin can close ticket",
         ephemeral: true
@@ -131,4 +171,8 @@ async function handle(interaction) {
   }
 }
 
-module.exports = { handle };
+// ================= EXPORT =================
+module.exports = {
+  handle,
+  createTicketPanel
+};
