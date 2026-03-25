@@ -1,51 +1,43 @@
-const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
-const ms = require('ms');
+const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require("discord.js");
+const ms = require("ms");
+
+const MUTE_ROLE = "1476000458240819301";
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('mute')
-    .setDescription('Mute a user (timeout)')
-    .addUserOption(option =>
-      option.setName('user')
-        .setDescription('User to mute')
-        .setRequired(true))
-    .addStringOption(option =>
-      option.setName('time')
-        .setDescription('Time (e.g. 10m, 1h)')
-        .setRequired(true))
-    .addStringOption(option =>
-      option.setName('reason')
-        .setDescription('Reason for mute')
-        .setRequired(false))
-    .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers),
+    .setName("mute")
+    .setDescription("Mute user")
+    .addUserOption(o => o.setName("user").setRequired(true))
+    .addStringOption(o => o.setName("time").setRequired(true))
+    .addStringOption(o => o.setName("reason").setRequired(true)),
 
   async execute(interaction) {
-    const member = interaction.options.getMember('user');
-    const time = interaction.options.getString('time');
-    const reason = interaction.options.getString('reason') || 'No reason';
 
-    if (!member) {
-      return interaction.reply({ content: '❌ User not found', ephemeral: true });
+    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+      return interaction.reply({ content: "❌ No perms", ephemeral: true });
     }
+
+    const user = interaction.options.getMember("user");
+    const time = interaction.options.getString("time");
+    const reason = interaction.options.getString("reason");
 
     const duration = ms(time);
-    if (!duration) {
-      return interaction.reply({ content: '❌ Invalid time format', ephemeral: true });
-    }
 
-    try {
-      await member.timeout(duration, reason);
+    await user.roles.add(MUTE_ROLE);
 
-      await interaction.reply({
-        content: `🔇 ${member.user.tag} muted for ${time}\nReason: ${reason}`
-      });
+    const embed = new EmbedBuilder()
+      .setColor("#ef4444")
+      .setTitle("🔇 User Muted")
+      .setDescription(`${user} muted`)
+      .addFields(
+        { name: "Reason", value: reason },
+        { name: "Time", value: time }
+      );
 
-    } catch (err) {
-      console.log(err);
-      await interaction.reply({
-        content: '❌ Cannot mute this user',
-        ephemeral: true
-      });
-    }
+    interaction.reply({ embeds: [embed] });
+
+    setTimeout(() => {
+      user.roles.remove(MUTE_ROLE).catch(() => {});
+    }, duration);
   }
 };
