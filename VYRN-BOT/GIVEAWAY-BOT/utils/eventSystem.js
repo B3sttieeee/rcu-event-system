@@ -92,7 +92,7 @@ function getCountdown() {
   return `${minutes}m ${seconds}s`;
 }
 
-// ===== EMBED (TU BYŁ BŁĄD — POPRAWIONY OPIS 1:1) =====
+// ===== EMBED =====
 function panelEmbed() {
   const current = getCurrentEvent();
   const next = getNextEvent();
@@ -131,22 +131,22 @@ function panelEmbed() {
     .setTimestamp();
 }
 
-// ===== BUTTONS =====
+// ===== BUTTONS (NAPRAWIONE ID) =====
 function getPanelButtons() {
   return [
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("refresh")
+        .setCustomId("event_refresh")
         .setLabel("🔄 Refresh")
         .setStyle(ButtonStyle.Secondary),
 
       new ButtonBuilder()
-        .setCustomId("roles")
+        .setCustomId("event_roles")
         .setLabel("🎭 Roles")
         .setStyle(ButtonStyle.Secondary),
 
       new ButtonBuilder()
-        .setCustomId("dm")
+        .setCustomId("event_dm")
         .setLabel("📩 Notifications")
         .setStyle(ButtonStyle.Secondary)
     )
@@ -157,8 +157,10 @@ function getPanelButtons() {
 function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId("roles_menu")
+      .setCustomId("event_roles_menu")
       .setPlaceholder("Select roles")
+      .setMinValues(0)
+      .setMaxValues(3)
       .addOptions([
         { label: "RNG EGG", value: "egg" },
         { label: "MERCHANT", value: "merchant" },
@@ -170,8 +172,10 @@ function rolesMenu() {
 function dmMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId("dm_menu")
+      .setCustomId("event_dm_menu")
       .setPlaceholder("Select DM notifications")
+      .setMinValues(0)
+      .setMaxValues(3)
       .addOptions([
         { label: "RNG EGG", value: "egg" },
         { label: "MERCHANT", value: "merchant" },
@@ -180,7 +184,7 @@ function dmMenu() {
   );
 }
 
-// ===== PANEL + PING SYSTEM =====
+// ===== PANEL =====
 async function startPanel(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
   const db = loadDB();
@@ -203,7 +207,7 @@ async function startPanel(client) {
     saveDB(db);
   }
 
-  // refresh
+  // REFRESH
   setInterval(async () => {
     try {
       await panelMessage.edit({
@@ -213,67 +217,59 @@ async function startPanel(client) {
     } catch {}
   }, 10000);
 
-  let lastBefore = null;
-  let lastStart = null;
+  console.log("✨ Event panel started");
+}
 
-  setInterval(async () => {
-    const now = getNowPL();
-    const min = now.getMinutes();
-    const hour = now.getHours();
+// ===== INTERACTION HANDLER =====
+async function handleEventInteraction(interaction) {
 
+  if (interaction.customId === "event_refresh") {
+    return interaction.update({
+      embeds: [panelEmbed()],
+      components: getPanelButtons()
+    });
+  }
+
+  if (interaction.customId === "event_roles") {
+    return interaction.reply({
+      content: "🎭 Select roles:",
+      components: [rolesMenu()],
+      ephemeral: true
+    });
+  }
+
+  if (interaction.customId === "event_dm") {
+    return interaction.reply({
+      content: "📩 Select notifications:",
+      components: [dmMenu()],
+      ephemeral: true
+    });
+  }
+
+  if (interaction.customId === "event_roles_menu") {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+
+    for (const key in ROLES) {
+      await member.roles.remove(ROLES[key]).catch(()=>{});
+    }
+
+    for (const val of interaction.values) {
+      await member.roles.add(ROLES[val]).catch(()=>{});
+    }
+
+    return interaction.reply({ content: "✅ Roles updated", ephemeral: true });
+  }
+
+  if (interaction.customId === "event_dm_menu") {
     const db = loadDB();
-    const current = getCurrentEvent();
-    const next = getNextEvent();
+    db.dm[interaction.user.id] = interaction.values;
+    saveDB(db);
 
-    if (min === 55 && lastBefore !== hour) {
-      lastBefore = hour;
-
-      const msg = await channel.send({
-        content: `<@&${ROLES[next]}> ⚠️ Event za 5 minut!`
-      });
-
-      db.beforePingId = msg.id;
-      saveDB(db);
-    }
-
-    if (min === 0 && lastStart !== hour) {
-      lastStart = hour;
-
-      try {
-        if (db.beforePingId) {
-          const old = await channel.messages.fetch(db.beforePingId);
-          await old.delete();
-        }
-      } catch {}
-
-      const data = EVENT_DATA[current];
-
-      const msg = await channel.send({
-        content: `<@&${ROLES[current]}>`,
-        embeds: [
-          new EmbedBuilder()
-            .setColor(data.color)
-            .setTitle("🚀 EVENT START")
-            .setDescription(
-`**${data.name}**
-
-${data.tip}`
-            )
-            .setImage(data.image)
-        ]
-      });
-
-      db.startPingId = msg.id;
-      saveDB(db);
-    }
-
-  }, 10000);
+    return interaction.reply({ content: "✅ DM saved", ephemeral: true });
+  }
 }
 
 module.exports = {
   startPanel,
-  panelEmbed,
-  getPanelButtons,
-  rolesMenu,
-  dmMenu
+  handleEventInteraction
 };
