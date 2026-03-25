@@ -1,7 +1,9 @@
 const fs = require("fs");
 const path = require("path");
 const { REST, Routes } = require("discord.js");
+
 const { createTicketPanel } = require("../utils/ticketSystem");
+const eventSystem = require("../utils/eventSystem"); // 🔥 PANEL EVENTÓW
 
 module.exports = {
   name: "clientReady",
@@ -12,19 +14,27 @@ module.exports = {
 
     try {
 
-      // ===== LOAD COMMANDS =====
+      // =========================
+      // 📦 LOAD COMMANDS
+      // =========================
       const commands = [];
       const commandsPath = path.join(__dirname, "../commands");
       const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
       for (const file of commandFiles) {
-        const command = require(`../commands/${file}`);
-        if (command.data) {
-          commands.push(command.data.toJSON());
+        try {
+          const command = require(`../commands/${file}`);
+          if (command?.data) {
+            commands.push(command.data.toJSON());
+          }
+        } catch (err) {
+          console.log("❌ Command load error:", file, err);
         }
       }
 
-      // ===== REGISTER COMMANDS =====
+      // =========================
+      // 🚀 REGISTER SLASH
+      // =========================
       const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
       await rest.put(
@@ -34,10 +44,21 @@ module.exports = {
 
       console.log("✅ Commands deployed");
 
-      // ===== TICKET PANEL =====
+      // =========================
+      // 🎫 TICKET PANEL
+      // =========================
       await createTicketPanel(client);
-
       console.log("🎟 Ticket panel loaded");
+
+      // =========================
+      // 🎮 EVENT PANEL (TEN DUŻY SYSTEM)
+      // =========================
+      if (eventSystem && typeof eventSystem.startPanel === "function") {
+        await eventSystem.startPanel(client);
+        console.log("✨ Event panel started");
+      } else {
+        console.log("⚠️ eventSystem not found or invalid");
+      }
 
     } catch (err) {
       console.log("❌ READY ERROR:", err);
