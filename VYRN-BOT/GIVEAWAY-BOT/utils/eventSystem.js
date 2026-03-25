@@ -11,14 +11,14 @@ const fs = require("fs");
 // ================= CONFIG =================
 const CHANNEL_ID = "1484937784283369502";
 
-// ================= CZAS =================
+// ================= TIME =================
 function getNowPL() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
   );
 }
 
-// ================= EVENT DATA =================
+// ================= DATA =================
 const EVENT_DATA = {
   egg: {
     name: "RNG EGG",
@@ -27,7 +27,7 @@ const EVENT_DATA = {
     tip: "Znajdź serwer i farm Tier!"
   },
   merchant: {
-    name: "BOSS / HONEY MERCHANT",
+    name: "MERCHANT",
     color: "#ff3300",
     image: "https://imgur.com/ft4q1bC.png",
     tip: "Przygotuj walutę!"
@@ -65,7 +65,7 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ================= EVENTY =================
+// ================= EVENTS =================
 function getEventByHour(hour) {
   if ([0,3,6,9,12,15,18,21].includes(hour)) return "egg";
   if ([1,4,7,10,13,16,19,22].includes(hour)) return "merchant";
@@ -123,6 +123,59 @@ function panelEmbed() {
     .setTimestamp();
 }
 
+// ================= BUTTONS =================
+function getPanelButtons() {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("refresh")
+        .setLabel("🔄 Refresh")
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId("roles")
+        .setLabel("🎭 Roles")
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId("dm")
+        .setLabel("📩 Notifications")
+        .setStyle(ButtonStyle.Secondary)
+    )
+  ];
+}
+
+// ================= MENUS =================
+function rolesMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("roles_menu")
+      .setPlaceholder("Select roles")
+      .setMinValues(0)
+      .setMaxValues(3)
+      .addOptions([
+        { label: "RNG EGG", value: "egg" },
+        { label: "MERCHANT", value: "merchant" },
+        { label: "DEV SPIN", value: "spin" }
+      ])
+  );
+}
+
+function dmMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("dm_menu")
+      .setPlaceholder("Select DM notifications")
+      .setMinValues(0)
+      .setMaxValues(3)
+      .addOptions([
+        { label: "RNG EGG", value: "egg" },
+        { label: "MERCHANT", value: "merchant" },
+        { label: "DEV SPIN", value: "spin" }
+      ])
+  );
+}
+
 // ================= PANEL =================
 let panelMessage;
 
@@ -138,23 +191,25 @@ async function startPanel(client) {
 
   if (!panelMessage) {
     panelMessage = await channel.send({
-      embeds: [panelEmbed()]
+      embeds: [panelEmbed()],
+      components: getPanelButtons()
     });
 
     db.panelMessageId = panelMessage.id;
     saveDB(db);
   }
 
-  // ===== REFRESH PANEL =====
+  // refresh
   setInterval(async () => {
     try {
       await panelMessage.edit({
-        embeds: [panelEmbed()]
+        embeds: [panelEmbed()],
+        components: getPanelButtons()
       });
     } catch {}
   }, 10000);
 
-  // ===== PING SYSTEM (FIXED NO SPAM) =====
+  // ================= PING SYSTEM =================
   let lastBeforeHour = null;
   let lastStartHour = null;
 
@@ -167,7 +222,7 @@ async function startPanel(client) {
     const current = getCurrentEvent();
     const next = getNextEvent();
 
-    // ===== 5 MIN BEFORE =====
+    // 5 min before
     if (min === 55 && lastBeforeHour !== hour) {
       lastBeforeHour = hour;
 
@@ -179,11 +234,10 @@ async function startPanel(client) {
       saveDB(db);
     }
 
-    // ===== START EVENT =====
+    // START
     if (min === 0 && lastStartHour !== hour) {
       lastStartHour = hour;
 
-      // usuń before ping
       try {
         if (db.beforePingId) {
           const old = await channel.messages.fetch(db.beforePingId);
@@ -207,7 +261,6 @@ async function startPanel(client) {
       db.startPingId = msg.id;
       saveDB(db);
 
-      // usuń po 15 min
       setTimeout(async () => {
         try {
           const fresh = loadDB();
@@ -224,5 +277,7 @@ async function startPanel(client) {
 
 // ================= EXPORT =================
 module.exports = {
-  startPanel
+  startPanel,
+  rolesMenu,
+  dmMenu
 };
