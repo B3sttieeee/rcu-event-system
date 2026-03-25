@@ -1,4 +1,8 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  PermissionFlagsBits
+} = require("discord.js");
 
 const MUTE_ROLE = "1476000458240819301";
 
@@ -6,42 +10,79 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("mute")
     .setDescription("Mute user")
-    .addUserOption(o =>
-      o.setName("user").setDescription("User").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("czas").setDescription("Czas w minutach").setRequired(true))
-    .addStringOption(o =>
-      o.setName("reason").setDescription("Powód").setRequired(false)),
+    .addUserOption(opt =>
+      opt.setName("user").setDescription("User").setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName("time").setDescription("Time (e.g. 10m, 1h)").setRequired(true)
+    )
+    .addStringOption(opt =>
+      opt.setName("reason").setDescription("Reason").setRequired(false)
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
     const user = interaction.options.getUser("user");
-    const time = interaction.options.getInteger("czas");
+    const member = interaction.guild.members.cache.get(user.id);
+
+    const time = interaction.options.getString("time");
     const reason = interaction.options.getString("reason") || "No reason";
 
-    const member = interaction.guild.members.cache.get(user.id);
-    const role = interaction.guild.roles.cache.get(MUTE_ROLE);
+    const muteRole = interaction.guild.roles.cache.get(MUTE_ROLE);
 
-    if (!role) return interaction.reply("❌ Brak roli mute");
+    if (!member || !muteRole) {
+      return interaction.reply({ content: "❌ Error", ephemeral: true });
+    }
 
-    await member.roles.add(role);
+    // ===== PARSE TIME =====
+    const ms =
+      time.endsWith("m") ? parseInt(time) * 60000 :
+      time.endsWith("h") ? parseInt(time) * 3600000 :
+      time.endsWith("d") ? parseInt(time) * 86400000 :
+      null;
 
-    // DM
+    if (!ms) {
+      return interaction.reply({
+        content: "❌ Wrong time format (use 10m / 1h / 1d)",
+        ephemeral: true
+      });
+    }
+
+    // ===== ADD ROLE =====
+    await member.roles.add(muteRole).catch(() => {});
+
+    // ===== DM =====
     try {
-      const embed = new EmbedBuilder()
-        .setColor("Red")
+      const dm = new EmbedBuilder()
+        .setColor("#ef4444")
         .setTitle("🔇 You have been muted")
-        .setDescription(`⏱ ${time} min\n📌 ${reason}`);
+        .setDescription(
+          `📌 **Server:** ${interaction.guild.name}\n\n` +
+          `⏱ **Time:** ${time}\n` +
+          `📝 **Reason:** ${reason}`
+        );
 
-      await user.send({ embeds: [embed] });
+      await user.send({ embeds: [dm] });
     } catch {}
 
-    interaction.reply(`✅ ${user} muted for ${time} min`);
+    // ===== RESPONSE =====
+    const embed = new EmbedBuilder()
+      .setColor("#ef4444")
+      .setTitle("🔇 User Muted")
+      .setDescription(
+        `👤 ${user}\n\n` +
+        `⏱ **Time:** ${time}\n` +
+        `📝 **Reason:** ${reason}`
+      )
+      .setFooter({ text: `By ${interaction.user.tag}` });
 
-    // AUTO UNMUTE
+    await interaction.reply({ embeds: [embed] });
+
+    // ===== AUTO UNMUTE =====
     setTimeout(async () => {
-      if (member.roles.cache.has(role.id)) {
-        await member.roles.remove(role).catch(() => {});
+      if (member.roles.cache.has(muteRole.id)) {
+        await member.roles.remove(muteRole).catch(() => {});
       }
-    }, time * 60000);
+    }, ms);
   }
 };
