@@ -1,6 +1,4 @@
 const {
-  ChannelType,
-  PermissionsBitField,
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -8,15 +6,14 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  StringSelectMenuBuilder
+  ChannelType,
+  PermissionsBitField
 } = require("discord.js");
 
 // ===== CONFIG =====
-const CATEGORY_ID = "1475985874385899530";
-const ADMIN_ROLE = "1475572271446884535";
-const REQUIRED_ROLE = "1475998527191519302";
+const REQUIRED_ROLE = "1475998527191519302"; // kto może otworzyć
+const ADMIN_ROLE = "1475998527191519302"; // kto może zamknąć
 
-// ===== HANDLE =====
 async function handle(interaction) {
 
   // =========================
@@ -26,72 +23,51 @@ async function handle(interaction) {
 
     if (!interaction.member.roles.cache.has(REQUIRED_ROLE)) {
       return interaction.reply({
-        content: "❌ You don't have permission to open a ticket.",
+        content: "❌ Nie masz roli do tworzenia ticketów",
         ephemeral: true
       });
     }
 
-    const select = new StringSelectMenuBuilder()
-      .setCustomId("ticket_lang")
-      .setPlaceholder("🌍 Choose language / Wybierz język")
-      .addOptions([
-        {
-          label: "🇵🇱 Polish Ticket",
-          value: "pl"
-        },
-        {
-          label: "🇬🇧 English Ticket",
-          value: "en"
-        }
-      ]);
-
-    const row = new ActionRowBuilder().addComponents(select);
-
-    return interaction.reply({
-      content: "🎫 Choose ticket language:",
-      components: [row],
-      ephemeral: true
-    });
-  }
-
-  // =========================
-  // 🌍 LANGUAGE SELECT
-  // =========================
-  if (interaction.isStringSelectMenu() && interaction.customId === "ticket_lang") {
-
-    const lang = interaction.values[0];
-
     const modal = new ModalBuilder()
-      .setCustomId(`ticket_modal_${lang}`)
-      .setTitle("🎫 Ticket");
+      .setCustomId("ticket_modal")
+      .setTitle("🎫 Create Ticket");
 
-    const input = new TextInputBuilder()
+    const nickInput = new TextInputBuilder()
       .setCustomId("nick")
-      .setLabel(lang === "pl" ? "Twój nick" : "Your nickname")
+      .setLabel("Twój nick / Your nickname")
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
-    const row = new ActionRowBuilder().addComponents(input);
-    modal.addComponents(row);
+    const langInput = new TextInputBuilder()
+      .setCustomId("lang")
+      .setLabel("Język (pl/en)")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(nickInput),
+      new ActionRowBuilder().addComponents(langInput)
+    );
 
     return interaction.showModal(modal);
   }
 
   // =========================
-  // 📩 MODAL SUBMIT
+  // 📝 MODAL SUBMIT
   // =========================
-  if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket_modal_")) {
+  if (interaction.isModalSubmit() && interaction.customId === "ticket_modal") {
 
-    const lang = interaction.customId.split("_")[2];
     const nick = interaction.fields.getTextInputValue("nick");
+    const lang = interaction.fields.getTextInputValue("lang").toLowerCase();
 
-    const channel = await interaction.guild.channels.create({
+    const guild = interaction.guild;
+
+    const channel = await guild.channels.create({
       name: `ticket-${nick}`,
       type: ChannelType.GuildText,
-      parent: CATEGORY_ID,
       permissionOverwrites: [
         {
-          id: interaction.guild.id,
+          id: guild.id,
           deny: [PermissionsBitField.Flags.ViewChannel]
         },
         {
@@ -111,54 +87,55 @@ async function handle(interaction) {
       ]
     });
 
+    // ===== EMBED =====
     const embed = new EmbedBuilder()
-      .setColor("#2b2d31")
+      .setColor("#22c55e")
       .setTitle("🎫 Ticket Opened")
+      .setThumbnail(interaction.user.displayAvatarURL())
       .setDescription(
-        lang === "pl"
-          ? `👋 Witaj ${interaction.user}
-
-📸 Wyślij screen swoich statystyk / gamepassów oraz teamu, abyśmy mogli rozpatrzyć Twoją aplikację do klanu.`
-          : `👋 Welcome ${interaction.user}
-
-📸 Please send screenshots of your stats / gamepasses and your team so we can review your clan application.`
+        lang === "en"
+          ? `👤 **User:** ${interaction.user}\n📝 **Nickname:** ${nick}\n\n📸 Please send screenshots of your stats, gamepasses and your team.\nOur staff will review your application.`
+          : `👤 **Użytkownik:** ${interaction.user}\n📝 **Nick:** ${nick}\n\n📸 Wyślij screeny statystyk, gamepassów oraz teamu.\nAdministracja sprawdzi twoją aplikację.`
       )
-      .setFooter({ text: "VYRN SYSTEM" });
+      .setFooter({ text: "VYRN Ticket System" });
 
-    const closeBtn = new ButtonBuilder()
-      .setCustomId("close_ticket")
-      .setLabel("🔒 Close Ticket")
-      .setStyle(ButtonStyle.Danger);
-
-    const row = new ActionRowBuilder().addComponents(closeBtn);
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("close_ticket")
+        .setLabel("🔒 Close Ticket")
+        .setStyle(ButtonStyle.Danger)
+    );
 
     await channel.send({
-      content: `<@${interaction.user.id}> <@&${ADMIN_ROLE}>`,
+      content: `<@${interaction.user.id}>`,
       embeds: [embed],
       components: [row]
     });
 
-    return interaction.reply({
+    await interaction.reply({
       content: `✅ Ticket created: ${channel}`,
       ephemeral: true
     });
   }
 
   // =========================
-  // 🔒 CLOSE TICKET
+  // 🔒 CLOSE BUTTON
   // =========================
   if (interaction.isButton() && interaction.customId === "close_ticket") {
 
     if (!interaction.member.roles.cache.has(ADMIN_ROLE)) {
       return interaction.reply({
-        content: "❌ Only admin can close tickets.",
+        content: "❌ Tylko Admin może zamknąć ticket",
         ephemeral: true
       });
     }
 
-    await interaction.reply({
-      content: "🔒 Closing ticket in 3 seconds..."
-    });
+    const embed = new EmbedBuilder()
+      .setColor("#ef4444")
+      .setTitle("🗑️ Ticket Closing")
+      .setDescription("Ticket will be deleted in 3 seconds...");
+
+    await interaction.reply({ embeds: [embed] });
 
     setTimeout(() => {
       interaction.channel.delete().catch(() => {});
@@ -166,7 +143,6 @@ async function handle(interaction) {
   }
 }
 
-// ===== EXPORT =====
 module.exports = {
   handle
 };
