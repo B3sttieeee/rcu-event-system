@@ -1,13 +1,15 @@
-const ticketSystem = require("./ticketSystem");
-const fs = require("fs");
+const fs = require('fs');
+const ticketSystem = require('../utils/ticketSystem');
 
 module.exports = {
-  name: "interactionCreate",
+  name: 'interactionCreate',
 
   async execute(interaction, client) {
     try {
 
-      // ===== TICKET SYSTEM =====
+      // =========================
+      // 🎫 TICKET SYSTEM
+      // =========================
       if (
         interaction.isButton() ||
         interaction.isModalSubmit() ||
@@ -18,36 +20,46 @@ module.exports = {
         }
       }
 
-      // ===== SLASH COMMANDS =====
+      // =========================
+      // ⚡ SLASH COMMANDS
+      // =========================
       if (!interaction.isChatInputCommand()) return;
 
-      const commandFiles = fs.readdirSync("./commands");
+      const commandFiles = fs.readdirSync('./commands');
       const commands = new Map();
 
       for (const file of commandFiles) {
-        const cmd = require(`../commands/${file}`);
-        commands.set(cmd.data.name, cmd);
+        try {
+          const command = require(`../commands/${file}`);
+          if (command?.data?.name) {
+            commands.set(command.data.name, command);
+          }
+        } catch (err) {
+          console.log("❌ COMMAND LOAD ERROR:", file, err);
+        }
       }
 
-      const command = commands.get(interaction.commandName);
-      if (!command) return;
+      const cmd = commands.get(interaction.commandName);
+      if (!cmd) return;
 
-      await command.execute(interaction);
+      await cmd.execute(interaction, client);
 
     } catch (err) {
       console.log("❌ INTERACTION ERROR:", err);
 
-      if (interaction.replied || interaction.deferred) {
-        interaction.followUp({
-          content: "❌ Error occurred",
-          ephemeral: true
-        }).catch(() => {});
-      } else {
-        interaction.reply({
-          content: "❌ Error occurred",
-          ephemeral: true
-        }).catch(() => {});
-      }
+      try {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({
+            content: '❌ Wystąpił błąd',
+            ephemeral: true
+          });
+        } else {
+          await interaction.reply({
+            content: '❌ Wystąpił błąd',
+            ephemeral: true
+          });
+        }
+      } catch {}
     }
   }
 };
