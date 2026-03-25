@@ -1,5 +1,4 @@
-const { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } = require("discord.js");
-const ms = require("ms");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 const MUTE_ROLE = "1476000458240819301";
 
@@ -7,37 +6,42 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("mute")
     .setDescription("Mute user")
-    .addUserOption(o => o.setName("user").setRequired(true))
-    .addStringOption(o => o.setName("time").setRequired(true))
-    .addStringOption(o => o.setName("reason").setRequired(true)),
+    .addUserOption(o =>
+      o.setName("user").setDescription("User").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("czas").setDescription("Czas w minutach").setRequired(true))
+    .addStringOption(o =>
+      o.setName("reason").setDescription("Powód").setRequired(false)),
 
   async execute(interaction) {
+    const user = interaction.options.getUser("user");
+    const time = interaction.options.getInteger("czas");
+    const reason = interaction.options.getString("reason") || "No reason";
 
-    if (!interaction.member.permissions.has(PermissionsBitField.Flags.ModerateMembers)) {
-      return interaction.reply({ content: "❌ No perms", ephemeral: true });
-    }
+    const member = interaction.guild.members.cache.get(user.id);
+    const role = interaction.guild.roles.cache.get(MUTE_ROLE);
 
-    const user = interaction.options.getMember("user");
-    const time = interaction.options.getString("time");
-    const reason = interaction.options.getString("reason");
+    if (!role) return interaction.reply("❌ Brak roli mute");
 
-    const duration = ms(time);
+    await member.roles.add(role);
 
-    await user.roles.add(MUTE_ROLE);
+    // DM
+    try {
+      const embed = new EmbedBuilder()
+        .setColor("Red")
+        .setTitle("🔇 You have been muted")
+        .setDescription(`⏱ ${time} min\n📌 ${reason}`);
 
-    const embed = new EmbedBuilder()
-      .setColor("#ef4444")
-      .setTitle("🔇 User Muted")
-      .setDescription(`${user} muted`)
-      .addFields(
-        { name: "Reason", value: reason },
-        { name: "Time", value: time }
-      );
+      await user.send({ embeds: [embed] });
+    } catch {}
 
-    interaction.reply({ embeds: [embed] });
+    interaction.reply(`✅ ${user} muted for ${time} min`);
 
-    setTimeout(() => {
-      user.roles.remove(MUTE_ROLE).catch(() => {});
-    }, duration);
+    // AUTO UNMUTE
+    setTimeout(async () => {
+      if (member.roles.cache.has(role.id)) {
+        await member.roles.remove(role).catch(() => {});
+      }
+    }, time * 60000);
   }
 };
