@@ -4,8 +4,6 @@ const {
   PermissionFlagsBits
 } = require("discord.js");
 
-const { createCase } = require("../utils/moderation");
-
 const MUTE_ROLE = "1476000458240819301";
 
 module.exports = {
@@ -30,8 +28,9 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
+
     const user = interaction.options.getUser("user");
-    const member = interaction.guild.members.cache.get(user.id);
+    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
     const time = interaction.options.getString("time");
     const reason = interaction.options.getString("reason") || "No reason";
@@ -46,8 +45,8 @@ module.exports = {
     }
 
     // ===== PARSE TIME =====
-    let ms;
-    let prettyTime;
+    let ms = 0;
+    let prettyTime = "Unknown";
 
     if (time.endsWith("m")) {
       ms = parseInt(time) * 60000;
@@ -70,28 +69,20 @@ module.exports = {
     // ===== ADD ROLE =====
     await member.roles.add(muteRole).catch(() => {});
 
-    // ===== CREATE CASE =====
-    const caseData = createCase({
-      userId: user.id,
-      moderatorId: interaction.user.id,
-      type: "MUTE",
-      reason,
-      duration: prettyTime
-    });
-
     // ===== DM =====
     try {
-      const dmEmbed = new EmbedBuilder()
-        .setColor("#ef4444")
-        .setTitle("🔇 You have been muted")
-        .setDescription(
-          `📌 Server: **${interaction.guild.name}**\n\n` +
-          `🆔 Case: **#${caseData.id}**\n` +
-          `⏱ Time: **${prettyTime}**\n` +
-          `📝 Reason: **${reason}**`
-        );
-
-      await user.send({ embeds: [dmEmbed] });
+      await user.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("#ef4444")
+            .setTitle("🔇 You have been muted")
+            .setDescription(
+              `📌 Server: **${interaction.guild.name}**\n\n` +
+              `⏱ Time: **${prettyTime}**\n` +
+              `📝 Reason: **${reason}**`
+            )
+        ]
+      });
     } catch {}
 
     // ===== RESPONSE =====
@@ -101,7 +92,6 @@ module.exports = {
       .setThumbnail(user.displayAvatarURL())
       .setDescription(
         `👤 ${user}\n\n` +
-        `🆔 Case: **#${caseData.id}**\n` +
         `⏱ Time: **${prettyTime}**\n` +
         `📝 Reason: **${reason}**`
       )
@@ -112,15 +102,10 @@ module.exports = {
     // ===== AUTO UNMUTE =====
     setTimeout(async () => {
       try {
-        if (member.roles.cache.has(muteRole.id)) {
-          await member.roles.remove(muteRole);
+        const freshMember = await interaction.guild.members.fetch(user.id);
 
-          createCase({
-            userId: user.id,
-            moderatorId: interaction.client.user.id,
-            type: "AUTO_UNMUTE",
-            reason: "Mute expired"
-          });
+        if (freshMember.roles.cache.has(muteRole.id)) {
+          await freshMember.roles.remove(muteRole);
         }
       } catch {}
     }, ms);
