@@ -1,19 +1,13 @@
+const { EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 
-const DB_PATH = "./data.json";
-
-const BOOST_ROLE = "1476000398107217980";
-const BOOST_MULTIPLIER = 1.75;
+// ===== CONFIG =====
+const PREFIX = ".";
 
 const LEVEL_CHANNEL = "1475999590716018719";
 
-const LEVEL_ROLES = {
-  1: "1476000458987278397",
-  15: "1476000995501670534",
-  30: "1476000459595448442"
-};
-
-const cooldown = new Set();
+// ===== DB =====
+const DB_PATH = "./data.json";
 
 function loadDB() {
   try {
@@ -27,60 +21,107 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
+// ===== XP =====
 function neededXP(level) {
   return 50 + level * 25;
 }
 
+// ===== EVENT =====
 module.exports = {
   name: "messageCreate",
 
   async execute(message) {
     if (message.author.bot) return;
 
-    // ===== COOLDOWN =====
-    if (cooldown.has(message.author.id)) return;
-    cooldown.add(message.author.id);
-    setTimeout(() => cooldown.delete(message.author.id), 5000);
-
     const db = loadDB();
 
+    // ===== INIT USER =====
     if (!db.xp[message.author.id]) {
       db.xp[message.author.id] = { xp: 0, level: 0 };
     }
 
-    const member = message.member;
+    // ===== ADD XP =====
+    db.xp[message.author.id].xp += 5;
 
-    let multiplier = member.roles.cache.has(BOOST_ROLE)
-      ? BOOST_MULTIPLIER
-      : 1;
-
-    db.xp[message.author.id].xp += Math.floor(5 * multiplier);
+    let leveledUp = false;
 
     while (
       db.xp[message.author.id].xp >=
       neededXP(db.xp[message.author.id].level)
     ) {
-      db.xp[message.author.id].xp -= neededXP(
-        db.xp[message.author.id].level
-      );
-
+      db.xp[message.author.id].xp -= neededXP(db.xp[message.author.id].level);
       db.xp[message.author.id].level++;
-
-      const level = db.xp[message.author.id].level;
-
-      const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
-
-      if (channel) {
-        channel.send(`🎉 ${message.author} wbił level ${level}!`);
-      }
-
-      const roleId = LEVEL_ROLES[level];
-      if (roleId) {
-        const role = message.guild.roles.cache.get(roleId);
-        if (role) member.roles.add(role).catch(() => {});
-      }
+      leveledUp = true;
     }
 
     saveDB(db);
+
+    // ===== LEVEL UP EMBED =====
+    if (leveledUp) {
+      const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
+
+      if (channel) {
+        const embed = new EmbedBuilder()
+          .setColor("#facc15")
+          .setAuthor({
+            name: `${message.author.username} • Level Up`,
+            iconURL: message.author.displayAvatarURL()
+          })
+          .setDescription(
+            `🎉 **Congratulations!**\n\n` +
+            `🏆 You reached **Level ${db.xp[message.author.id].level}**\n\n` +
+            `🚀 Keep chatting!`
+          )
+          .setThumbnail(message.author.displayAvatarURL());
+
+        channel.send({ embeds: [embed] });
+      }
+    }
+
+    // ===== PREFIX COMMANDS =====
+    if (!message.content.startsWith(PREFIX)) return;
+
+    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+    const cmd = args.shift().toLowerCase();
+
+    const userData = db.xp[message.author.id];
+
+    // ===== RANK =====
+    if (cmd === "rank" || cmd === "r") {
+      const embed = new EmbedBuilder()
+        .setColor("#22c55e")
+        .setAuthor({
+          name: `${message.author.username} • Profile`,
+          iconURL: message.author.displayAvatarURL()
+        })
+        .setDescription(
+          `🏆 **Level:** ${userData.level}\n` +
+          `⭐ **XP:** ${userData.xp}/${neededXP(userData.level)}`
+        )
+        .setThumbnail(message.author.displayAvatarURL());
+
+      return message.reply({ embeds: [embed] });
+    }
+
+    // ===== TOP =====
+    if (cmd === "top") {
+      const sorted = Object.entries(db.xp)
+        .sort((a, b) => b[1].level - a[1].level)
+        .slice(0, 10);
+
+      const leaderboard = sorted
+        .map(
+          (u, i) =>
+            `**#${i + 1}** <@${u[0]}> • Level ${u[1].level}`
+        )
+        .join("\n");
+
+      const embed = new EmbedBuilder()
+        .setColor("#6366f1")
+        .setTitle("🏆 Leaderboard")
+        .setDescription(leaderboard || "No data");
+
+      return message.reply({ embeds: [embed] });
+    }
   }
 };
