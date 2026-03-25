@@ -1,18 +1,24 @@
-const giveaways = new Map();
+const giveaways = {};
 
 module.exports = {
+  name: "interactionCreate",
+
   async execute(interaction) {
+    if (!interaction.isButton()) return;
 
-    if (interaction.customId !== "gw_join") return;
-
-    const data = giveaways.get(interaction.message.id);
+    const data = giveaways[interaction.message.id];
     if (!data) return;
 
-    if (!data.participants.includes(interaction.user.id)) {
-      data.participants.push(interaction.user.id);
-      interaction.reply({ content: "🎉 Joined!", ephemeral: true });
-    } else {
-      interaction.reply({ content: "❌ Already joined", ephemeral: true });
+    if (interaction.customId === "join") {
+      if (!data.users.includes(interaction.user.id)) {
+        data.users.push(interaction.user.id);
+      }
     }
+
+    if (interaction.customId === "leave") {
+      data.users = data.users.filter(u => u !== interaction.user.id);
+    }
+
+    interaction.reply({ content: "✅ Updated", ephemeral: true });
   }
 };
