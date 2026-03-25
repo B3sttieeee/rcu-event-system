@@ -14,6 +14,7 @@ const {
 const REQUIRED_ROLE = "1475998527191519302";
 const ADMIN_ROLE = "1475998527191519302";
 const PANEL_CHANNEL_ID = "1475558248487583805";
+const CATEGORY_ID = null; // opcjonalnie wstaw ID kategorii
 
 // ================= PANEL =================
 async function createTicketPanel(client) {
@@ -23,18 +24,24 @@ async function createTicketPanel(client) {
 
     const embed = new EmbedBuilder()
       .setColor("#ff6600")
-      .setTitle("📌 Clan VYRN - TICKET")
+      .setTitle("📌 Clan VYRN • Ticket System")
       .setDescription(
-`📌 Open a ticket to apply for clan
+`📩 **Open a ticket to apply for clan**
 
-📋 **Requirements:**
-• Good Team
-• Good GamePass
-• 🔄️ 1.5N Rebirth + 
-• 3-8H AFK
+━━━━━━━━━━━━━━━━━━
+
+📋 **Requirements**
+• Good Team  
+• Good GamePass  
+• 🔄 1.5N Rebirth+  
+• 🕒 3–8h AFK  
+
+━━━━━━━━━━━━━━━━━━
+
+🚀 Click button below to start`
       )
       .setImage("https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif")
-      .setFooter({ text: "VYRN SYSTEM" });
+      .setFooter({ text: "VYRN SYSTEM • Tickets" });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -68,13 +75,25 @@ async function handle(interaction) {
       });
     }
 
+    // 🔥 blokada duplikatów
+    const existing = interaction.guild.channels.cache.find(
+      c => c.name === `ticket-${interaction.user.username}`
+    );
+
+    if (existing) {
+      return interaction.reply({
+        content: `❌ Masz już ticket: ${existing}`,
+        ephemeral: true
+      });
+    }
+
     const modal = new ModalBuilder()
       .setCustomId("ticket_modal")
       .setTitle("🎫 Create Ticket");
 
     const nick = new TextInputBuilder()
       .setCustomId("nick")
-      .setLabel("Nick")
+      .setLabel("Nickname")
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
@@ -99,8 +118,9 @@ async function handle(interaction) {
     const lang = interaction.fields.getTextInputValue("lang").toLowerCase();
 
     const channel = await interaction.guild.channels.create({
-      name: `ticket-${nick}`,
+      name: `ticket-${interaction.user.username}`,
       type: ChannelType.GuildText,
+      parent: CATEGORY_ID || null,
       permissionOverwrites: [
         {
           id: interaction.guild.id,
@@ -129,14 +149,21 @@ async function handle(interaction) {
       .setThumbnail(interaction.user.displayAvatarURL())
       .setDescription(
         lang === "en"
-          ? `👤 **User:** ${interaction.user}\n📝 **Nickname:** ${nick}\n\n📸 Send screenshots of your stats, gamepasses and team.`
-          : `👤 **Użytkownik:** ${interaction.user}\n📝 **Nick:** ${nick}\n\n📸 Wyślij screeny statystyk, gamepassów i teamu.`
-      );
+          ? `👤 **User:** ${interaction.user}
+📝 **Nickname:** ${nick}
+
+📸 Send screenshots of stats, gamepasses and team.`
+          : `👤 **Użytkownik:** ${interaction.user}
+📝 **Nick:** ${nick}
+
+📸 Wyślij screeny statystyk, gamepassów i teamu.`
+      )
+      .setFooter({ text: "VYRN Recruitment System" });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("close_ticket")
-        .setLabel("🔒 Close")
+        .setLabel("🔒 Close Ticket")
         .setStyle(ButtonStyle.Danger)
     );
 
@@ -152,7 +179,7 @@ async function handle(interaction) {
     });
   }
 
-  // ===== CLOSE BUTTON =====
+  // ===== CLOSE =====
   if (interaction.isButton() && interaction.customId === "close_ticket") {
 
     const isAdmin =
