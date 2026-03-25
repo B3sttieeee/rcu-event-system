@@ -3,73 +3,74 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ChannelType,
-  PermissionsBitField
+  PermissionsBitField,
+  ChannelType
 } = require("discord.js");
 
-const giveaways = new Map();
+const fs = require("fs");
 
-// ================= PARSE TIME =================
+const DB = "./giveaways.json";
+
+// ===== LOAD DB =====
+function load() {
+  if (!fs.existsSync(DB)) fs.writeFileSync(DB, JSON.stringify({}));
+  return JSON.parse(fs.readFileSync(DB));
+}
+
+function save(data) {
+  fs.writeFileSync(DB, JSON.stringify(data, null, 2));
+}
+
+// ===== PARSE TIME (FIXED 🔥) =====
 function parseTime(time) {
   const match = time.match(/^(\d+)(s|m|h|d)$/);
+
   if (!match) return null;
 
   const value = parseInt(match[1]);
   const unit = match[2];
 
-  switch (unit) {
-    case "s": return value * 1000;
-    case "m": return value * 60000;
-    case "h": return value * 3600000;
-    case "d": return value * 86400000;
-    default: return null;
-  }
+  const map = {
+    s: 1000,
+    m: 60000,
+    h: 3600000,
+    d: 86400000
+  };
+
+  return value * map[unit];
 }
 
-// ================= FORMAT TIME =================
+// ===== FORMAT TIME =====
 function formatTime(ms) {
-  const totalSeconds = Math.floor(ms / 1000);
-
-  const d = Math.floor(totalSeconds / 86400);
-  const h = Math.floor((totalSeconds % 86400) / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
-
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
+  if (ms < 3600000) return `${Math.floor(ms / 60000)}m`;
+  if (ms < 86400000) return `${Math.floor(ms / 3600000)}h`;
+  return `${Math.floor(ms / 86400000)}d`;
 }
 
-// ================= CREATE GIVEAWAY =================
-async function createGiveaway(interaction) {
-  const prize = interaction.options.getString("prize");
-  const time = interaction.options.getString("time");
-  const winnersCount = interaction.options.getInteger("winners") || 1;
-  const image = interaction.options.getString("image");
+// ===== CREATE =====
+async function createGiveaway(interaction, data) {
 
-  const duration = parseTime(time);
+  const duration = parseTime(data.time);
 
-  if (!duration) {
-    throw new Error("Bad time");
-  }
+  if (!duration) throw new Error("Bad time");
 
-  const endTime = Date.now() + duration;
+  const end = Date.now() + duration;
 
   const embed = new EmbedBuilder()
-    .setColor("#f97316")
-    .setTitle("🎉 GIVEAWAY")
+    .setColor("#ff8800")
+    .setTitle("🎉 Giveaway")
     .setDescription(
-      `🎁 **Nagroda:** ${prize}\n\n` +
-      `👥 **Uczestnicy:** 0\n` +
-      `🏆 **Wygrani:** ${winnersCount}\n` +
-      `⏳ **Czas:** ${time}\n\n` +
-      `👉 Kliknij **Join** aby wziąć udział!`
-    )
-    .setFooter({ text: "VYRN GIVEAWAY SYSTEM" })
-    .setTimestamp(endTime);
+`🎁 **Prize:** ${data.prize}
 
-  if (image) embed.setImage(image);
+👥 **Participants:** 0
+🏆 **Winners:** ${data.winners}
+⏳ **Ends in:** ${formatTime(duration)}
+
+👉 Kliknij **Join** aby wziąć udział!`
+    )
+    .setFooter({ text: "VYRN Giveaway System" })
+    .setTimestamp(end);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -83,116 +84,139 @@ async function createGiveaway(interaction) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const msg = await interaction.reply({
+  const msg = await interaction.channel.send({
     embeds: [embed],
-    components: [row],
-    fetchReply: true
+    components: [row]
   });
 
-  giveaways.set(msg.id, {
-    prize,
-    endTime,
+  const db = load();
+
+  db[msg.id] = {
+    prize: data.prize,
+    winners: data.winners,
+    end,
     users: [],
-    winnersCount,
-    messageId: msg.id,
-    channelId: msg.channel.id
-  });
+    channelId: interaction.channel.id,
+    guildId: interaction.guild.id
+  };
+
+  save(db);
 
   // ===== END TIMER =====
-  setTimeout(async () => {
-    const data = giveaways.get(msg.id);
-    if (!data) return;
+  setTimeout(() => endGiveaway(msg.id, interaction.client), duration);
+}
 
-    const channel = await interaction.guild.channels.fetch(data.channelId);
-    const message = await channel.messages.fetch(data.messageId);
+// ===== JOIN =====
+async function join(interaction) {
+  const db = load();
+  const gw = db[interaction.message.id];
+  if (!gw) return;
 
-    if (!data.users.length) {
-      await message.edit({
-        embeds: [
-          new EmbedBuilder()
-            .setColor("#ef4444")
-            .setTitle("❌ Giveaway zakończony")
-            .setDescription("Brak uczestników")
-        ],
-        components: []
-      });
-      return;
-    }
+  if (!gw.users.includes(interaction.user.id)) {
+    gw.users.push(interaction.user.id);
+  }
 
-    const winners = data.users
-      .sort(() => 0.5 - Math.random())
-      .slice(0, data.winnersCount);
+  save(db);
 
-    const winMentions = winners.map(id => `<@${id}>`).join(", ");
+  updateEmbed(interaction.message, gw);
 
-    await message.edit({
-      embeds: [
-        new EmbedBuilder()
-          .setColor("#22c55e")
-          .setTitle("🎉 Giveaway zakończony")
-          .setDescription(
-            `🎁 **Nagroda:** ${data.prize}\n\n` +
-            `🏆 **Wygrani:** ${winMentions}`
-          )
-      ],
-      components: []
-    });
+  return interaction.reply({ content: "✅ Dołączyłeś!", ephemeral: true });
+}
 
-    // ===== PRIVATE CHANNEL =====
+// ===== LEAVE =====
+async function leave(interaction) {
+  const db = load();
+  const gw = db[interaction.message.id];
+  if (!gw) return;
+
+  gw.users = gw.users.filter(u => u !== interaction.user.id);
+
+  save(db);
+
+  updateEmbed(interaction.message, gw);
+
+  return interaction.reply({ content: "❌ Opuściłeś giveaway", ephemeral: true });
+}
+
+// ===== UPDATE EMBED =====
+async function updateEmbed(message, gw) {
+
+  const embed = EmbedBuilder.from(message.embeds[0])
+    .setDescription(
+`🎁 **Prize:** ${gw.prize}
+
+👥 **Participants:** ${gw.users.length}
+🏆 **Winners:** ${gw.winners}
+
+👉 Kliknij **Join** aby wziąć udział!`
+    );
+
+  await message.edit({ embeds: [embed] });
+}
+
+// ===== END =====
+async function endGiveaway(id, client) {
+  const db = load();
+  const gw = db[id];
+  if (!gw) return;
+
+  const channel = await client.channels.fetch(gw.channelId);
+
+  let winners = [];
+
+  if (gw.users.length > 0) {
+    winners = gw.users.sort(() => 0.5 - Math.random()).slice(0, gw.winners);
+  }
+
+  const winnerMentions = winners.map(id => `<@${id}>`).join(", ") || "Brak";
+
+  await channel.send({
+    embeds: [
+      new EmbedBuilder()
+        .setColor("#22c55e")
+        .setTitle("🎉 Giveaway Ended")
+        .setDescription(
+`🎁 **Prize:** ${gw.prize}
+
+🏆 **Winners:**
+${winnerMentions}`
+        )
+    ]
+  });
+
+  // ===== PRIVATE CHANNEL =====
+  if (winners.length > 0) {
     for (const id of winners) {
-      await interaction.guild.channels.create({
-        name: `wygrana-${id}`,
+      await channel.guild.channels.create({
+        name: `win-${id}`,
         type: ChannelType.GuildText,
         permissionOverwrites: [
           {
-            id: interaction.guild.id,
+            id: channel.guild.id,
             deny: [PermissionsBitField.Flags.ViewChannel]
           },
           {
-            id: id,
+            id,
             allow: [PermissionsBitField.Flags.ViewChannel]
           }
         ]
       });
     }
+  }
 
-    giveaways.delete(msg.id);
-
-  }, duration);
+  delete db[id];
+  save(db);
 }
 
-// ================= HANDLE BUTTON =================
-async function handleButton(interaction) {
-  const data = giveaways.get(interaction.message.id);
-  if (!data) return;
+// ===== HANDLE =====
+async function handle(interaction) {
+  if (!interaction.isButton()) return;
 
-  const userId = interaction.user.id;
-
-  if (interaction.customId === "gw_join") {
-    if (!data.users.includes(userId)) {
-      data.users.push(userId);
-    }
-  }
-
-  if (interaction.customId === "gw_leave") {
-    data.users = data.users.filter(id => id !== userId);
-  }
-
-  const embed = EmbedBuilder.from(interaction.message.embeds[0])
-    .setDescription(
-      `🎁 **Nagroda:** ${data.prize}\n\n` +
-      `👥 **Uczestnicy:** ${data.users.length}\n` +
-      `🏆 **Wygrani:** ${data.winnersCount}\n` +
-      `⏳ **Czas końca:** <t:${Math.floor(data.endTime / 1000)}:R>\n\n` +
-      `👉 Kliknij **Join** aby wziąć udział!`
-    );
-
-  await interaction.update({
-    embeds: [embed]
-  });
+  if (interaction.customId === "gw_join") return join(interaction);
+  if (interaction.customId === "gw_leave") return leave(interaction);
 }
 
 module.exports = {
   createGiveaway,
-  handleButton
+  handle
 };
