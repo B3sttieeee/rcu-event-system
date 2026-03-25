@@ -6,14 +6,15 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("unmute")
     .setDescription("Unmute user")
-    .addUserOption(o => o.setName("user").setRequired(true)),
+    .addUserOption(o =>
+      o.setName("user").setDescription("User").setRequired(true)),
 
   async execute(interaction) {
+    const user = interaction.options.getUser("user");
+    const member = interaction.guild.members.cache.get(user.id);
 
-    const user = interaction.options.getMember("user");
+    await member.roles.remove(MUTE_ROLE);
 
-    await user.roles.remove(MUTE_ROLE);
-
-    interaction.reply(`✅ Unmuted ${user}`);
+    interaction.reply(`✅ ${user} unmuted`);
   }
 };
