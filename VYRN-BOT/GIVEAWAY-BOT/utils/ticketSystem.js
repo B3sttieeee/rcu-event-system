@@ -23,17 +23,22 @@ async function createTicketPanel(client) {
 
     const embed = new EmbedBuilder()
       .setColor("#ff6600")
-      .setTitle("🎫 Ticket System")
+      .setTitle("📌 Clan Ticket")
       .setDescription(
-        "Kliknij przycisk poniżej aby stworzyć ticket\n\n" +
-        "📌 Wymagana rola do otwarcia ticketa"
+`📌 Open a ticket to apply for clan
+
+📋 **Requirements:**
+• Good Gamepasses  
+• Active player  
+• High stats`
       )
+      .setImage("https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif")
       .setFooter({ text: "VYRN SYSTEM" });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("open_ticket")
-        .setLabel("🎫 Create Ticket")
+        .setLabel("🔥 Open Ticket")
         .setStyle(ButtonStyle.Primary)
     );
 
