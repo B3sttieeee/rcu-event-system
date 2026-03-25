@@ -1,8 +1,4 @@
-const {
-  SlashCommandBuilder,
-  PermissionFlagsBits
-} = require("discord.js");
-
+const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 const { createGiveaway } = require("../utils/giveawaySystem");
 
 module.exports = {
@@ -11,44 +7,53 @@ module.exports = {
     .setDescription("Create giveaway")
 
     .addStringOption(opt =>
-      opt.setName("prize").setDescription("Prize").setRequired(true)
+      opt.setName("prize")
+        .setDescription("Prize")
+        .setRequired(true)
     )
-    .addStringOption(opt =>
-      opt.setName("time").setDescription("Time (10m, 1h)").setRequired(true)
-    )
+
     .addIntegerOption(opt =>
-      opt.setName("winners").setDescription("Winners").setRequired(true)
+      opt.setName("winners")
+        .setDescription("Number of winners")
+        .setRequired(true)
     )
-    .addChannelOption(opt =>
-      opt.setName("channel").setDescription("Channel").setRequired(true)
-    )
+
     .addStringOption(opt =>
-      opt.setName("image").setDescription("Image URL").setRequired(false)
+      opt.setName("time")
+        .setDescription("Time (10s, 5m, 1h, 1d)")
+        .setRequired(true)
     )
 
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
-  async execute(interaction, client) {
+  async execute(interaction) {
 
     const prize = interaction.options.getString("prize");
-    const time = interaction.options.getString("time");
     const winners = interaction.options.getInteger("winners");
-    const channel = interaction.options.getChannel("channel");
-    const image = interaction.options.getString("image");
+    const time = interaction.options.getString("time");
 
-    await createGiveaway({
-      client,
-      channel,
-      host: interaction.user,
+    // 🔥 TU TWORZYSZ DATA (TEGO CI BRAKOWAŁO)
+    const data = {
       prize,
-      duration: time,
       winners,
-      image
-    });
+      time
+    };
 
-    interaction.reply({
-      content: "✅ Giveaway created",
-      ephemeral: true
-    });
+    try {
+      await createGiveaway(interaction, data);
+
+      await interaction.reply({
+        content: "🎉 Giveaway created!",
+        ephemeral: true
+      });
+
+    } catch (err) {
+      console.log(err);
+
+      await interaction.reply({
+        content: "❌ Error creating giveaway (time format np: 10m)",
+        ephemeral: true
+      });
+    }
   }
 };
