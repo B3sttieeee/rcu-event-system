@@ -1,32 +1,45 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const fs = require("fs");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder
+} = require("discord.js");
 
-const PATH = "./models/warnings.json";
+const { getUserCases } = require("../utils/moderation");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("history")
-    .setDescription("Check your warnings")
-    .addUserOption(o => o.setName("user").setDescription("User")),
+    .setDescription("User history")
+    .addUserOption(opt =>
+      opt.setName("user").setDescription("User").setRequired(true)
+    ),
 
   async execute(interaction) {
-    const target = interaction.options.getUser("user") || interaction.user;
+    const user = interaction.options.getUser("user");
 
-    const db = JSON.parse(fs.readFileSync(PATH));
+    const cases = getUserCases(user.id);
 
-    const warns = db.warnings[target.id] || [];
+    if (!cases.length) {
+      return interaction.reply({
+        content: "❌ No history",
+        ephemeral: true
+      });
+    }
+
+    const desc = cases
+      .slice(-10)
+      .reverse()
+      .map(c =>
+        `🆔 **#${c.id}** • ${c.type}\n` +
+        `📝 ${c.reason}\n` +
+        `⏱ ${c.duration || "—"}`
+      )
+      .join("\n\n");
 
     const embed = new EmbedBuilder()
-      .setColor("#3b82f6")
-      .setTitle(`📜 History • ${target.username}`)
-      .setDescription(
-        warns.length === 0
-          ? "No warnings"
-          : warns.map(w =>
-              `🆔 #${w.case} • ${w.reason}`
-            ).join("\n")
-      );
+      .setColor("#6366f1")
+      .setTitle(`📜 History • ${user.username}`)
+      .setDescription(desc);
 
-    interaction.reply({ embeds: [embed] });
+    interaction.reply({ embeds: [embed], ephemeral: true });
   }
 };
