@@ -4,6 +4,7 @@ const fs = require("fs");
 // ===== CONFIG =====
 const PREFIX = ".";
 const LEVEL_CHANNEL = "1475999590716018719";
+
 const BOOST_ROLE = "1476000398107217980";
 const BOOST_MULTIPLIER = 1.75;
 
@@ -28,6 +29,7 @@ function neededXP(level) {
 }
 
 function getMultiplier(member) {
+  if (!member) return 1;
   return member.roles.cache.has(BOOST_ROLE) ? BOOST_MULTIPLIER : 1;
 }
 
@@ -36,6 +38,7 @@ module.exports = {
   name: "messageCreate",
 
   async execute(message) {
+    if (!message.guild) return;
     if (message.author.bot) return;
 
     const db = loadDB();
@@ -46,7 +49,7 @@ module.exports = {
 
     const member = message.member;
 
-    // ===== XP =====
+    // ===== XP ADD =====
     const gained = Math.floor(5 * getMultiplier(member));
     db.xp[message.author.id].xp += gained;
 
@@ -63,29 +66,29 @@ module.exports = {
 
     saveDB(db);
 
-    // ===== LEVEL UP =====
+    // ===== LEVEL UP EMBED =====
     if (leveledUp) {
       const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
-      if (!channel) return;
+      if (channel) {
+        const embed = new EmbedBuilder()
+          .setColor("#facc15")
+          .setAuthor({
+            name: `${message.author.username} • Level Up`,
+            iconURL: message.author.displayAvatarURL()
+          })
+          .setDescription(
+            `🏆 **New Level Achieved!**\n\n` +
+            `🎯 You are now **Level ${db.xp[message.author.id].level}**\n\n` +
+            `🚀 Keep chatting to earn more XP!`
+          )
+          .setThumbnail(message.author.displayAvatarURL())
+          .setFooter({ text: "VYRN Level System • by B3sttiee" });
 
-      const embed = new EmbedBuilder()
-        .setColor("#facc15")
-        .setAuthor({
-          name: `${message.author.username} • Level Up`,
-          iconURL: message.author.displayAvatarURL()
-        })
-        .setDescription(
-          `🏆 **New Level Achieved!**\n\n` +
-          `🎯 You are now **Level ${db.xp[message.author.id].level}**\n\n` +
-          `🚀 Keep chatting to earn more XP!`
-        )
-        .setThumbnail(message.author.displayAvatarURL())
-        .setFooter({ text: "VYRN Level System • by B3sttiee" });
-
-      channel.send({
-        content: `🎉 ${message.author}`,
-        embeds: [embed]
-      });
+        channel.send({
+          content: `🎉 ${message.author}`,
+          embeds: [embed]
+        });
+      }
     }
 
     // ===== PREFIX =====
@@ -96,10 +99,14 @@ module.exports = {
 
     const data = db.xp[message.author.id];
 
-    // ===== RANK (DOKŁADNIE JAK CHCIAŁEŚ) =====
+    // ===== RANK =====
     if (cmd === "rank" || cmd === "r") {
       const needed = neededXP(data.level);
-      const hasBoost = member.roles.cache.has(BOOST_ROLE);
+
+      const hasBoost =
+        member &&
+        member.roles.cache &&
+        member.roles.cache.has(BOOST_ROLE);
 
       const embed = new EmbedBuilder()
         .setColor("#111111")
@@ -114,8 +121,9 @@ module.exports = {
           `▶ XP: **${data.xp}/${needed}**\n\n` +
 
           `⚡ **XP Boost Status**\n` +
-          `▶ ${hasBoost ? "Activated Booster Role" : "No Active Boost"}\n` +
-          `▶ **${BOOST_MULTIPLIER}x More XP**`
+          (hasBoost
+            ? `▶ Activated Booster Role\n▶ **${BOOST_MULTIPLIER}x More XP**`
+            : `▶ No Active Boost\n▶ **1x XP**`)
         )
         .setFooter({ text: "VYRN System • by B3sttiee" });
 
