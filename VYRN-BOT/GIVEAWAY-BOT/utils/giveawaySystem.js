@@ -7,220 +7,192 @@ const {
   PermissionsBitField
 } = require("discord.js");
 
-const fs = require("fs");
+const giveaways = new Map();
 
-const DB_PATH = "./giveaways.json";
-
-// ===== DB =====
-function loadDB() {
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ giveaways: {} }, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(DB_PATH));
-}
-
-function saveDB(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
-
-// ===== TIME =====
+// ================= PARSE TIME =================
 function parseTime(time) {
-  const num = parseInt(time);
-  if (time.endsWith("s")) return num * 1000;
-  if (time.endsWith("m")) return num * 60000;
-  if (time.endsWith("h")) return num * 3600000;
-  if (time.endsWith("d")) return num * 86400000;
-  return null;
+  const match = time.match(/^(\d+)(s|m|h|d)$/);
+  if (!match) return null;
+
+  const value = parseInt(match[1]);
+  const unit = match[2];
+
+  switch (unit) {
+    case "s": return value * 1000;
+    case "m": return value * 60000;
+    case "h": return value * 3600000;
+    case "d": return value * 86400000;
+    default: return null;
+  }
 }
 
+// ================= FORMAT TIME =================
 function formatTime(ms) {
-  const m = Math.floor(ms / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  return `${m}m ${s}s`;
+  const totalSeconds = Math.floor(ms / 1000);
+
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
 }
 
-// ===== CREATE =====
-async function createGiveaway({
-  client,
-  channel,
-  host,
-  prize,
-  duration,
-  winners,
-  requiredRoles = [],
-  bonusRoles = {},
-  image
-}) {
+// ================= CREATE GIVEAWAY =================
+async function createGiveaway(interaction) {
+  const prize = interaction.options.getString("prize");
+  const time = interaction.options.getString("time");
+  const winnersCount = interaction.options.getInteger("winners") || 1;
+  const image = interaction.options.getString("image");
 
-  const ms = parseTime(duration);
-  if (!ms) throw new Error("Bad time");
+  const duration = parseTime(time);
+
+  if (!duration) {
+    throw new Error("Bad time");
+  }
+
+  const endTime = Date.now() + duration;
 
   const embed = new EmbedBuilder()
-    .setColor("#facc15")
-    .setAuthor({ name: "🎉 Giveaway", iconURL: client.user.displayAvatarURL() })
-    .setTitle(`🎁 ${prize}`)
-    .setDescription("Kliknij przycisk aby wziąć udział!\n━━━━━━━━━━━━━━━━━━")
-    .addFields(
-      { name: "👑 Host", value: `${host}`, inline: true },
-      { name: "🏆 Winners", value: `${winners}`, inline: true },
-      { name: "⏳ Time", value: `\`${duration}\``, inline: true },
-      { name: "👥 Participants", value: "`0`", inline: true },
-      {
-        name: "🎭 Required Roles",
-        value: requiredRoles.length
-          ? requiredRoles.map(r => `<@&${r}>`).join(", ")
-          : "`None`"
-      },
-      {
-        name: "✨ Bonus",
-        value: Object.keys(bonusRoles).length
-          ? Object.entries(bonusRoles).map(([r, x]) => `<@&${r}> +${x}`).join("\n")
-          : "`None`"
-      }
+    .setColor("#f97316")
+    .setTitle("🎉 GIVEAWAY")
+    .setDescription(
+      `🎁 **Nagroda:** ${prize}\n\n` +
+      `👥 **Uczestnicy:** 0\n` +
+      `🏆 **Wygrani:** ${winnersCount}\n` +
+      `⏳ **Czas:** ${time}\n\n` +
+      `👉 Kliknij **Join** aby wziąć udział!`
     )
-    .setImage(image || null)
-    .setFooter({ text: "🎯 Join to participate" });
+    .setFooter({ text: "VYRN GIVEAWAY SYSTEM" })
+    .setTimestamp(endTime);
+
+  if (image) embed.setImage(image);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId("giveaway_join")
-      .setLabel("🎉 Join")
+      .setCustomId("gw_join")
+      .setLabel("Join")
       .setStyle(ButtonStyle.Success),
 
     new ButtonBuilder()
-      .setCustomId("giveaway_leave")
+      .setCustomId("gw_leave")
       .setLabel("Leave")
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const msg = await channel.send({
+  const msg = await interaction.reply({
     embeds: [embed],
-    components: [row]
+    components: [row],
+    fetchReply: true
   });
 
-  const db = loadDB();
-
-  db.giveaways[msg.id] = {
-    channelId: channel.id,
+  giveaways.set(msg.id, {
     prize,
-    host: host.id,
-    winners,
-    participants: [],
-    requiredRoles,
-    bonusRoles,
-    endAt: Date.now() + ms
-  };
+    endTime,
+    users: [],
+    winnersCount,
+    messageId: msg.id,
+    channelId: msg.channel.id
+  });
 
-  saveDB(db);
+  // ===== END TIMER =====
+  setTimeout(async () => {
+    const data = giveaways.get(msg.id);
+    if (!data) return;
 
-  setTimeout(() => endGiveaway(client, msg.id), ms);
+    const channel = await interaction.guild.channels.fetch(data.channelId);
+    const message = await channel.messages.fetch(data.messageId);
+
+    if (!data.users.length) {
+      await message.edit({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("#ef4444")
+            .setTitle("❌ Giveaway zakończony")
+            .setDescription("Brak uczestników")
+        ],
+        components: []
+      });
+      return;
+    }
+
+    const winners = data.users
+      .sort(() => 0.5 - Math.random())
+      .slice(0, data.winnersCount);
+
+    const winMentions = winners.map(id => `<@${id}>`).join(", ");
+
+    await message.edit({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#22c55e")
+          .setTitle("🎉 Giveaway zakończony")
+          .setDescription(
+            `🎁 **Nagroda:** ${data.prize}\n\n` +
+            `🏆 **Wygrani:** ${winMentions}`
+          )
+      ],
+      components: []
+    });
+
+    // ===== PRIVATE CHANNEL =====
+    for (const id of winners) {
+      await interaction.guild.channels.create({
+        name: `wygrana-${id}`,
+        type: ChannelType.GuildText,
+        permissionOverwrites: [
+          {
+            id: interaction.guild.id,
+            deny: [PermissionsBitField.Flags.ViewChannel]
+          },
+          {
+            id: id,
+            allow: [PermissionsBitField.Flags.ViewChannel]
+          }
+        ]
+      });
+    }
+
+    giveaways.delete(msg.id);
+
+  }, duration);
 }
 
-// ===== JOIN =====
-async function handleJoin(interaction) {
-  const db = loadDB();
-  const data = db.giveaways[interaction.message.id];
+// ================= HANDLE BUTTON =================
+async function handleButton(interaction) {
+  const data = giveaways.get(interaction.message.id);
   if (!data) return;
 
-  if (data.participants.includes(interaction.user.id)) {
-    return interaction.reply({ content: "❌ Already joined", ephemeral: true });
+  const userId = interaction.user.id;
+
+  if (interaction.customId === "gw_join") {
+    if (!data.users.includes(userId)) {
+      data.users.push(userId);
+    }
   }
 
-  data.participants.push(interaction.user.id);
-  saveDB(db);
+  if (interaction.customId === "gw_leave") {
+    data.users = data.users.filter(id => id !== userId);
+  }
 
-  await updateEmbed(interaction.message, data);
-
-  interaction.reply({ content: "✅ Joined!", ephemeral: true });
-}
-
-// ===== LEAVE =====
-async function handleLeave(interaction) {
-  const db = loadDB();
-  const data = db.giveaways[interaction.message.id];
-  if (!data) return;
-
-  data.participants = data.participants.filter(x => x !== interaction.user.id);
-  saveDB(db);
-
-  await updateEmbed(interaction.message, data);
-
-  interaction.reply({ content: "❌ Left", ephemeral: true });
-}
-
-// ===== UPDATE =====
-async function updateEmbed(msg, data) {
-  const embed = EmbedBuilder.from(msg.embeds[0]);
-
-  embed.data.fields[3].value = `\`${data.participants.length}\``;
-
-  await msg.edit({ embeds: [embed] });
-}
-
-// ===== END =====
-async function endGiveaway(client, id) {
-  const db = loadDB();
-  const data = db.giveaways[id];
-  if (!data) return;
-
-  const channel = await client.channels.fetch(data.channelId);
-  const msg = await channel.messages.fetch(id);
-
-  const winners = data.participants
-    .sort(() => 0.5 - Math.random())
-    .slice(0, data.winners);
-
-  const embed = new EmbedBuilder()
-    .setColor("#22c55e")
-    .setTitle("🎉 Giveaway Ended")
+  const embed = EmbedBuilder.from(interaction.message.embeds[0])
     .setDescription(
-      `🎁 ${data.prize}\n\n🏆 Winners:\n${winners.map(w => `<@${w}>`).join("\n") || "None"}`
+      `🎁 **Nagroda:** ${data.prize}\n\n` +
+      `👥 **Uczestnicy:** ${data.users.length}\n` +
+      `🏆 **Wygrani:** ${data.winnersCount}\n` +
+      `⏳ **Czas końca:** <t:${Math.floor(data.endTime / 1000)}:R>\n\n` +
+      `👉 Kliknij **Join** aby wziąć udział!`
     );
 
-  await msg.edit({ embeds: [embed], components: [] });
-
-  // ===== PRIVATE CHANNEL =====
-  for (const userId of winners) {
-    const member = await channel.guild.members.fetch(userId);
-
-    await channel.guild.channels.create({
-      name: `win-${member.user.username}`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        { id: channel.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        {
-          id: member.id,
-          allow: [PermissionsBitField.Flags.ViewChannel]
-        }
-      ]
-    });
-  }
-
-  delete db.giveaways[id];
-  saveDB(db);
-}
-
-// ===== REROLL =====
-async function reroll(client, messageId) {
-  const db = loadDB();
-  const data = db.giveaways[messageId];
-  if (!data) return "❌ Not found";
-
-  const winner = data.participants[Math.floor(Math.random() * data.participants.length)];
-
-  return `<@${winner}>`;
-}
-
-// ===== HANDLER =====
-async function handle(interaction) {
-  if (!interaction.isButton()) return;
-
-  if (interaction.customId === "giveaway_join") return handleJoin(interaction);
-  if (interaction.customId === "giveaway_leave") return handleLeave(interaction);
+  await interaction.update({
+    embeds: [embed]
+  });
 }
 
 module.exports = {
   createGiveaway,
-  handle,
-  reroll
+  handleButton
 };
