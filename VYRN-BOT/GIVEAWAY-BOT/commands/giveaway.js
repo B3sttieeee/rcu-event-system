@@ -6,68 +6,62 @@ const {
   ButtonStyle
 } = require("discord.js");
 
-const ms = require("ms");
-const giveaways = new Map();
+let giveaways = {};
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("giveaway")
-    .setDescription("Start giveaway")
-    .addStringOption(o => o.setName("time").setRequired(true))
-    .addStringOption(o => o.setName("reward").setRequired(true))
-    .addIntegerOption(o => o.setName("winners").setRequired(true)),
+    .setDescription("Create giveaway")
+    .addStringOption(o =>
+      o.setName("nagroda").setDescription("Nagroda").setRequired(true))
+    .addIntegerOption(o =>
+      o.setName("czas").setDescription("Minuty").setRequired(true))
+    .addRoleOption(o =>
+      o.setName("bonus").setDescription("Bonus role")),
 
   async execute(interaction) {
-
-    const time = interaction.options.getString("time");
-    const reward = interaction.options.getString("reward");
-    const winners = interaction.options.getInteger("winners");
-
-    const duration = ms(time);
-    if (!duration) return interaction.reply({ content: "❌ Bad time", ephemeral: true });
-
-    const data = {
-      reward,
-      winners,
-      participants: [],
-      end: Date.now() + duration
-    };
+    const prize = interaction.options.getString("nagroda");
+    const time = interaction.options.getInteger("czas");
+    const bonusRole = interaction.options.getRole("bonus");
 
     const embed = new EmbedBuilder()
-      .setColor("#5865F2")
-      .setTitle("🎉 GIVEAWAY")
-      .setDescription(`🎁 **${reward}**\nKliknij 🎉`)
-      .addFields(
-        { name: "👥", value: "0", inline: true },
-        { name: "🏆", value: `${winners}`, inline: true }
+      .setColor("#ff6600")
+      .setTitle("🎉 Giveaway")
+      .setDescription(
+        `🎁 ${prize}\n\nKliknij Join aby wziąć udział\n\n👥 0\n🏆 1\n⏳ ${time} min`
       );
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("gw_join")
-        .setEmoji("🎉")
-        .setStyle(ButtonStyle.Primary)
+        .setCustomId("join")
+        .setLabel("Join")
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("leave")
+        .setLabel("Leave")
+        .setStyle(ButtonStyle.Secondary)
     );
 
-    const msg = await interaction.channel.send({ embeds: [embed], components: [row] });
+    const msg = await interaction.reply({
+      embeds: [embed],
+      components: [row],
+      fetchReply: true
+    });
 
-    giveaways.set(msg.id, data);
+    giveaways[msg.id] = {
+      users: [],
+      bonusRole,
+      prize
+    };
 
-    setTimeout(() => end(msg), duration);
+    setTimeout(() => {
+      const data = giveaways[msg.id];
+      if (!data || data.users.length === 0) return;
 
-    interaction.reply({ content: "✅ Started", ephemeral: true });
+      const winner =
+        data.users[Math.floor(Math.random() * data.users.length)];
+
+      interaction.channel.send(`🏆 Winner: <@${winner}> (${prize})`);
+    }, time * 60000);
   }
 };
-
-function end(msg) {
-  const data = giveaways.get(msg.id);
-  if (!data) return;
-
-  if (!data.participants.length) {
-    msg.channel.send("❌ No participants");
-    return;
-  }
-
-  const winner = data.participants[Math.floor(Math.random() * data.participants.length)];
-  msg.channel.send(`🎉 Winner: <@${winner}>`);
-}
