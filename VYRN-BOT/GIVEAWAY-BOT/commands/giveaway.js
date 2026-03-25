@@ -4,99 +4,70 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle
-} = require('discord.js');
+} = require("discord.js");
 
-const ms = require('ms');
-const Giveaway = require('../models/Giveaway');
+const ms = require("ms");
+const giveaways = new Map();
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('giveaway')
-    .setDescription('Create giveaway')
-    .addStringOption(o =>
-      o.setName('time').setDescription('1m / 1h').setRequired(true))
-    .addStringOption(o =>
-      o.setName('reward').setDescription('Reward').setRequired(true))
-    .addIntegerOption(o =>
-      o.setName('winners').setDescription('Winners').setRequired(true))
-    .addRoleOption(o =>
-      o.setName('bonus_role').setDescription('Bonus role'))
-    .addRoleOption(o =>
-      o.setName('required_role').setDescription('Required role')),
+    .setName("giveaway")
+    .setDescription("Start giveaway")
+    .addStringOption(o => o.setName("time").setRequired(true))
+    .addStringOption(o => o.setName("reward").setRequired(true))
+    .addIntegerOption(o => o.setName("winners").setRequired(true)),
 
   async execute(interaction) {
 
-    const time = interaction.options.getString('time');
-    const reward = interaction.options.getString('reward');
-    const winners = interaction.options.getInteger('winners');
-    const bonusRole = interaction.options.getRole('bonus_role');
-    const requiredRole = interaction.options.getRole('required_role');
+    const time = interaction.options.getString("time");
+    const reward = interaction.options.getString("reward");
+    const winners = interaction.options.getInteger("winners");
 
     const duration = ms(time);
-    if (!duration) return interaction.reply({ content: '❌ Invalid time', ephemeral: true });
+    if (!duration) return interaction.reply({ content: "❌ Bad time", ephemeral: true });
 
     const data = {
       reward,
       winners,
-      endTime: Date.now() + duration,
       participants: [],
-      bonusRole: bonusRole?.id || null,
-      requiredRole: requiredRole?.id || null
+      end: Date.now() + duration
     };
 
-    const embed = buildEmbed(data);
+    const embed = new EmbedBuilder()
+      .setColor("#5865F2")
+      .setTitle("🎉 GIVEAWAY")
+      .setDescription(`🎁 **${reward}**\nKliknij 🎉`)
+      .addFields(
+        { name: "👥", value: "0", inline: true },
+        { name: "🏆", value: `${winners}`, inline: true }
+      );
 
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('gw_join').setLabel('Join').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('gw_leave').setLabel('Leave').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder()
+        .setCustomId("gw_join")
+        .setEmoji("🎉")
+        .setStyle(ButtonStyle.Primary)
     );
 
-    const msg = await interaction.channel.send({
-      embeds: [embed],
-      components: [row]
-    });
+    const msg = await interaction.channel.send({ embeds: [embed], components: [row] });
 
-    await Giveaway.create({
-      ...data,
-      messageId: msg.id,
-      channelId: msg.channel.id,
-      guildId: interaction.guild.id
-    });
+    giveaways.set(msg.id, data);
 
-    setTimeout(() => endGiveaway(msg.id), duration);
+    setTimeout(() => end(msg), duration);
 
-    interaction.reply({ content: '✅ Giveaway created', ephemeral: true });
+    interaction.reply({ content: "✅ Started", ephemeral: true });
   }
 };
 
-function buildEmbed(data) {
-  return new EmbedBuilder()
-    .setColor('#2b2d31')
-    .setTitle('🎉 Giveaway')
-    .setDescription(`🎁 **${data.reward}**\n\nKliknij **Join**, aby wziąć udział`)
-    .addFields(
-      { name: '👥 Uczestnicy', value: `${data.participants.length}`, inline: true },
-      { name: '🏆 Zwycięzcy', value: `${data.winners}`, inline: true },
-      { name: '⏳ Koniec', value: `<t:${Math.floor(data.endTime / 1000)}:R>`, inline: true },
-      { name: '🎟 Bonus', value: data.bonusRole ? `<@&${data.bonusRole}>` : 'Brak', inline: true },
-      { name: '🔒 Rola', value: data.requiredRole ? `<@&${data.requiredRole}>` : 'Brak', inline: true }
-    );
-}
-
-async function endGiveaway(id) {
-  const data = await Giveaway.findOne({ messageId: id });
-  if (!data || data.ended) return;
-
-  data.ended = true;
-  await data.save();
-
-  const channel = await global.client.channels.fetch(data.channelId);
+function end(msg) {
+  const data = giveaways.get(msg.id);
+  if (!data) return;
 
   if (!data.participants.length) {
-    return channel.send('❌ No participants');
+    msg.channel.send("❌ No participants");
+    return;
   }
 
   const winner = data.participants[Math.floor(Math.random() * data.participants.length)];
-
-  channel.send(`🎉 Winner: <@${winner}>`);
+  msg.channel.send(`🎉 Winner: <@${winner}>`);
 }
