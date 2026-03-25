@@ -30,15 +30,15 @@ module.exports = {
       .setColor('#2b2d31')
       .setAuthor({ name: 'VYRN - SYSTEM' })
       .setDescription(`
-`🎉` **Welcome ${member}!**
+🎉 **Welcome ${member}!**
 
-`📌` **1. Check <#${RULES_CHANNEL}> to familiarize yourself with the server rules.**
+📌 **1. Check <#${RULES_CHANNEL}> to familiarize yourself with the server rules.**
 
-`🔗` **2. Connect your account in <#${VERIFY_CHANNEL}> using command \`/verify\`**
+🔗 **2. Connect your account in <#${VERIFY_CHANNEL}> using command \`/verify\`**
 
-`👥` **3. If you want join clan check <#${CLAN_CHANNEL}>**
+👥 **3. If you want join clan check <#${CLAN_CHANNEL}>**
 
-`✨` Good Luck ${member}
+✨ Good Luck ${member}
 
 **Administrations | VYRN**
 `)
