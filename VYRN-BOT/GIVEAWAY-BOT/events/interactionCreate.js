@@ -1,29 +1,36 @@
-const ticketSystem = require('./ticketSystem');
 const fs = require('fs');
 
+// 🔥 SYSTEMY
+const ticketSystem = require('../utils/ticketSystem');
+const giveawayButtons = require('./giveawayButtons');
+
+// ===== LOAD COMMANDS ONCE =====
 const commands = new Map();
 
-// 🔥 Ładujemy komendy tylko RAZ (lepiej niż za każdym interaction)
-const commandFiles = fs.readdirSync('./commands');
+const commandFiles = fs.readdirSync('./commands').filter(file => file.endsWith('.js'));
 
 for (const file of commandFiles) {
   try {
     const cmd = require(`../commands/${file}`);
+
     if (cmd.data && cmd.execute) {
       commands.set(cmd.data.name, cmd);
       console.log(`✅ Loaded command: ${cmd.data.name}`);
     } else {
       console.log(`⚠️ Invalid command file: ${file}`);
     }
+
   } catch (err) {
     console.log("❌ COMMAND LOAD ERROR:", file, err);
   }
 }
 
+// ===== EVENT =====
 module.exports = {
   name: 'interactionCreate',
 
   async execute(interaction, client) {
+
     try {
 
       // =========================
@@ -35,6 +42,15 @@ module.exports = {
         interaction.isStringSelectMenu()
       ) {
         await ticketSystem.handle(interaction);
+      }
+
+      // =========================
+      // 🎉 GIVEAWAY BUTTONS
+      // =========================
+      if (interaction.isButton()) {
+        if (giveawayButtons?.execute) {
+          await giveawayButtons.execute(interaction);
+        }
       }
 
       // =========================
