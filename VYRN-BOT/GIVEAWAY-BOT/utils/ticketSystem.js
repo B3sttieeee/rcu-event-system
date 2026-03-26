@@ -14,13 +14,22 @@ const {
 const REQUIRED_ROLE = "1475998527191519302";
 const ADMIN_ROLE = "1475998527191519302";
 const PANEL_CHANNEL_ID = "1475558248487583805";
-const CATEGORY_ID = null; // opcjonalnie wstaw ID kategorii
+const CATEGORY_ID = "1475985874385899530";
 
 // ================= PANEL =================
 async function createTicketPanel(client) {
   try {
     const channel = await client.channels.fetch(PANEL_CHANNEL_ID);
     if (!channel) return console.log("❌ Ticket channel not found");
+
+    // 🔥 ANTI DUPLIKAT PANELU
+    const messages = await channel.messages.fetch({ limit: 10 });
+    const exists = messages.find(m => m.author.id === client.user.id);
+
+    if (exists) {
+      console.log("⚠️ Ticket panel already exists");
+      return;
+    }
 
     const embed = new EmbedBuilder()
       .setColor("#ff6600")
@@ -75,9 +84,9 @@ async function handle(interaction) {
       });
     }
 
-    // 🔥 blokada duplikatów
+    // 🔥 POPRAWIONA BLOKADA DUPLIKATÓW (topic)
     const existing = interaction.guild.channels.cache.find(
-      c => c.name === `ticket-${interaction.user.username}`
+      c => c.topic === interaction.user.id
     );
 
     if (existing) {
@@ -118,7 +127,8 @@ async function handle(interaction) {
     const lang = interaction.fields.getTextInputValue("lang").toLowerCase();
 
     const channel = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.username}`,
+      name: `ticket-${interaction.user.id}`, // 🔥 stabilna nazwa
+      topic: interaction.user.id, // 🔥 klucz do wykrywania
       type: ChannelType.GuildText,
       parent: CATEGORY_ID || null,
       permissionOverwrites: [
@@ -130,14 +140,16 @@ async function handle(interaction) {
           id: interaction.user.id,
           allow: [
             PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory
           ]
         },
         {
           id: ADMIN_ROLE,
           allow: [
             PermissionsBitField.Flags.ViewChannel,
-            PermissionsBitField.Flags.SendMessages
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory
           ]
         }
       ]
