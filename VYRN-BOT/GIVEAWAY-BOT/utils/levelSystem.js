@@ -1,12 +1,12 @@
 const fs = require("fs");
 
-// ===== DB =====
+// ===== PATH =====
 const DB_PATH = "/data/levels.json";
+const CONFIG_PATH = "/data/levelConfig.json";
 
+// ===== LOAD DB =====
 function loadDB() {
-  if (!fs.existsSync("/data")) {
-    fs.mkdirSync("/data");
-  }
+  if (!fs.existsSync("/data")) fs.mkdirSync("/data");
 
   if (!fs.existsSync(DB_PATH)) {
     fs.writeFileSync(DB_PATH, JSON.stringify({ xp: {} }, null, 2));
@@ -20,9 +20,25 @@ function saveDB(data) {
 }
 
 // ===== CONFIG =====
-const BOOST_ROLE = "1476000398107217980";
-const BOOST_MULTIPLIER = 1.75;
+function loadConfig() {
+  if (!fs.existsSync(CONFIG_PATH)) {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify({
+      messageXP: 3,
+      voiceXP: 5,
+      lengthBonus: 0.3,
+      lengthThreshold: 30,
+      globalMultiplier: 1
+    }, null, 2));
+  }
 
+  return JSON.parse(fs.readFileSync(CONFIG_PATH));
+}
+
+function saveConfig(cfg) {
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+}
+
+// ===== LEVEL ROLES =====
 const LEVEL_ROLES = {
   1: "1476000458987278397",
   15: "1476000995501670534",
@@ -32,43 +48,44 @@ const LEVEL_ROLES = {
   75: "1476000992351879229"
 };
 
-// ===== XP =====
+const BOOST_ROLE = "1476000398107217980";
+const BOOST_MULTIPLIER = 1.75;
+
+// ===== XP FORMUŁA (HARDCORE) =====
 function neededXP(level) {
-  return 50 + level * 25;
+  return Math.floor(100 * Math.pow(level, 1.5));
 }
 
+// ===== MULTIPLIER =====
 function getMultiplier(member) {
-  if (!member) return 1;
-  return member.roles.cache.has(BOOST_ROLE) ? BOOST_MULTIPLIER : 1;
-}
+  const cfg = loadConfig();
 
-// ===== BONUS DO GIVEAWAY =====
-function getLevelBonus(member) {
-  const db = loadDB();
-  const user = db.xp[member.id];
-  if (!user) return 0;
+  let multi = cfg.globalMultiplier;
 
-  return Math.floor(user.level / 5);
-}
-
-// ===== ROLE =====
-async function checkLevelRoles(member, level) {
-  for (const lvl in LEVEL_ROLES) {
-    const roleId = LEVEL_ROLES[lvl];
-
-    if (level >= lvl && !member.roles.cache.has(roleId)) {
-      await member.roles.add(roleId).catch(()=>{});
-    }
+  if (member.roles.cache.has(BOOST_ROLE)) {
+    multi *= BOOST_MULTIPLIER;
   }
+
+  return multi;
 }
 
 // ===== ADD XP =====
-async function addXP(member, amount) {
+async function addXP(member, baseAmount, messageLength = 0) {
   const db = loadDB();
+  const cfg = loadConfig();
 
   if (!db.xp[member.id]) {
     db.xp[member.id] = { xp: 0, level: 0 };
   }
+
+  let amount = baseAmount;
+
+  // ✍️ BONUS ZA DŁUGOŚĆ
+  if (messageLength >= cfg.lengthThreshold) {
+    amount = Math.floor(amount * (1 + cfg.lengthBonus));
+  }
+
+  amount = Math.floor(amount * getMultiplier(member));
 
   db.xp[member.id].xp += amount;
 
@@ -84,7 +101,7 @@ async function addXP(member, amount) {
   }
 
   if (leveledUp) {
-    await checkLevelRoles(member, db.xp[member.id].level);
+    await checkRoles(member, db.xp[member.id].level);
   }
 
   saveDB(db);
@@ -92,13 +109,27 @@ async function addXP(member, amount) {
   return {
     leveledUp,
     level: db.xp[member.id].level,
-    xp: db.xp[member.id].xp
+    xp: db.xp[member.id].xp,
+    gained: amount
   };
+}
+
+// ===== ROLE =====
+async function checkRoles(member, level) {
+  for (const lvl in LEVEL_ROLES) {
+    const roleId = LEVEL_ROLES[lvl];
+
+    if (level >= lvl && !member.roles.cache.has(roleId)) {
+      await member.roles.add(roleId).catch(()=>{});
+    }
+  }
 }
 
 // ===== VOICE XP =====
 function startVoiceXP(client) {
   setInterval(() => {
+    const cfg = loadConfig();
+
     client.guilds.cache.forEach(guild => {
       guild.members.cache.forEach(member => {
 
@@ -106,15 +137,47 @@ function startVoiceXP(client) {
         if (member.voice.channel.members.size <= 1) return;
         if (member.voice.selfMute || member.voice.selfDeaf) return;
 
-        addXP(member, 3);
+        addXP(member, cfg.voiceXP);
 
       });
     });
   }, 60000);
 }
 
+// ===== CONFIG COMMANDS =====
+function setMessageXP(val) {
+  const cfg = loadConfig();
+  cfg.messageXP = val;
+  saveConfig(cfg);
+}
+
+function setVoiceXP(val) {
+  const cfg = loadConfig();
+  cfg.voiceXP = val;
+  saveConfig(cfg);
+}
+
+function setLengthBonus(val) {
+  const cfg = loadConfig();
+  cfg.lengthBonus = val;
+  saveConfig(cfg);
+}
+
+function setGlobalMultiplier(val) {
+  const cfg = loadConfig();
+  cfg.globalMultiplier = val;
+  saveConfig(cfg);
+}
+
 module.exports = {
   addXP,
+  startVoiceXP,
+  loadConfig,
+  setMessageXP,
+  setVoiceXP,
+  setLengthBonus,
+  setGlobalMultiplier
+};
   getLevelBonus,
   startVoiceXP,
   getMultiplier
