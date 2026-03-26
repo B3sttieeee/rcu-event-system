@@ -6,7 +6,7 @@ const { createTicketPanel } = require("../utils/ticketSystem");
 const eventSystem = require("../utils/eventSystem");
 const { loadGiveaways } = require("../utils/giveawaySystem");
 
-// 🔥 LEVEL SYSTEM (UTILS)
+// 🔥 LEVEL SYSTEM
 const levelSystem = require("../utils/levelSystem");
 
 module.exports = {
@@ -23,71 +23,102 @@ module.exports = {
       // =========================
       const commands = [];
       const commandsPath = path.join(__dirname, "../commands");
-      const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
-      for (const file of commandFiles) {
-        try {
-          const command = require(`../commands/${file}`);
-          if (command?.data) {
-            commands.push(command.data.toJSON());
+      if (fs.existsSync(commandsPath)) {
+        const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
+
+        for (const file of commandFiles) {
+          try {
+            const command = require(`../commands/${file}`);
+
+            if (command?.data) {
+              commands.push(command.data.toJSON());
+            }
+
+          } catch (err) {
+            console.log(`❌ Command load error: ${file}`, err);
           }
-        } catch (err) {
-          console.log("❌ Command load error:", file, err);
         }
       }
 
       // =========================
-      // 🚀 REGISTER SLASH
+      // 🚀 REGISTER SLASH COMMANDS
       // =========================
-      const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
+      try {
+        const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
-      await rest.put(
-        Routes.applicationCommands(client.user.id),
-        { body: commands }
-      );
+        await rest.put(
+          Routes.applicationCommands(client.user.id),
+          { body: commands }
+        );
 
-      console.log("✅ Commands deployed");
+        console.log(`✅ Commands deployed (${commands.length})`);
+
+      } catch (err) {
+        console.log("❌ Slash register error:", err);
+      }
 
       // =========================
       // 🎫 TICKET PANEL
       // =========================
-      await createTicketPanel(client);
-      console.log("🎟 Ticket panel loaded");
+      try {
+        await createTicketPanel(client);
+        console.log("🎟 Ticket panel loaded");
+      } catch (err) {
+        console.log("❌ Ticket panel error:", err);
+      }
 
       // =========================
       // 🎮 EVENT SYSTEM
       // =========================
-      if (eventSystem) {
+      try {
+        if (eventSystem) {
 
-        if (typeof eventSystem.startPanel === "function") {
-          await eventSystem.startPanel(client);
+          if (typeof eventSystem.startPanel === "function") {
+            await eventSystem.startPanel(client);
+          }
+
+          if (typeof eventSystem.startEventSystem === "function") {
+            await eventSystem.startEventSystem(client);
+          }
+
+          console.log("✨ Event system started");
         }
-
-        if (typeof eventSystem.startEventSystem === "function") {
-          await eventSystem.startEventSystem(client);
-        }
-
-        console.log("✨ Event system started");
+      } catch (err) {
+        console.log("❌ Event system error:", err);
       }
 
       // =========================
       // 🎉 LOAD GIVEAWAYS
       // =========================
-      if (typeof loadGiveaways === "function") {
-        await loadGiveaways(client);
-        console.log("🎁 Giveaways loaded");
+      try {
+        if (typeof loadGiveaways === "function") {
+          await loadGiveaways(client);
+          console.log("🎁 Giveaways loaded");
+        }
+      } catch (err) {
+        console.log("❌ Giveaway load error:", err);
       }
 
       // =========================
       // 🎤 LEVEL SYSTEM (VOICE XP)
       // =========================
-      if (levelSystem && typeof levelSystem.startVoiceXP === "function") {
-        levelSystem.startVoiceXP(client);
-        console.log("🎤 Voice XP system started");
+      try {
+        if (levelSystem && typeof levelSystem.startVoiceXP === "function") {
+          levelSystem.startVoiceXP(client);
+          console.log("🎤 Voice XP system started");
+        }
+      } catch (err) {
+        console.log("❌ Voice XP error:", err);
       }
 
+      // =========================
+      // 🚀 READY DONE
+      // =========================
+      console.log("🚀 BOT FULLY READY");
+
     } catch (err) {
-      console.log("❌ READY ERROR:", err);
+      console.log("❌ CRITICAL READY ERROR:", err);
     }
   }
 };
