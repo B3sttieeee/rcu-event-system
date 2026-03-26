@@ -1,4 +1,4 @@
-const {
+const { 
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
@@ -7,7 +7,23 @@ const {
   PermissionsBitField
 } = require("discord.js");
 
+const fs = require("fs");
+
 const giveaways = new Map();
+const DB_PATH = "./giveaways.json";
+
+// ===== LOAD / SAVE =====
+function loadDB() {
+  if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify({}, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(DB_PATH));
+}
+
+function saveDB() {
+  const obj = Object.fromEntries(giveaways);
+  fs.writeFileSync(DB_PATH, JSON.stringify(obj, null, 2));
+}
 
 // ===== BONUS ROLE =====
 const BONUS_ROLES = {
@@ -106,19 +122,25 @@ async function createGiveaway(interaction, data) {
 
   giveawayData.messageId = msg.id;
   giveaways.set(msg.id, giveawayData);
+  saveDB();
 
-  // ===== LIVE UPDATE =====
+  startTimer(msg, giveawayData);
+}
+
+// ===== TIMER =====
+function startTimer(message, data) {
+
   const interval = setInterval(async () => {
-    const data = giveaways.get(msg.id);
-    if (!data) return clearInterval(interval);
+    const d = giveaways.get(message.id);
+    if (!d) return clearInterval(interval);
 
     try {
-      await msg.edit({ embeds: [buildEmbed(data)] });
+      await message.edit({ embeds: [buildEmbed(d)] });
     } catch {}
 
-    if (Date.now() >= data.end) {
+    if (Date.now() >= d.end) {
       clearInterval(interval);
-      endGiveaway(msg, data);
+      endGiveaway(message, d);
     }
 
   }, 5000);
@@ -153,7 +175,6 @@ async function endGiveaway(message, data) {
     const winner = pool[Math.floor(Math.random() * pool.length)];
     winners.push(winner);
 
-    // remove duplicates
     for (let j = pool.length - 1; j >= 0; j--) {
       if (pool[j] === winner) pool.splice(j, 1);
     }
@@ -173,27 +194,34 @@ ${winners.length ? winners.map(w => `<@${w}>`).join("\n") : "Brak"}
 
   await message.edit({ embeds: [embed], components: [] });
 
-  // PRIVATE CHANNEL
-  if (winners.length) {
-    const channel = await message.guild.channels.create({
-      name: `giveaway-win`,
-      type: ChannelType.GuildText,
-      permissionOverwrites: [
-        {
-          id: message.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
-        },
-        ...winners.map(id => ({
-          id,
-          allow: [PermissionsBitField.Flags.ViewChannel]
-        }))
-      ]
-    });
-
-    channel.send(`🎉 Gratulacje ${winners.map(w => `<@${w}>`).join(", ")}`);
-  }
-
   giveaways.delete(message.id);
+  saveDB();
+}
+
+// ===== LOAD OLD GIVEAWAYS =====
+async function loadGiveaways(client) {
+  const db = loadDB();
+
+  for (const msgId in db) {
+    const data = db[msgId];
+
+    try {
+      const channel = await client.channels.fetch(data.channelId);
+      const message = await channel.messages.fetch(msgId);
+
+      giveaways.set(msgId, data);
+
+      // jeśli już minął czas → zakończ
+      if (Date.now() >= data.end) {
+        endGiveaway(message, data);
+      } else {
+        startTimer(message, data);
+      }
+
+    } catch (e) {
+      giveaways.delete(msgId);
+    }
+  }
 }
 
 // ===== HANDLE BUTTONS =====
@@ -204,33 +232,24 @@ async function handleGiveaway(interaction) {
 
   const userId = interaction.user.id;
 
-  // ===== JOIN =====
   if (interaction.customId === "gw_join") {
-
     if (!data.users.includes(userId)) {
       data.users.push(userId);
+      saveDB();
     }
 
-    await interaction.reply({
-      content: "✅ Dołączyłeś!",
-      ephemeral: true
-    });
+    await interaction.reply({ content: "✅ Dołączyłeś!", ephemeral: true });
 
-    // update embed instantly
     interaction.message.edit({
       embeds: [buildEmbed(data)]
     }).catch(()=>{});
   }
 
-  // ===== LEAVE =====
   if (interaction.customId === "gw_leave") {
-
     data.users = data.users.filter(id => id !== userId);
+    saveDB();
 
-    await interaction.reply({
-      content: "❌ Opuściłeś giveaway",
-      ephemeral: true
-    });
+    await interaction.reply({ content: "❌ Opuściłeś giveaway", ephemeral: true });
 
     interaction.message.edit({
       embeds: [buildEmbed(data)]
@@ -240,5 +259,6 @@ async function handleGiveaway(interaction) {
 
 module.exports = {
   createGiveaway,
-  handleGiveaway
+  handleGiveaway,
+  loadGiveaways
 };
