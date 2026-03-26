@@ -3,7 +3,8 @@ const path = require("path");
 const { REST, Routes } = require("discord.js");
 
 const { createTicketPanel } = require("../utils/ticketSystem");
-const eventSystem = require("../utils/eventSystem"); // 🔥 PANEL EVENTÓW
+const eventSystem = require("../utils/eventSystem");
+const { loadGiveaways } = require("../utils/giveawaySystem"); // 🔥 NOWE
 
 module.exports = {
   name: "clientReady",
@@ -51,13 +52,25 @@ module.exports = {
       console.log("🎟 Ticket panel loaded");
 
       // =========================
-      // 🎮 EVENT PANEL (TEN DUŻY SYSTEM)
+      // 🎮 EVENT SYSTEM (PANEL + PINGI)
       // =========================
-      if (eventSystem && typeof eventSystem.startPanel === "function") {
-        await eventSystem.startPanel(client);
-        console.log("✨ Event panel started");
-      } else {
-        console.log("⚠️ eventSystem not found or invalid");
+      if (eventSystem) {
+        if (typeof eventSystem.startPanel === "function") {
+          await eventSystem.startPanel(client);
+        }
+        if (typeof eventSystem.startEventSystem === "function") {
+          await eventSystem.startEventSystem(client); // 🔥 KLUCZOWE
+        }
+
+        console.log("✨ Event system started");
+      }
+
+      // =========================
+      // 🎉 LOAD GIVEAWAYS (po restarcie)
+      // =========================
+      if (typeof loadGiveaways === "function") {
+        await loadGiveaways(client);
+        console.log("🎁 Giveaways loaded");
       }
 
     } catch (err) {
