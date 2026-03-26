@@ -68,7 +68,12 @@ module.exports = {
 
     const vcMinutes = Math.floor(user.voice / 60);
 
-    // ===== EMBED (WIDE STYLE) =====
+    // ===== STATUS =====
+    let status = "🔴 Low Progress";
+    if (percent >= 40) status = "🟡 Medium Progress";
+    if (percent >= 75) status = "🟢 High Progress";
+
+    // ===== EMBED =====
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setAuthor({
@@ -90,26 +95,29 @@ module.exports = {
         },
         {
           name: "⚡ STATUS",
-          value: percent >= 75 ? "🟢 High Progress" :
-                 percent >= 40 ? "🟡 Medium Progress" :
-                 "🔴 Low Progress",
+          value: status,
           inline: true
         },
 
-        { name: " ", value: " ", inline: false },
+        // 🔥 SEPARATOR
+        {
+          name: " ",
+          value: "✨ **ACTIVITY & DAILY PROGRESS**",
+          inline: false
+        },
 
         {
-          name: "🎤 VOICE",
-          value: `⏱️ \`${vcMinutes} min\``,
+          name: "🎤 Voice Time",
+          value: `\`${vcMinutes} min\``,
           inline: true
         },
         {
-          name: "💬 MESSAGES",
+          name: "💬 Messages",
           value: `\`${user.daily.msgs} / 50\``,
           inline: true
         },
         {
-          name: "🎯 DAILY VC",
+          name: "🎯 Daily Voice",
           value: `\`${Math.floor(user.daily.vc / 60)} / 30 min\``,
           inline: true
         }
@@ -119,7 +127,6 @@ module.exports = {
         text: "VYRN System • Profile",
         iconURL: interaction.client.user.displayAvatarURL()
       })
-
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
