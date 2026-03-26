@@ -68,7 +68,7 @@ function buildEmbed(data) {
   const now = Date.now();
   const left = data.end - now;
 
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setColor("#f59e0b")
     .setTitle("🎉 GIVEAWAY")
     .setDescription(
@@ -92,6 +92,13 @@ ${getBonusText() || "Brak"}
     )
     .setFooter({ text: "VYRN Giveaway System" })
     .setTimestamp();
+
+  // 🔥 IMAGE SUPPORT
+  if (data.image) {
+    embed.setImage(data.image);
+  }
+
+  return embed;
 }
 
 // ===== CREATE =====
@@ -105,7 +112,8 @@ async function createGiveaway(interaction, data) {
     winners: data.winners,
     end: Date.now() + duration,
     users: [],
-    channelId: interaction.channel.id
+    channelId: interaction.channel.id,
+    image: data.image || null
   };
 
   const embed = buildEmbed(giveawayData);
