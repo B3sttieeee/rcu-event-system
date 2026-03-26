@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 
 // ===== PATH =====
@@ -20,44 +20,33 @@ function loadProfile() {
   return JSON.parse(fs.readFileSync(PROFILE_DB));
 }
 
-// ===== XP FORMULA =====
+// ===== XP =====
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
 
-// ===== PROGRESS BAR =====
 function createBar(current, needed) {
   const percent = Math.floor((current / needed) * 100);
   const filled = Math.round(percent / 10);
 
-  const bar =
-    "🟩".repeat(filled) +
-    "⬛".repeat(10 - filled);
+  const bar = "🟩".repeat(filled) + "⬛".repeat(10 - filled);
 
   return { bar, percent };
 }
 
 module.exports = {
-  name: "messageCreate",
+  data: new SlashCommandBuilder()
+    .setName("profile")
+    .setDescription("📊 Show your profile"),
 
-  async execute(message) {
-    if (!message.guild) return;
-    if (message.author.bot) return;
+  async execute(interaction) {
 
-    if (!message.content.startsWith(".")) return;
-
-    const args = message.content.slice(1).trim().split(/ +/);
-    const cmd = args.shift().toLowerCase();
-
-    if (cmd !== "profile" && cmd !== "p") return;
-
-    // ===== LOAD DATA =====
     const levels = loadLevels();
     const profile = loadProfile();
 
-    const lvlData = levels.xp[message.author.id] || { xp: 0, level: 0 };
+    const lvlData = levels.xp[interaction.user.id] || { xp: 0, level: 0 };
 
-    const user = profile.users?.[message.author.id] || {
+    const user = profile.users?.[interaction.user.id] || {
       voice: 0,
       daily: { msgs: 0, vc: 0 }
     };
@@ -67,34 +56,24 @@ module.exports = {
 
     const vcMinutes = Math.floor(user.voice / 60);
 
-    // ===== EMBED =====
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setAuthor({
-        name: `${message.author.username} • PROFILE`,
-        iconURL: message.author.displayAvatarURL()
+        name: `${interaction.user.username} • PROFILE`,
+        iconURL: interaction.user.displayAvatarURL()
       })
-      .setThumbnail(message.author.displayAvatarURL({ size: 512 }))
       .setDescription(
-        `🏆 **LEVEL SYSTEM**\n` +
-        `> **Level:** \`${lvlData.level}\`\n` +
-        `> **XP:** \`${lvlData.xp} / ${needed}\`\n` +
-        `> ${bar} **${percent}%**\n\n` +
+        `🏆 **LEVEL ${lvlData.level}**\n` +
+        `${bar} ${percent}%\n` +
+        `XP: ${lvlData.xp}/${needed}\n\n` +
 
-        `🎤 **VOICE ACTIVITY**\n` +
-        `> ⏱️ **Time:** \`${vcMinutes} min\`\n\n` +
+        `🎤 Voice: ${vcMinutes} min\n\n` +
 
-        `🎯 **DAILY PROGRESS**\n` +
-        `> 💬 Messages: \`${user.daily.msgs} / 50\`\n` +
-        `> 🎤 VC Time: \`${Math.floor(user.daily.vc / 60)} / 30 min\`\n\n` +
+        `🎯 Daily:\n` +
+        `💬 ${user.daily.msgs}/50\n` +
+        `🎤 ${Math.floor(user.daily.vc / 60)}/30 min`
+      );
 
-        `🚀 **TIP:** Longer messages = more XP!`
-      )
-      .setFooter({
-        text: "VYRN System • Advanced Profile",
-        iconURL: message.client.user.displayAvatarURL()
-      });
-
-    return message.reply({ embeds: [embed] });
+    await interaction.reply({ embeds: [embed] });
   }
 };
