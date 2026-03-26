@@ -2,21 +2,24 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  ChannelType,
-  PermissionsBitField
+  ButtonStyle
 } = require("discord.js");
 
 const fs = require("fs");
 
 const giveaways = new Map();
-const DB_PATH = "./giveaways.json";
+const DB_PATH = "/data/giveaways.json";
 
-// ===== LOAD / SAVE =====
+// ===== DB =====
 function loadDB() {
+  if (!fs.existsSync("/data")) {
+    fs.mkdirSync("/data");
+  }
+
   if (!fs.existsSync(DB_PATH)) {
     fs.writeFileSync(DB_PATH, JSON.stringify({}, null, 2));
   }
+
   return JSON.parse(fs.readFileSync(DB_PATH));
 }
 
@@ -34,6 +37,15 @@ const BONUS_ROLES = {
   "1476000991823532032": 10,
   "1476000992351879229": 15
 };
+
+// ===== LEVEL BONUS =====
+function getLevelBonus(member) {
+  // 🔥 dostosuj do siebie
+  if (member.roles.cache.has("LEVEL_100_ID")) return 20;
+  if (member.roles.cache.has("LEVEL_50_ID")) return 10;
+  if (member.roles.cache.has("LEVEL_25_ID")) return 5;
+  return 0;
+}
 
 // ===== TIME =====
 function parseTime(time) {
@@ -56,13 +68,6 @@ function formatTime(ms) {
   return `${s}s`;
 }
 
-// ===== BONUS TEXT =====
-function getBonusText() {
-  return Object.entries(BONUS_ROLES)
-    .map(([id, val]) => `<@&${id}> ➜ **+${val} entries**`)
-    .join("\n");
-}
-
 // ===== EMBED =====
 function buildEmbed(data) {
   const now = Date.now();
@@ -72,31 +77,23 @@ function buildEmbed(data) {
     .setColor("#f59e0b")
     .setTitle("🎉 GIVEAWAY")
     .setDescription(
-`🎁 **Prize:** ${data.prize}
+`🎁 **${data.prize}**
 
 ━━━━━━━━━━━━━━━━━━
 
-👥 **Participants:** \`${data.users.length}\`
-🏆 **Winners:** \`${data.winners}\`
+👥 Uczestnicy: \`${data.users.length}\`
+🏆 Zwycięzcy: \`${data.winners}\`
 
-⏳ **Ends in:** \`${left > 0 ? formatTime(left) : "Ended"}\`
-
-━━━━━━━━━━━━━━━━━━
-
-🎟 **Bonus Entries**
-${getBonusText() || "Brak"}
+⏳ Koniec za: \`${left > 0 ? formatTime(left) : "Zakończono"}\`
 
 ━━━━━━━━━━━━━━━━━━
 
-👉 Click **Join** to participate!`
+👉 Kliknij **Join**, aby wziąć udział!`
     )
     .setFooter({ text: "VYRN Giveaway System" })
     .setTimestamp();
 
-  // 🔥 IMAGE SUPPORT
-  if (data.image) {
-    embed.setImage(data.image);
-  }
+  if (data.image) embed.setImage(data.image);
 
   return embed;
 }
@@ -113,10 +110,9 @@ async function createGiveaway(interaction, data) {
     end: Date.now() + duration,
     users: [],
     channelId: interaction.channel.id,
+    messageId: null,
     image: data.image || null
   };
-
-  const embed = buildEmbed(giveawayData);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -131,11 +127,12 @@ async function createGiveaway(interaction, data) {
   );
 
   const msg = await interaction.channel.send({
-    embeds: [embed],
+    embeds: [buildEmbed(giveawayData)],
     components: [row]
   });
 
   giveawayData.messageId = msg.id;
+
   giveaways.set(msg.id, giveawayData);
   saveDB();
 
@@ -173,11 +170,15 @@ async function endGiveaway(message, data) {
 
     let entries = 1;
 
+    // role bonus
     for (const roleId in BONUS_ROLES) {
       if (member.roles.cache.has(roleId)) {
         entries += BONUS_ROLES[roleId];
       }
     }
+
+    // level bonus
+    entries += getLevelBonus(member);
 
     for (let i = 0; i < entries; i++) {
       pool.push(id);
@@ -197,16 +198,15 @@ async function endGiveaway(message, data) {
 
   const embed = new EmbedBuilder()
     .setColor("#22c55e")
-    .setTitle("🎉 GIVEAWAY ENDED")
+    .setTitle("🎉 GIVEAWAY ZAKOŃCZONY")
     .setDescription(
-`🎁 **Prize:** ${data.prize}
+`🎁 **${data.prize}**
 
-🏆 **Winners:**
+🏆 Wygrani:
 ${winners.length ? winners.map(w => `<@${w}>`).join("\n") : "Brak"}
 
-👥 Participants: ${data.users.length}`
-    )
-    .setTimestamp();
+👥 Uczestnicy: ${data.users.length}`
+    );
 
   await message.edit({ embeds: [embed], components: [] });
 
@@ -218,14 +218,14 @@ ${winners.length ? winners.map(w => `<@${w}>`).join("\n") : "Brak"}
 async function loadGiveaways(client) {
   const db = loadDB();
 
-  for (const msgId in db) {
-    const data = db[msgId];
+  for (const id in db) {
+    const data = db[id];
 
     try {
       const channel = await client.channels.fetch(data.channelId);
-      const message = await channel.messages.fetch(msgId);
+      const message = await channel.messages.fetch(id);
 
-      giveaways.set(msgId, data);
+      giveaways.set(id, data);
 
       if (Date.now() >= data.end) {
         endGiveaway(message, data);
@@ -234,14 +234,13 @@ async function loadGiveaways(client) {
       }
 
     } catch {
-      giveaways.delete(msgId);
+      giveaways.delete(id);
     }
   }
 }
 
 // ===== RESUME =====
 async function resumeGiveaway(client, messageId) {
-
   const db = loadDB();
   const data = db[messageId];
 
@@ -266,7 +265,7 @@ async function resumeGiveaway(client, messageId) {
   }
 }
 
-// ===== HANDLE BUTTONS =====
+// ===== BUTTONS =====
 async function handleGiveaway(interaction) {
 
   const data = giveaways.get(interaction.message.id);
@@ -280,7 +279,7 @@ async function handleGiveaway(interaction) {
       saveDB();
     }
 
-    await interaction.reply({ content: "✅ Joined!", ephemeral: true });
+    await interaction.reply({ content: "✅ Dołączyłeś!", ephemeral: true });
 
     interaction.message.edit({
       embeds: [buildEmbed(data)]
@@ -291,7 +290,7 @@ async function handleGiveaway(interaction) {
     data.users = data.users.filter(id => id !== userId);
     saveDB();
 
-    await interaction.reply({ content: "❌ Left giveaway", ephemeral: true });
+    await interaction.reply({ content: "❌ Opuściłeś giveaway", ephemeral: true });
 
     interaction.message.edit({
       embeds: [buildEmbed(data)]
