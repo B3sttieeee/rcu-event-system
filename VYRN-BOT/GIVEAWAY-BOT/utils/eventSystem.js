@@ -166,10 +166,71 @@ async function startPanel(client) {
   }, 10000);
 }
 
+// ===== EVENT SYSTEM =====
+async function startEventSystem(client) {
+  const channel = await client.channels.fetch(CHANNEL_ID);
+
+  let lastPrePingHour = null;
+  let lastStartHour = null;
+
+  let prePingMsg = null;
+  let startMsg = null;
+
+  setInterval(async () => {
+    const now = getNow();
+    const hour = now.getHours();
+    const min = now.getMinutes();
+
+    const eventKey = getEventByHour(hour);
+    const data = EVENT_DATA[eventKey];
+    const roleId = ROLES[eventKey];
+
+    // ===== 5 MIN BEFORE =====
+    if (min === 55 && lastPrePingHour !== hour) {
+      lastPrePingHour = hour;
+
+      prePingMsg = await channel.send({
+        content: `<@&${roleId}> ⏳ EVENT ZA 5 MIN: **${data.name}**`
+      }).catch(()=>{});
+    }
+
+    // ===== EVENT START =====
+    if (min === 0 && lastStartHour !== hour) {
+      lastStartHour = hour;
+
+      // usuń pre ping
+      if (prePingMsg) {
+        prePingMsg.delete().catch(()=>{});
+        prePingMsg = null;
+      }
+
+      // wyślij embed + ping
+      startMsg = await channel.send({
+        content: `<@&${roleId}>`,
+        embeds: [
+          new EmbedBuilder()
+            .setColor(data.color)
+            .setTitle(`🚀 ${data.name} START!`)
+            .setDescription(`💡 ${data.tip}`)
+            .setImage(data.image)
+        ]
+      }).catch(()=>{});
+
+      // usuń po 15 min
+      setTimeout(() => {
+        if (startMsg) {
+          startMsg.delete().catch(()=>{});
+          startMsg = null;
+        }
+      }, 15 * 60 * 1000);
+    }
+
+  }, 10000);
+}
+
 // ===== INTERACTION =====
 async function handleEventInteraction(interaction) {
 
-  // REFRESH
   if (interaction.customId === "refresh") {
     return interaction.update({
       embeds: [panelEmbed()],
@@ -177,7 +238,6 @@ async function handleEventInteraction(interaction) {
     });
   }
 
-  // OPEN ROLE MENU
   if (interaction.customId === "roles") {
     return interaction.reply({
       content: "🎭 Select roles:",
@@ -186,7 +246,6 @@ async function handleEventInteraction(interaction) {
     });
   }
 
-  // OPEN DM MENU
   if (interaction.customId === "dm") {
     return interaction.reply({
       content: "📩 Select DM notifications:",
@@ -195,16 +254,13 @@ async function handleEventInteraction(interaction) {
     });
   }
 
-  // ROLE SELECT
   if (interaction.isStringSelectMenu() && interaction.customId === "roles_menu") {
     const member = await interaction.guild.members.fetch(interaction.user.id);
 
-    // remove all
     for (const key in ROLES) {
       await member.roles.remove(ROLES[key]).catch(()=>{});
     }
 
-    // add selected
     for (const val of interaction.values) {
       await member.roles.add(ROLES[val]).catch(()=>{});
     }
@@ -212,10 +268,8 @@ async function handleEventInteraction(interaction) {
     return interaction.reply({ content: "✅ Roles updated", ephemeral: true });
   }
 
-  // DM SELECT
   if (interaction.isStringSelectMenu() && interaction.customId === "dm_menu") {
     const db = loadDB();
-
     db.dm[interaction.user.id] = interaction.values;
     saveDB(db);
 
@@ -225,5 +279,6 @@ async function handleEventInteraction(interaction) {
 
 module.exports = {
   startPanel,
+  startEventSystem,
   handleEventInteraction
 };
