@@ -94,7 +94,7 @@ function panelEmbed() {
     .setDescription(
 `🎮 **Live Event Tracking**
 
-🟢 **Now**
+🟢 **Current**
 \`${EVENT_DATA[current].name}\`
 ⏳ ${getCountdown()}
 
@@ -105,17 +105,24 @@ function panelEmbed() {
     .setImage("https://imgur.com/sOU3JWV.png");
 }
 
-// ===== BUTTONS (FIXED) =====
+// ===== BUTTONS =====
 function getButtons() {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Refresh").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("roles").setLabel("🎭 Roles").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("dm").setLabel("📩 Notifications").setStyle(ButtonStyle.Secondary)
-    ),
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("info").setLabel("ℹ️ Info").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("help").setLabel("❓ Help").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder()
+        .setCustomId("refresh")
+        .setLabel("🔄 Refresh")
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId("roles")
+        .setLabel("🎭 Roles")
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
+        .setCustomId("dm")
+        .setLabel("📩 Notifications")
+        .setStyle(ButtonStyle.Secondary)
     )
   ];
 }
@@ -168,7 +175,7 @@ async function startPanel(client) {
   }, 10000);
 }
 
-// ===== EVENT SYSTEM FIX =====
+// ===== EVENT SYSTEM =====
 async function startEventSystem(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
@@ -183,20 +190,18 @@ async function startEventSystem(client) {
     const hour = now.getHours();
     const min = now.getMinutes();
 
-    const NEXT_EVENT = getEventByHour((hour + 1) % 24);
-    const nextData = EVENT_DATA[NEXT_EVENT];
-    const nextRole = ROLES[NEXT_EVENT];
+    const NEXT = getEventByHour((hour + 1) % 24);
+    const CURRENT = getEventByHour(hour);
 
-    const CURRENT_EVENT = getEventByHour(hour);
-    const currentData = EVENT_DATA[CURRENT_EVENT];
-    const currentRole = ROLES[CURRENT_EVENT];
-
-    // ===== 5 MIN BEFORE (FIXED) =====
+    // ===== 5 MIN BEFORE =====
     if (min === 55 && lastPrePingHour !== hour) {
       lastPrePingHour = hour;
 
+      const data = EVENT_DATA[NEXT];
+      const role = ROLES[NEXT];
+
       prePingMsg = await channel.send({
-        content: `<@&${nextRole}> ⏳ EVENT ZA 5 MIN: **${nextData.name}**`
+        content: `<@&${role}> ⏳ EVENT ZA 5 MIN: **${data.name}**`
       }).catch(()=>{});
     }
 
@@ -209,14 +214,17 @@ async function startEventSystem(client) {
         prePingMsg = null;
       }
 
+      const data = EVENT_DATA[CURRENT];
+      const role = ROLES[CURRENT];
+
       startMsg = await channel.send({
-        content: `<@&${currentRole}>`,
+        content: `<@&${role}>`,
         embeds: [
           new EmbedBuilder()
-            .setColor(currentData.color)
-            .setTitle(`🚀 ${currentData.name} START!`)
-            .setDescription(`💡 ${currentData.tip}`)
-            .setImage(currentData.image)
+            .setColor(data.color)
+            .setTitle(`🚀 ${data.name} START!`)
+            .setDescription(`💡 ${data.tip}`)
+            .setImage(data.image)
         ]
       }).catch(()=>{});
 
