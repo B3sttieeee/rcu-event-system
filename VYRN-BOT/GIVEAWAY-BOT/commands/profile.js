@@ -25,11 +25,23 @@ function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
 
+// ===== PROGRESS BAR =====
 function createBar(current, needed) {
   const percent = Math.floor((current / needed) * 100);
   const filled = Math.round(percent / 10);
 
-  const bar = "🟩".repeat(filled) + "⬛".repeat(10 - filled);
+  let bar = "";
+
+  for (let i = 0; i < 10; i++) {
+    if (i < filled) {
+      if (percent < 25) bar += "🟥";
+      else if (percent < 50) bar += "🟧";
+      else if (percent < 75) bar += "🟨";
+      else bar += "🟩";
+    } else {
+      bar += "⬛";
+    }
+  }
 
   return { bar, percent };
 }
@@ -56,23 +68,59 @@ module.exports = {
 
     const vcMinutes = Math.floor(user.voice / 60);
 
+    // ===== EMBED (WIDE STYLE) =====
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setAuthor({
         name: `${interaction.user.username} • PROFILE`,
         iconURL: interaction.user.displayAvatarURL()
       })
-      .setDescription(
-        `🏆 **LEVEL ${lvlData.level}**\n` +
-        `${bar} ${percent}%\n` +
-        `XP: ${lvlData.xp}/${needed}\n\n` +
+      .setThumbnail(interaction.user.displayAvatarURL({ size: 512 }))
 
-        `🎤 Voice: ${vcMinutes} min\n\n` +
+      .addFields(
+        {
+          name: "🏆 LEVEL",
+          value: `\`${lvlData.level}\``,
+          inline: true
+        },
+        {
+          name: "📊 XP",
+          value: `\`${lvlData.xp} / ${needed}\`\n${bar} **${percent}%**`,
+          inline: true
+        },
+        {
+          name: "⚡ STATUS",
+          value: percent >= 75 ? "🟢 High Progress" :
+                 percent >= 40 ? "🟡 Medium Progress" :
+                 "🔴 Low Progress",
+          inline: true
+        },
 
-        `🎯 Daily:\n` +
-        `💬 ${user.daily.msgs}/50\n` +
-        `🎤 ${Math.floor(user.daily.vc / 60)}/30 min`
-      );
+        { name: " ", value: " ", inline: false },
+
+        {
+          name: "🎤 VOICE",
+          value: `⏱️ \`${vcMinutes} min\``,
+          inline: true
+        },
+        {
+          name: "💬 MESSAGES",
+          value: `\`${user.daily.msgs} / 50\``,
+          inline: true
+        },
+        {
+          name: "🎯 DAILY VC",
+          value: `\`${Math.floor(user.daily.vc / 60)} / 30 min\``,
+          inline: true
+        }
+      )
+
+      .setFooter({
+        text: "VYRN System • Profile",
+        iconURL: interaction.client.user.displayAvatarURL()
+      })
+
+      .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
   }
