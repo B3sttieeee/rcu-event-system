@@ -4,7 +4,10 @@ const { REST, Routes } = require("discord.js");
 
 const { createTicketPanel } = require("../utils/ticketSystem");
 const eventSystem = require("../utils/eventSystem");
-const { loadGiveaways } = require("../utils/giveawaySystem"); // 🔥 NOWE
+const { loadGiveaways } = require("../utils/giveawaySystem");
+
+// 🔥 LEVEL SYSTEM
+const levelSystem = require("../utils/levelSystem"); // ← upewnij się że nazwa pliku się zgadza
 
 module.exports = {
   name: "clientReady",
@@ -52,25 +55,34 @@ module.exports = {
       console.log("🎟 Ticket panel loaded");
 
       // =========================
-      // 🎮 EVENT SYSTEM (PANEL + PINGI)
+      // 🎮 EVENT SYSTEM
       // =========================
       if (eventSystem) {
         if (typeof eventSystem.startPanel === "function") {
           await eventSystem.startPanel(client);
         }
+
         if (typeof eventSystem.startEventSystem === "function") {
-          await eventSystem.startEventSystem(client); // 🔥 KLUCZOWE
+          await eventSystem.startEventSystem(client);
         }
 
         console.log("✨ Event system started");
       }
 
       // =========================
-      // 🎉 LOAD GIVEAWAYS (po restarcie)
+      // 🎉 LOAD GIVEAWAYS
       // =========================
       if (typeof loadGiveaways === "function") {
         await loadGiveaways(client);
         console.log("🎁 Giveaways loaded");
+      }
+
+      // =========================
+      // 🎤 LEVEL SYSTEM (VOICE XP)
+      // =========================
+      if (levelSystem && typeof levelSystem.startVoiceXP === "function") {
+        levelSystem.startVoiceXP(client);
+        console.log("🎤 Voice XP system started");
       }
 
     } catch (err) {
