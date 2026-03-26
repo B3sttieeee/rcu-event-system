@@ -6,8 +6,8 @@ const { createTicketPanel } = require("../utils/ticketSystem");
 const eventSystem = require("../utils/eventSystem");
 const { loadGiveaways } = require("../utils/giveawaySystem");
 
-// 🔥 LEVEL SYSTEM
-const levelSystem = require("../utils/levelSystem"); // ← upewnij się że nazwa pliku się zgadza
+// 🔥 LEVEL SYSTEM (UTILS)
+const levelSystem = require("../utils/levelSystem");
 
 module.exports = {
   name: "clientReady",
@@ -58,6 +58,7 @@ module.exports = {
       // 🎮 EVENT SYSTEM
       // =========================
       if (eventSystem) {
+
         if (typeof eventSystem.startPanel === "function") {
           await eventSystem.startPanel(client);
         }
