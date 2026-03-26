@@ -1,27 +1,35 @@
-const { EmbedBuilder } = require("discord.js");
-const { addXP, getMultiplier } = require("../utils/levelSystem");
+const {
+  EmbedBuilder,
+  PermissionFlagsBits
+} = require("discord.js");
+
+const {
+  addXP,
+  loadConfig,
+  setMessageXP,
+  setVoiceXP,
+  setLengthBonus,
+  setGlobalMultiplier
+} = require("../utils/levelSystem");
+
 const fs = require("fs");
 
 // ===== CONFIG =====
 const PREFIX = ".";
 const LEVEL_CHANNEL = "1475999590716018719";
+
 const DB_PATH = "/data/levels.json";
+
+const cooldown = new Map();
 
 // ===== LOAD DB =====
 function loadDB() {
-  if (!fs.existsSync("/data")) {
-    fs.mkdirSync("/data");
-  }
-
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ xp: {} }, null, 2));
-  }
-
+  if (!fs.existsSync(DB_PATH)) return { xp: {} };
   return JSON.parse(fs.readFileSync(DB_PATH));
 }
 
 function neededXP(level) {
-  return 50 + level * 25;
+  return Math.floor(100 * Math.pow(level, 1.5));
 }
 
 // ===== EVENT =====
@@ -32,8 +40,21 @@ module.exports = {
     if (!message.guild) return;
     if (message.author.bot) return;
 
-    const gained = Math.floor(5 * getMultiplier(message.member));
-    const result = await addXP(message.member, gained);
+    const now = Date.now();
+
+    if (cooldown.has(message.author.id)) {
+      if (now < cooldown.get(message.author.id)) return;
+    }
+
+    cooldown.set(message.author.id, now + 10000); // 10s
+
+    const cfg = loadConfig();
+
+    const result = await addXP(
+      message.member,
+      cfg.messageXP,
+      message.content.length
+    );
 
     // ===== LEVEL UP =====
     if (result.leveledUp) {
@@ -46,7 +67,11 @@ module.exports = {
             name: `${message.author.username} • Level Up`,
             iconURL: message.author.displayAvatarURL()
           })
-          .setDescription(`🎯 Level: **${result.level}**`)
+          .setDescription(
+            `🏆 **LEVEL UP!**\n` +
+            `🎯 Level **${result.level}**\n\n` +
+            `➕ +${result.gained} XP`
+          )
           .setThumbnail(message.author.displayAvatarURL());
 
         channel.send({
@@ -56,7 +81,7 @@ module.exports = {
       }
     }
 
-    // ===== PREFIX COMMANDS =====
+    // ===== COMMANDS =====
     if (!message.content.startsWith(PREFIX)) return;
 
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
@@ -64,46 +89,45 @@ module.exports = {
 
     const db = loadDB();
     const data = db.xp[message.author.id];
-
     if (!data) return;
 
     // ===== RANK =====
-    if (cmd === "rank" || cmd === "r") {
+    if (cmd === "rank") {
       const needed = neededXP(data.level);
 
-      const embed = new EmbedBuilder()
-        .setColor("#111111")
-        .setAuthor({
-          name: `${message.author.username} • Profile`,
-          iconURL: message.author.displayAvatarURL()
-        })
-        .setThumbnail(message.author.displayAvatarURL())
-        .setDescription(
-          `🏆 **Level Information**\n` +
-          `▶ Level: **${data.level}**\n` +
-          `▶ XP: **${data.xp}/${needed}**`
-        )
-        .setFooter({ text: "VYRN System" });
-
-      return message.reply({ embeds: [embed] });
+      return message.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("#111111")
+            .setTitle("🏆 Your Profile")
+            .setDescription(
+              `Level: **${data.level}**\nXP: **${data.xp}/${needed}**`
+            )
+        ]
+      });
     }
 
-    // ===== TOP =====
-    if (cmd === "top") {
-      const sorted = Object.entries(db.xp)
-        .sort((a, b) => b[1].level - a[1].level)
-        .slice(0, 10);
+    // ===== ADMIN =====
+    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
 
-      const leaderboard = sorted
-        .map((u, i) => `**#${i + 1}** <@${u[0]}> • Level ${u[1].level}`)
-        .join("\n");
+    if (cmd === "setxp") {
+      setMessageXP(parseInt(args[0]));
+      return message.reply("✅ Message XP updated");
+    }
 
-      const embed = new EmbedBuilder()
-        .setColor("#6366f1")
-        .setTitle("🏆 Leaderboard")
-        .setDescription(leaderboard || "Brak danych");
+    if (cmd === "setvcxp") {
+      setVoiceXP(parseInt(args[0]));
+      return message.reply("✅ Voice XP updated");
+    }
 
-      return message.reply({ embeds: [embed] });
+    if (cmd === "setlengthbonus") {
+      setLengthBonus(parseFloat(args[0]));
+      return message.reply("✅ Length bonus updated");
+    }
+
+    if (cmd === "multixp") {
+      setGlobalMultiplier(parseFloat(args[0]));
+      return message.reply("🔥 Global multiplier updated");
     }
   }
 };
