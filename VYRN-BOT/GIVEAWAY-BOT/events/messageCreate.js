@@ -40,6 +40,99 @@ module.exports = {
     if (!message.guild) return;
     if (message.author.bot) return;
 
+    const isCommand = message.content.startsWith(PREFIX);
+
+    // =========================
+    // 💬 KOMENDY (NAJPIERW)
+    // =========================
+    if (isCommand) {
+      const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+      const cmd = args.shift().toLowerCase();
+
+      const db = loadDB();
+      const data = db.xp[message.author.id] || { xp: 0, level: 0 };
+
+      // ===== RANK =====
+      if (cmd === "rank" || cmd === "r") {
+        const needed = neededXP(data.level);
+        const progress = Math.floor((data.xp / needed) * 100);
+
+        const barSize = 10;
+        const filled = Math.round((progress / 100) * barSize);
+        const empty = barSize - filled;
+
+        const bar = "🟩".repeat(filled) + "⬛".repeat(empty);
+
+        const cfg = loadConfig();
+        const hasBoost = message.member.roles.cache.has("1476000398107217980");
+
+        const embed = new EmbedBuilder()
+          .setColor("#0f172a")
+          .setAuthor({
+            name: `${message.author.username} • Level ${data.level}`,
+            iconURL: message.author.displayAvatarURL()
+          })
+          .setThumbnail(message.author.displayAvatarURL())
+          .setDescription(
+            `🏆 **LEVEL SYSTEM**\n\n` +
+            `📊 ${bar} **${progress}%**\n` +
+            `\`${data.xp} / ${needed} XP\`\n\n` +
+            `⚡ Boost: ${
+              hasBoost
+                ? `✅ Active (1.75x)`
+                : `❌ No Active`
+            }\n` +
+            `🌍 Global: ${cfg.globalMultiplier}x`
+          )
+          .setFooter({
+            text: "VYRN System • Grind Mode 🔥"
+          });
+
+        return message.reply({ embeds: [embed] });
+      }
+
+      // ===== ADMIN ONLY =====
+      if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
+
+      if (cmd === "setxp") {
+        const val = parseInt(args[0]);
+        if (isNaN(val)) return message.reply("❌ Usage: .setxp 5");
+
+        setMessageXP(val);
+        return message.reply(`✅ Message XP set to ${val}`);
+      }
+
+      if (cmd === "setvcxp") {
+        const val = parseInt(args[0]);
+        if (isNaN(val)) return message.reply("❌ Usage: .setvcxp 5");
+
+        setVoiceXP(val);
+        return message.reply(`✅ Voice XP set to ${val}`);
+      }
+
+      if (cmd === "setlengthbonus") {
+        const val = parseFloat(args[0]);
+        if (isNaN(val)) return message.reply("❌ Usage: .setlengthbonus 0.3");
+
+        setLengthBonus(val);
+        return message.reply(`✅ Length bonus set to ${val}`);
+      }
+
+      if (cmd === "multixp") {
+        const val = parseFloat(args[0]);
+        if (isNaN(val)) return message.reply("❌ Usage: .multixp 2");
+
+        setGlobalMultiplier(val);
+        return message.reply(`🔥 Global multiplier set to ${val}x`);
+      }
+
+      return;
+    }
+
+    // =========================
+    // 💰 XP SYSTEM (TYLKO NORMALNE WIADOMOŚCI)
+    // =========================
+
     const now = Date.now();
 
     if (cooldown.has(message.author.id)) {
@@ -79,55 +172,6 @@ module.exports = {
           embeds: [embed]
         });
       }
-    }
-
-    // ===== COMMANDS =====
-    if (!message.content.startsWith(PREFIX)) return;
-
-    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-    const cmd = args.shift().toLowerCase();
-
-    const db = loadDB();
-    const data = db.xp[message.author.id];
-    if (!data) return;
-
-    // ===== RANK =====
-    if (cmd === "rank") {
-      const needed = neededXP(data.level);
-
-      return message.reply({
-        embeds: [
-          new EmbedBuilder()
-            .setColor("#111111")
-            .setTitle("🏆 Your Profile")
-            .setDescription(
-              `Level: **${data.level}**\nXP: **${data.xp}/${needed}**`
-            )
-        ]
-      });
-    }
-
-    // ===== ADMIN =====
-    if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
-
-    if (cmd === "setxp") {
-      setMessageXP(parseInt(args[0]));
-      return message.reply("✅ Message XP updated");
-    }
-
-    if (cmd === "setvcxp") {
-      setVoiceXP(parseInt(args[0]));
-      return message.reply("✅ Voice XP updated");
-    }
-
-    if (cmd === "setlengthbonus") {
-      setLengthBonus(parseFloat(args[0]));
-      return message.reply("✅ Length bonus updated");
-    }
-
-    if (cmd === "multixp") {
-      setGlobalMultiplier(parseFloat(args[0]));
-      return message.reply("🔥 Global multiplier updated");
     }
   }
 };
