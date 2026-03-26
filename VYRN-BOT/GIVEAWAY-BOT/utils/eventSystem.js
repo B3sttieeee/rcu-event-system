@@ -11,7 +11,10 @@ const fs = require("fs");
 // ===== CONFIG =====
 const CHANNEL_ID = "1484937784283369502";
 
-// ===== EVENT DATA (UPDATED IMAGES) =====
+// ===== PANEL IMAGE =====
+const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
+
+// ===== EVENT DATA =====
 const EVENT_DATA = {
   egg: {
     name: "RNG EGG",
@@ -83,7 +86,7 @@ function getCountdown() {
   return `${m}m ${s}s`;
 }
 
-// ===== EMBED =====
+// ===== PANEL EMBED =====
 function panelEmbed() {
   const current = getCurrent();
   const next = getNext();
@@ -102,7 +105,7 @@ function panelEmbed() {
 \`${EVENT_DATA[next].name}\`
 ⏱️ ${getCountdown()}`
     )
-    .setImage(EVENT_DATA[current].image);
+    .setImage(PANEL_IMAGE); // 🔥 TUTAJ TWOJE ZDJĘCIE PANELU
 }
 
 // ===== BUTTONS =====
