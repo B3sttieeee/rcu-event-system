@@ -59,7 +59,7 @@ function formatTime(ms) {
 // ===== BONUS TEXT =====
 function getBonusText() {
   return Object.entries(BONUS_ROLES)
-    .map(([id, val]) => `<@&${id}> ➜ +${val} wejść`)
+    .map(([id, val]) => `<@&${id}> ➜ **+${val} entries**`)
     .join("\n");
 }
 
@@ -69,19 +69,26 @@ function buildEmbed(data) {
   const left = data.end - now;
 
   return new EmbedBuilder()
-    .setColor("#ff8800")
-    .setTitle("🎉 Giveaway")
+    .setColor("#f59e0b")
+    .setTitle("🎉 GIVEAWAY")
     .setDescription(
-`🎁 **${data.prize}**
+`🎁 **Prize:** ${data.prize}
 
-👉 Kliknij **Join**, aby wziąć udział!
+━━━━━━━━━━━━━━━━━━
 
-👥 **Uczestnicy:** ${data.users.length}
-🏆 **Zwycięzcy:** ${data.winners}
-⏳ **Koniec za:** ${left > 0 ? formatTime(left) : "Zakończono"}
+👥 **Participants:** \`${data.users.length}\`
+🏆 **Winners:** \`${data.winners}\`
 
-🎟 **Bonusowe wejścia**
-${getBonusText()}`
+⏳ **Ends in:** \`${left > 0 ? formatTime(left) : "Ended"}\`
+
+━━━━━━━━━━━━━━━━━━
+
+🎟 **Bonus Entries**
+${getBonusText() || "Brak"}
+
+━━━━━━━━━━━━━━━━━━
+
+👉 Click **Join** to participate!`
     )
     .setFooter({ text: "VYRN Giveaway System" })
     .setTimestamp();
@@ -182,15 +189,16 @@ async function endGiveaway(message, data) {
 
   const embed = new EmbedBuilder()
     .setColor("#22c55e")
-    .setTitle("🎉 Giveaway Zakończony")
+    .setTitle("🎉 GIVEAWAY ENDED")
     .setDescription(
-`🎁 **${data.prize}**
+`🎁 **Prize:** ${data.prize}
 
-🏆 **Wygrani:**
+🏆 **Winners:**
 ${winners.length ? winners.map(w => `<@${w}>`).join("\n") : "Brak"}
 
-👥 Uczestnicy: ${data.users.length}`
-    );
+👥 Participants: ${data.users.length}`
+    )
+    .setTimestamp();
 
   await message.edit({ embeds: [embed], components: [] });
 
@@ -198,7 +206,7 @@ ${winners.length ? winners.map(w => `<@${w}>`).join("\n") : "Brak"}
   saveDB();
 }
 
-// ===== LOAD OLD GIVEAWAYS =====
+// ===== LOAD =====
 async function loadGiveaways(client) {
   const db = loadDB();
 
@@ -211,16 +219,42 @@ async function loadGiveaways(client) {
 
       giveaways.set(msgId, data);
 
-      // jeśli już minął czas → zakończ
       if (Date.now() >= data.end) {
         endGiveaway(message, data);
       } else {
         startTimer(message, data);
       }
 
-    } catch (e) {
+    } catch {
       giveaways.delete(msgId);
     }
+  }
+}
+
+// ===== RESUME =====
+async function resumeGiveaway(client, messageId) {
+
+  const db = loadDB();
+  const data = db[messageId];
+
+  if (!data) return false;
+
+  try {
+    const channel = await client.channels.fetch(data.channelId);
+    const message = await channel.messages.fetch(messageId);
+
+    giveaways.set(messageId, data);
+
+    if (Date.now() >= data.end) {
+      await endGiveaway(message, data);
+    } else {
+      startTimer(message, data);
+    }
+
+    return true;
+
+  } catch {
+    return false;
   }
 }
 
@@ -238,7 +272,7 @@ async function handleGiveaway(interaction) {
       saveDB();
     }
 
-    await interaction.reply({ content: "✅ Dołączyłeś!", ephemeral: true });
+    await interaction.reply({ content: "✅ Joined!", ephemeral: true });
 
     interaction.message.edit({
       embeds: [buildEmbed(data)]
@@ -249,7 +283,7 @@ async function handleGiveaway(interaction) {
     data.users = data.users.filter(id => id !== userId);
     saveDB();
 
-    await interaction.reply({ content: "❌ Opuściłeś giveaway", ephemeral: true });
+    await interaction.reply({ content: "❌ Left giveaway", ephemeral: true });
 
     interaction.message.edit({
       embeds: [buildEmbed(data)]
@@ -260,5 +294,6 @@ async function handleGiveaway(interaction) {
 module.exports = {
   createGiveaway,
   handleGiveaway,
-  loadGiveaways
+  loadGiveaways,
+  resumeGiveaway
 };
