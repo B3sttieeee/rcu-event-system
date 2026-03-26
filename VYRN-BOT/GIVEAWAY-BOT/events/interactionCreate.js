@@ -11,7 +11,9 @@ module.exports = {
   async execute(interaction, client) {
     try {
 
+      // =========================
       // 🎫 TICKETS
+      // =========================
       if (
         interaction.isButton() ||
         interaction.isModalSubmit() ||
@@ -22,26 +24,30 @@ module.exports = {
         }
       }
 
+      // =========================
+      // 🎁 GIVEAWAY (NAPRAWIONE)
+      // =========================
+      if (interaction.isButton()) {
+        if (interaction.customId.startsWith("gw_")) {
+          return giveawaySystem.handleGiveaway(interaction);
+        }
+      }
+
+      // =========================
       // 🎮 EVENT SYSTEM
-      if (interaction.isButton() || interaction.isStringSelectMenu()) {
+      // =========================
+      if (
+        interaction.isButton() ||
+        interaction.isStringSelectMenu()
+      ) {
         if (handleEventInteraction) {
           await handleEventInteraction(interaction);
         }
       }
 
-      // 🎁 GIVEAWAY SYSTEM
-      if (interaction.isButton()) {
-
-        if (interaction.customId.startsWith("gw_join_")) {
-          return giveawaySystem.join(interaction);
-        }
-
-        if (interaction.customId.startsWith("gw_leave_")) {
-          return giveawaySystem.leave(interaction);
-        }
-      }
-
+      // =========================
       // ⚡ SLASH COMMANDS
+      // =========================
       if (!interaction.isChatInputCommand()) return;
 
       const commandFiles = fs.readdirSync("./commands");
