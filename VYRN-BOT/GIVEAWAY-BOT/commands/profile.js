@@ -1,184 +1,96 @@
-const { EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 
-// ===== CONFIG =====
-const PREFIX = ".";
 const DB_PATH = "./data.json";
 const PROFILE_PATH = "./profile.json";
 
-// ===== LOAD / SAVE =====
+// ===== LOAD =====
 function loadDB() {
-  try {
-    return JSON.parse(fs.readFileSync(DB_PATH));
-  } catch {
-    return { xp: {} };
-  }
-}
-
-function saveDB(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  if (!fs.existsSync(DB_PATH)) return { xp: {} };
+  return JSON.parse(fs.readFileSync(DB_PATH));
 }
 
 function loadProfile() {
-  try {
-    return JSON.parse(fs.readFileSync(PROFILE_PATH));
-  } catch {
-    return { users: {} };
+  if (!fs.existsSync(PROFILE_PATH)) {
+    fs.writeFileSync(PROFILE_PATH, JSON.stringify({ users: {} }, null, 2));
   }
+  return JSON.parse(fs.readFileSync(PROFILE_PATH));
 }
 
-function saveProfile(data) {
-  fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
-}
-
-// ===== XP SYSTEM =====
+// ===== XP =====
 function neededXP(level) {
-  return 120 + level * 80; // 🔥 cięższe levele
+  return 100 + level * 75 + level * level * 10; // 🔥 trudniejsze levele
 }
 
 // ===== PROGRESS BAR =====
-function getProgressBar(current, max) {
+function progressBar(current, max) {
   const percent = Math.floor((current / max) * 100);
-  const filled = Math.floor(percent / 10);
+  const filled = Math.round(percent / 10);
 
-  const bar = "🟩".repeat(filled) + "⬛".repeat(10 - filled);
-
-  return { bar, percent };
+  return {
+    bar: "🟩".repeat(filled) + "⬛".repeat(10 - filled),
+    percent
+  };
 }
 
-// ===== EVENT =====
 module.exports = {
-  name: "messageCreate",
+  data: new SlashCommandBuilder()
+    .setName("profile")
+    .setDescription("Show your profile"),
 
-  async execute(message) {
-    if (!message.guild) return;
-    if (message.author.bot) return;
+  async execute(interaction) {
 
-    // ===== IGNORUJ KOMENDY XP =====
-    if (message.content.startsWith(PREFIX)) {
-      const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-      const cmd = args.shift().toLowerCase();
-
-      // ===== PROFILE =====
-      if (cmd === "profile" || cmd === "p") {
-
-        const db = loadDB();
-        const profile = loadProfile();
-
-        // ===== USER DATA =====
-        if (!db.xp[message.author.id]) {
-          db.xp[message.author.id] = { xp: 0, level: 0 };
-        }
-
-        if (!profile.users[message.author.id]) {
-          profile.users[message.author.id] = {
-            voice: 0,
-            daily: { msgs: 0, vc: 0 }
-          };
-        }
-
-        const data = db.xp[message.author.id];
-        const user = profile.users[message.author.id];
-
-        const needed = neededXP(data.level);
-
-        const { bar, percent } = getProgressBar(data.xp, needed);
-
-        const vcMinutes = Math.floor(user.voice / 60);
-        const dailyVC = Math.floor(user.daily.vc / 60);
-
-        // ===== EMBED =====
-        const embed = new EmbedBuilder()
-          .setColor("#0f172a")
-          .setAuthor({
-            name: `${message.author.username}'s Profile`,
-            iconURL: message.author.displayAvatarURL()
-          })
-          .setThumbnail(message.author.displayAvatarURL())
-          .setDescription(
-`✨ **Your Progress Overview**
-
-━━━━━━━━━━━━━━━━━━
-
-🏆 **Level ${data.level}**
-${bar} **${percent}%**
-📊 XP: **${data.xp} / ${needed}**
-
-━━━━━━━━━━━━━━━━━━
-
-🎤 **Voice Activity**
-⏱ Total Time: **${vcMinutes} min**
-
-━━━━━━━━━━━━━━━━━━
-
-🎯 **Daily Quests**
-💬 Messages: **${user.daily.msgs} / 50**
-🎤 VC Time: **${dailyVC} / 30 min**
-
-━━━━━━━━━━━━━━━━━━
-
-🚀 *Stay active to level up faster!*`
-          )
-          .setFooter({
-            text: "VYRN System • Profile",
-            iconURL: message.guild.iconURL()
-          })
-          .setTimestamp();
-
-        return message.reply({ embeds: [embed] });
-      }
-
-      return;
-    }
-
-    // ===== NORMAL XP =====
     const db = loadDB();
     const profile = loadProfile();
 
-    if (!db.xp[message.author.id]) {
-      db.xp[message.author.id] = { xp: 0, level: 0 };
-    }
+    const userId = interaction.user.id;
 
-    if (!profile.users[message.author.id]) {
-      profile.users[message.author.id] = {
-        voice: 0,
-        daily: { msgs: 0, vc: 0 }
-      };
-    }
+    const data = db.xp[userId] || { xp: 0, level: 0 };
+    const user = profile.users[userId] || {
+      voice: 0,
+      daily: { msgs: 0, vc: 0 }
+    };
 
-    const data = db.xp[message.author.id];
+    const needed = neededXP(data.level);
+    const { bar, percent } = progressBar(data.xp, needed);
 
-    // 🔥 XP ZA WIADOMOŚĆ
-    const gained = 8 + Math.floor(Math.random() * 5);
-    data.xp += gained;
+    const vcMinutes = Math.floor(user.voice / 60);
 
-    profile.users[message.author.id].daily.msgs++;
+    const embed = new EmbedBuilder()
+      .setColor("#0f172a")
+      .setAuthor({
+        name: `${interaction.user.username} • Profile`,
+        iconURL: interaction.user.displayAvatarURL()
+      })
+      .setThumbnail(interaction.user.displayAvatarURL())
+      .setDescription(
+`🏆 **LEVEL SYSTEM**
 
-    // ===== LEVEL UP =====
-    let leveled = false;
+✨ Level: **${data.level}**
+📊 XP: **${data.xp} / ${needed}**
+${bar} \`${percent}%\`
 
-    while (data.xp >= neededXP(data.level)) {
-      data.xp -= neededXP(data.level);
-      data.level++;
-      leveled = true;
-    }
+━━━━━━━━━━━━━━━━━━
 
-    saveDB(db);
-    saveProfile(profile);
+🎤 **VOICE ACTIVITY**
+⏱️ Time: **${vcMinutes} minutes**
 
-    // ===== LEVEL UP MESSAGE =====
-    if (leveled) {
-      const embed = new EmbedBuilder()
-        .setColor("#22c55e")
-        .setDescription(
-`🎉 **LEVEL UP!**
+━━━━━━━━━━━━━━━━━━
 
-🚀 ${message.author} reached **Level ${data.level}**
+🎯 **DAILY PROGRESS**
+💬 Messages: **${user.daily.msgs} / 50**
+🎤 Voice: **${Math.floor(user.daily.vc / 60)} / 30 min**
 
-Keep going 🔥`
-        );
+━━━━━━━━━━━━━━━━━━
 
-      message.channel.send({ embeds: [embed] });
-    }
+🚀 Keep grinding to level up faster!`
+      )
+      .setFooter({
+        text: "VYRN System • Profile",
+        iconURL: interaction.client.user.displayAvatarURL()
+      })
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed] });
   }
 };
