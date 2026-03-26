@@ -17,23 +17,23 @@ const EVENT_DATA = {
     name: "RNG EGG",
     color: "#f59e0b",
     image: "https://imgur.com/yTE8jim.png",
-    tip: "Find a good server and farm tiers!"
+    tip: "Znajdź serwer i farm Tier!"
   },
   merchant: {
     name: "BOSS / HONEY MERCHANT",
     color: "#ef4444",
     image: "https://imgur.com/ft4q1bC.png",
-    tip: "Prepare your currency!"
+    tip: "Przygotuj walutę!"
   },
   spin: {
     name: "DEV SPIN",
     color: "#dc2626",
     image: "https://imgur.com/blg4iD8.png",
-    tip: "Spin the wheel!"
+    tip: "Zakręć kołem!"
   }
 };
 
-// ===== ROLES =====
+// ===== ROLE IDs =====
 const ROLES = {
   egg: "1476000993119568105",
   merchant: "1476000993660502139",
@@ -83,33 +83,72 @@ function getCountdown() {
   return `${m}m ${s}s`;
 }
 
-// ===== PANEL EMBED =====
+// ===== EMBED =====
 function panelEmbed() {
   const current = getCurrent();
   const next = getNext();
 
   return new EmbedBuilder()
     .setColor(EVENT_DATA[current].color)
-    .setTitle("✨ Event Panel")
+    .setTitle("✨ EVENT PANEL")
     .setDescription(
-      `🎮 Live tracking system\n\n` +
-      `🟢 **Current:** ${EVENT_DATA[current].name}\n` +
-      `⏳ \`${getCountdown()}\`\n\n` +
-      `⏭️ **Next:** ${EVENT_DATA[next].name}\n` +
-      `⏱️ \`${getCountdown()}\``
+`🎮 **Live Event Tracking**
+
+🟢 **Now**
+\`${EVENT_DATA[current].name}\`
+⏳ ${getCountdown()}
+
+⏭️ **Next**
+\`${EVENT_DATA[next].name}\`
+⏱️ ${getCountdown()}`
     )
     .setImage("https://imgur.com/sOU3JWV.png");
 }
 
-// ===== BUTTONS =====
+// ===== BUTTONS (FIXED) =====
 function getButtons() {
   return [
     new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId("refresh").setLabel("Refresh").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("roles").setLabel("Roles").setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId("dm").setLabel("Notifications").setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Refresh").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("roles").setLabel("🎭 Roles").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("dm").setLabel("📩 Notifications").setStyle(ButtonStyle.Secondary)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("info").setLabel("ℹ️ Info").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("help").setLabel("❓ Help").setStyle(ButtonStyle.Secondary)
     )
   ];
+}
+
+// ===== MENUS =====
+function rolesMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("roles_menu")
+      .setPlaceholder("Select roles")
+      .setMinValues(0)
+      .setMaxValues(3)
+      .addOptions([
+        { label: "RNG EGG", value: "egg" },
+        { label: "MERCHANT", value: "merchant" },
+        { label: "DEV SPIN", value: "spin" }
+      ])
+  );
+}
+
+function dmMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("dm_menu")
+      .setPlaceholder("Select DM notifications")
+      .setMinValues(0)
+      .setMaxValues(3)
+      .addOptions([
+        { label: "RNG EGG", value: "egg" },
+        { label: "MERCHANT", value: "merchant" },
+        { label: "DEV SPIN", value: "spin" }
+      ])
+  );
 }
 
 // ===== PANEL =====
@@ -129,7 +168,7 @@ async function startPanel(client) {
   }, 10000);
 }
 
-// ===== EVENT SYSTEM =====
+// ===== EVENT SYSTEM FIX =====
 async function startEventSystem(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
@@ -144,25 +183,24 @@ async function startEventSystem(client) {
     const hour = now.getHours();
     const min = now.getMinutes();
 
-    const currentEvent = getEventByHour(hour);
-    const nextEvent = getEventByHour((hour + 1) % 24);
+    const NEXT_EVENT = getEventByHour((hour + 1) % 24);
+    const nextData = EVENT_DATA[NEXT_EVENT];
+    const nextRole = ROLES[NEXT_EVENT];
 
-    const nextData = EVENT_DATA[nextEvent];
-    const nextRole = ROLES[nextEvent];
+    const CURRENT_EVENT = getEventByHour(hour);
+    const currentData = EVENT_DATA[CURRENT_EVENT];
+    const currentRole = ROLES[CURRENT_EVENT];
 
-    const currentData = EVENT_DATA[currentEvent];
-    const currentRole = ROLES[currentEvent];
-
-    // ===== 5 MIN BEFORE (NAPRAWIONE)
+    // ===== 5 MIN BEFORE (FIXED) =====
     if (min === 55 && lastPrePingHour !== hour) {
       lastPrePingHour = hour;
 
       prePingMsg = await channel.send({
-        content: `<@&${nextRole}> ⏳ Event in 5 minutes: **${nextData.name}**`
+        content: `<@&${nextRole}> ⏳ EVENT ZA 5 MIN: **${nextData.name}**`
       }).catch(()=>{});
     }
 
-    // ===== START EVENT
+    // ===== START =====
     if (min === 0 && lastStartHour !== hour) {
       lastStartHour = hour;
 
@@ -176,7 +214,7 @@ async function startEventSystem(client) {
         embeds: [
           new EmbedBuilder()
             .setColor(currentData.color)
-            .setTitle(`🚀 ${currentData.name}`)
+            .setTitle(`🚀 ${currentData.name} START!`)
             .setDescription(`💡 ${currentData.tip}`)
             .setImage(currentData.image)
         ]
@@ -193,8 +231,57 @@ async function startEventSystem(client) {
   }, 10000);
 }
 
-// ===== EXPORT =====
+// ===== INTERACTION =====
+async function handleEventInteraction(interaction) {
+
+  if (interaction.customId === "refresh") {
+    return interaction.update({
+      embeds: [panelEmbed()],
+      components: getButtons()
+    });
+  }
+
+  if (interaction.customId === "roles") {
+    return interaction.reply({
+      content: "🎭 Select roles:",
+      components: [rolesMenu()],
+      ephemeral: true
+    });
+  }
+
+  if (interaction.customId === "dm") {
+    return interaction.reply({
+      content: "📩 Select DM notifications:",
+      components: [dmMenu()],
+      ephemeral: true
+    });
+  }
+
+  if (interaction.isStringSelectMenu() && interaction.customId === "roles_menu") {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+
+    for (const key in ROLES) {
+      await member.roles.remove(ROLES[key]).catch(()=>{});
+    }
+
+    for (const val of interaction.values) {
+      await member.roles.add(ROLES[val]).catch(()=>{});
+    }
+
+    return interaction.reply({ content: "✅ Roles updated", ephemeral: true });
+  }
+
+  if (interaction.isStringSelectMenu() && interaction.customId === "dm_menu") {
+    const db = loadDB();
+    db.dm[interaction.user.id] = interaction.values;
+    saveDB(db);
+
+    return interaction.reply({ content: "✅ DM updated", ephemeral: true });
+  }
+}
+
 module.exports = {
   startPanel,
-  startEventSystem
+  startEventSystem,
+  handleEventInteraction
 };
