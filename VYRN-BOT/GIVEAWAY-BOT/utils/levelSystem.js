@@ -51,11 +51,11 @@ const LEVEL_ROLES = {
   75: "1476000992351879229"
 };
 
-// ===== BOOST =====
+// ===== BOOST ROLE =====
 const BOOST_ROLE = "1476000398107217980";
 const BOOST_MULTIPLIER = 1.75;
 
-// ===== HARD XP FORMULA =====
+// ===== XP FORMULA (HARD) =====
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
@@ -127,8 +127,10 @@ async function checkRoles(member, level) {
   }
 }
 
-// ===== VOICE XP =====
+// ===== VOICE XP + PROFILE =====
 function startVoiceXP(client) {
+  const { addVoiceTime } = require("./profileSystem");
+
   setInterval(() => {
     const cfg = loadConfig();
 
@@ -142,6 +144,7 @@ function startVoiceXP(client) {
         if (member.voice.selfMute || member.voice.selfDeaf) return;
 
         addXP(member, cfg.voiceXP);
+        addVoiceTime(member.id, 60);
 
       });
     });
