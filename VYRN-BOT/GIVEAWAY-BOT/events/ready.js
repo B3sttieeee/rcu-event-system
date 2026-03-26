@@ -6,15 +6,25 @@ const { createTicketPanel } = require("../utils/ticketSystem");
 const eventSystem = require("../utils/eventSystem");
 const { loadGiveaways } = require("../utils/giveawaySystem");
 const levelSystem = require("../utils/levelSystem");
-const { resetDaily } = require("../utils/profileSystem");
 
-// ===== HELPER LOGGER =====
+// 🔐 SAFE IMPORT (żeby bot nie crashował)
+let resetDaily = null;
+try {
+  ({ resetDaily } = require("../utils/profileSystem"));
+} catch {
+  console.log("⚠️ Profile system not loaded");
+}
+
+// ===== CONFIG =====
+const GUILD_ID = "1475521240058953830"; // 🔥 WAŻNE
+
+// ===== LOGGER =====
 function log(type, msg) {
   console.log(`${type} ${msg}`);
 }
 
 // ===== LOAD COMMANDS =====
-async function loadCommands(client) {
+async function loadCommands() {
   const commands = [];
   const commandsPath = path.join(__dirname, "../commands");
 
@@ -48,12 +58,13 @@ async function registerCommands(client, commands) {
   try {
     const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
+    // 🔥 GUILD COMMANDS = NATYCHMIAST DZIAŁA
     await rest.put(
-      Routes.applicationCommands(client.user.id),
+      Routes.applicationGuildCommands(client.user.id, GUILD_ID),
       { body: commands }
     );
 
-    log("✅", `Slash commands deployed (${commands.length})`);
+    log("✅", `Slash commands deployed instantly (${commands.length})`);
 
   } catch (err) {
     log("❌", "Slash register error");
@@ -61,7 +72,7 @@ async function registerCommands(client, commands) {
   }
 }
 
-// ===== INIT SYSTEMS =====
+// ===== SYSTEMS =====
 async function initSystems(client) {
 
   // 🎫 Ticket
@@ -73,7 +84,7 @@ async function initSystems(client) {
     console.log(err);
   }
 
-  // 🎮 Events
+  // 🎮 Event System
   try {
     if (eventSystem) {
 
@@ -114,19 +125,22 @@ async function initSystems(client) {
     console.log(err);
   }
 
-  // 🎯 DAILY RESET (24h)
+  // 🎯 DAILY RESET
   try {
-    setInterval(() => {
-      resetDaily();
-      log("🔄", "Daily quests reset");
-    }, 86400000);
+    if (resetDaily) {
+      resetDaily(); // 🔥 od razu przy starcie
 
+      setInterval(() => {
+        resetDaily();
+        log("🔄", "Daily quests reset");
+      }, 86400000);
+    }
   } catch (err) {
     log("❌", "Daily reset error");
   }
 }
 
-// ===== EVENT =====
+// ===== READY EVENT =====
 module.exports = {
   name: "clientReady",
   once: true,
@@ -136,9 +150,9 @@ module.exports = {
 
     try {
       // 1️⃣ Load commands
-      const commands = await loadCommands(client);
+      const commands = await loadCommands();
 
-      // 2️⃣ Register slash
+      // 2️⃣ Register slash (INSTANT)
       await registerCommands(client, commands);
 
       // 3️⃣ Start systems
