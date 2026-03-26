@@ -11,24 +11,24 @@ const fs = require("fs");
 // ===== CONFIG =====
 const CHANNEL_ID = "1484937784283369502";
 
-// ===== EVENT DATA =====
+// ===== EVENT DATA (UPDATED IMAGES) =====
 const EVENT_DATA = {
   egg: {
     name: "RNG EGG",
     color: "#f59e0b",
-    image: "https://imgur.com/yTE8jim.png",
+    image: "https://imgur.com/PfhYZnf.png",
     tip: "Znajdź serwer i farm Tier!"
   },
   merchant: {
     name: "BOSS / HONEY MERCHANT",
     color: "#ef4444",
-    image: "https://imgur.com/ft4q1bC.png",
+    image: "https://imgur.com/GQIFzx7.png",
     tip: "Przygotuj walutę!"
   },
   spin: {
     name: "DEV SPIN",
     color: "#dc2626",
-    image: "https://imgur.com/blg4iD8.png",
+    image: "https://imgur.com/mGVojBN.png",
     tip: "Zakręć kołem!"
   }
 };
@@ -102,7 +102,7 @@ function panelEmbed() {
 \`${EVENT_DATA[next].name}\`
 ⏱️ ${getCountdown()}`
     )
-    .setImage("https://imgur.com/sOU3JWV.png");
+    .setImage(EVENT_DATA[current].image);
 }
 
 // ===== BUTTONS =====
