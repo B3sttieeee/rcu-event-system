@@ -4,10 +4,13 @@ const fs = require("fs");
 const DB_PATH = "/data/levels.json";
 const CONFIG_PATH = "/data/levelConfig.json";
 
+// ===== INIT FOLDER =====
+if (!fs.existsSync("/data")) {
+  fs.mkdirSync("/data");
+}
+
 // ===== LOAD DB =====
 function loadDB() {
-  if (!fs.existsSync("/data")) fs.mkdirSync("/data");
-
   if (!fs.existsSync(DB_PATH)) {
     fs.writeFileSync(DB_PATH, JSON.stringify({ xp: {} }, null, 2));
   }
@@ -48,10 +51,11 @@ const LEVEL_ROLES = {
   75: "1476000992351879229"
 };
 
+// ===== BOOST =====
 const BOOST_ROLE = "1476000398107217980";
 const BOOST_MULTIPLIER = 1.75;
 
-// ===== XP FORMUŁA (HARDCORE) =====
+// ===== HARD XP FORMULA =====
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
@@ -80,21 +84,19 @@ async function addXP(member, baseAmount, messageLength = 0) {
 
   let amount = baseAmount;
 
-  // ✍️ BONUS ZA DŁUGOŚĆ
+  // BONUS ZA DŁUGOŚĆ WIADOMOŚCI
   if (messageLength >= cfg.lengthThreshold) {
     amount = Math.floor(amount * (1 + cfg.lengthBonus));
   }
 
+  // MULTIPLIER
   amount = Math.floor(amount * getMultiplier(member));
 
   db.xp[member.id].xp += amount;
 
   let leveledUp = false;
 
-  while (
-    db.xp[member.id].xp >=
-    neededXP(db.xp[member.id].level)
-  ) {
+  while (db.xp[member.id].xp >= neededXP(db.xp[member.id].level)) {
     db.xp[member.id].xp -= neededXP(db.xp[member.id].level);
     db.xp[member.id].level++;
     leveledUp = true;
@@ -114,13 +116,13 @@ async function addXP(member, baseAmount, messageLength = 0) {
   };
 }
 
-// ===== ROLE =====
+// ===== AUTO ROLE =====
 async function checkRoles(member, level) {
   for (const lvl in LEVEL_ROLES) {
     const roleId = LEVEL_ROLES[lvl];
 
     if (level >= lvl && !member.roles.cache.has(roleId)) {
-      await member.roles.add(roleId).catch(()=>{});
+      await member.roles.add(roleId).catch(() => {});
     }
   }
 }
@@ -134,6 +136,8 @@ function startVoiceXP(client) {
       guild.members.cache.forEach(member => {
 
         if (!member.voice.channel) return;
+
+        // ❌ ANTI AFK
         if (member.voice.channel.members.size <= 1) return;
         if (member.voice.selfMute || member.voice.selfDeaf) return;
 
@@ -141,10 +145,10 @@ function startVoiceXP(client) {
 
       });
     });
-  }, 60000);
+  }, 60000); // co 1 min
 }
 
-// ===== CONFIG COMMANDS =====
+// ===== CONFIG SETTERS =====
 function setMessageXP(val) {
   const cfg = loadConfig();
   cfg.messageXP = val;
@@ -169,6 +173,7 @@ function setGlobalMultiplier(val) {
   saveConfig(cfg);
 }
 
+// ===== EXPORT =====
 module.exports = {
   addXP,
   startVoiceXP,
@@ -177,8 +182,4 @@ module.exports = {
   setVoiceXP,
   setLengthBonus,
   setGlobalMultiplier
-};
-  getLevelBonus,
-  startVoiceXP,
-  getMultiplier
 };
