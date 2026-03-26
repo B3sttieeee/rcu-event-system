@@ -11,56 +11,46 @@ module.exports = {
   async execute(interaction, client) {
     try {
 
-      // =========================
-      // 🎫 TICKET SYSTEM
-      // =========================
+      // 🎫 TICKETS
       if (
         interaction.isButton() ||
         interaction.isModalSubmit() ||
         interaction.isStringSelectMenu()
       ) {
-        if (ticketSystem && typeof ticketSystem.handle === "function") {
+        if (ticketSystem?.handle) {
           await ticketSystem.handle(interaction, client);
         }
       }
 
-      // =========================
-      // 🎉 EVENT SYSTEM (BUTTONS + MENUS)
-      // =========================
-      if (
-        interaction.isButton() ||
-        interaction.isStringSelectMenu()
-      ) {
+      // 🎮 EVENT SYSTEM
+      if (interaction.isButton() || interaction.isStringSelectMenu()) {
         if (handleEventInteraction) {
           await handleEventInteraction(interaction);
         }
       }
 
-      // =========================
-      // 🎁 GIVEAWAY BUTTONS
-      // =========================
+      // 🎁 GIVEAWAY SYSTEM
       if (interaction.isButton()) {
-        if (giveawaySystem && typeof giveawaySystem.handleInteraction === "function") {
-          await giveawaySystem.handleInteraction(interaction);
+
+        if (interaction.customId.startsWith("gw_join_")) {
+          return giveawaySystem.join(interaction);
+        }
+
+        if (interaction.customId.startsWith("gw_leave_")) {
+          return giveawaySystem.leave(interaction);
         }
       }
 
-      // =========================
       // ⚡ SLASH COMMANDS
-      // =========================
       if (!interaction.isChatInputCommand()) return;
 
       const commandFiles = fs.readdirSync("./commands");
       const commands = new Map();
 
       for (const file of commandFiles) {
-        try {
-          const command = require(`../commands/${file}`);
-          if (command?.data?.name) {
-            commands.set(command.data.name, command);
-          }
-        } catch (err) {
-          console.log("❌ COMMAND LOAD ERROR:", file, err);
+        const command = require(`../commands/${file}`);
+        if (command?.data?.name) {
+          commands.set(command.data.name, command);
         }
       }
 
@@ -75,12 +65,12 @@ module.exports = {
       try {
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp({
-            content: "❌ Wystąpił błąd",
+            content: "❌ Error",
             ephemeral: true
           });
         } else {
           await interaction.reply({
-            content: "❌ Wystąpił błąd",
+            content: "❌ Error",
             ephemeral: true
           });
         }
