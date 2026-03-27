@@ -9,7 +9,20 @@ module.exports = {
     try {
 
       // =========================
-      // 🎫 TICKETS (PRIORITY)
+      // 📦 EMBED SYSTEM (NAJPIERW!)
+      // =========================
+      if (
+        interaction.customId?.startsWith("embedModal_") ||
+        interaction.customId?.startsWith("sendEmbed_") ||
+        interaction.customId?.startsWith("editEmbed_")
+      ) {
+        // 👉 załaduj embed system
+        const embedSystem = require("../events/embedSystem");
+        return embedSystem.execute(interaction, client);
+      }
+
+      // =========================
+      // 🎫 TICKETS
       // =========================
       if (
         interaction.isButton() ||
@@ -43,11 +56,10 @@ module.exports = {
       }
 
       // =========================
-      // ⚡ SLASH COMMANDS (OPTYMALNIE)
+      // ⚡ SLASH COMMANDS
       // =========================
       if (!interaction.isChatInputCommand()) return;
 
-      // 🔥 używamy client.commands zamiast fs
       const command = client.commands.get(interaction.commandName);
 
       if (!command) {
