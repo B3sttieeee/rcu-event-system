@@ -41,10 +41,10 @@ module.exports = {
 📌 **1. Check rules**
 <#1475526080361140344>
 
-🔗 **2. Connect your account**
+🔗 **2. Connect your account with Blox Link /verify**
 <#1475970436650237962>
 
-🎟 **3. Join clan ticket**
+🎟 **3. If u want Join to clan create ticket!!**
 <#1475558248487583805>
 
 🔥 Good Luck!`
