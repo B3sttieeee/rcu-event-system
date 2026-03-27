@@ -16,14 +16,17 @@ const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
 
 // ===== MERCHANT DATA =====
 const EVENT = {
-  name: "HONEY MERCHANT",
+  name: "BOSS / HONEY MERCHANT",
   color: "#ef4444",
-  image: "https://imgur.com/txWUEQE.png", // 🔥 podmień na swoje
+  image: "https://i.imgur.com/NEW_IMAGE.png", // 🔥 podmień
   tip: "Przygotuj walutę!"
 };
 
 // ===== ROLE =====
 const ROLE_ID = "1476000993660502139";
+
+// ===== GODZINY MERCHANT =====
+const MERCHANT_HOURS = [1, 4, 7, 10, 13, 16, 19, 22];
 
 // ===== DB =====
 const DB_PATH = "./eventDB.json";
@@ -46,36 +49,37 @@ function getNow() {
   );
 }
 
-// 🔥 Merchant co 3h (00, 03, 06, 09, 10, 13, 16, 19, 22)
+// 🔥 NAJBLIŻSZY MERCHANT
 function getNextMerchant() {
   const now = getNow();
-  const hour = now.getHours();
+  const currentHour = now.getHours();
 
-  let nextHour = Math.ceil(hour / 3) * 3;
+  let nextHour = MERCHANT_HOURS.find(h => h > currentHour);
 
   const next = new Date(now);
-  next.setMinutes(0, 0, 0);
 
-  if (nextHour >= 24) nextHour = 0;
-
-  next.setHours(nextHour);
-
-  if (next <= now) {
-    next.setHours(nextHour + 3);
+  if (nextHour !== undefined) {
+    next.setHours(nextHour, 0, 0, 0);
+  } else {
+    next.setDate(next.getDate() + 1);
+    next.setHours(MERCHANT_HOURS[0], 0, 0, 0);
   }
 
   return next;
 }
 
+// ===== COUNTDOWN =====
 function getCountdown() {
   const now = getNow();
   const next = getNextMerchant();
 
   const diff = next - now;
 
-  const m = Math.floor(diff / 60000);
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
   const s = Math.floor((diff % 60000) / 1000);
 
+  if (h > 0) return `${h}h ${m}m`;
   return `${m}m ${s}s`;
 }
 
@@ -166,13 +170,16 @@ async function startEventSystem(client) {
 
   setInterval(async () => {
     const now = getNow();
-    const next = getNextMerchant();
 
-    const diff = next - now;
-    const minutes = Math.floor(diff / 60000);
+    const currentHour = now.getHours();
+    const currentMin = now.getMinutes();
 
-    // 🔔 5 min before
-    if (minutes === 5 && lastPing !== "pre") {
+    // ===== 5 MIN BEFORE =====
+    if (
+      MERCHANT_HOURS.includes(currentHour) &&
+      currentMin === 55 &&
+      lastPing !== "pre"
+    ) {
       lastPing = "pre";
 
       await channel.send({
@@ -180,8 +187,12 @@ async function startEventSystem(client) {
       }).catch(()=>{});
     }
 
-    // 🚀 start
-    if (minutes === 0 && lastPing !== "start") {
+    // ===== START =====
+    if (
+      MERCHANT_HOURS.includes(currentHour) &&
+      currentMin === 0 &&
+      lastPing !== "start"
+    ) {
       lastPing = "start";
 
       await channel.send({
@@ -196,8 +207,8 @@ async function startEventSystem(client) {
       }).catch(()=>{});
     }
 
-    // reset blokady
-    if (minutes > 5) {
+    // reset
+    if (currentMin > 5) {
       lastPing = null;
     }
 
