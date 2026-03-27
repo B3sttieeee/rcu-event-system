@@ -3,13 +3,15 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder
+  ActionRowBuilder,
+  PermissionFlagsBits
 } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Tworzy embed (formularz)')
+    .setDescription('📦 Tworzy embed (formularz)')
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(opt =>
       opt.setName('kanal')
         .setDescription('Kanał docelowy')
@@ -27,36 +29,42 @@ module.exports = {
     const title = new TextInputBuilder()
       .setCustomId('title')
       .setLabel('Tytuł')
-      .setStyle(TextInputStyle.Short);
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false);
 
     const description = new TextInputBuilder()
       .setCustomId('description')
-      .setLabel('Opis (emoji 🎉 OK)')
-      .setStyle(TextInputStyle.Paragraph);
+      .setLabel('Opis (emoji 🎉)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(true) // 🔥 HACK (musi być 1 required)
+      .setPlaceholder('Wpisz "." jeśli nie chcesz opisu');
 
     const color = new TextInputBuilder()
       .setCustomId('color')
       .setLabel('Kolor HEX (#ff0000)')
-      .setStyle(TextInputStyle.Short);
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false);
 
     const author = new TextInputBuilder()
       .setCustomId('author')
       .setLabel('Autor: nazwa | iconURL')
       .setStyle(TextInputStyle.Short)
-      .setPlaceholder('Np: Admin | https://...');
+      .setRequired(false)
+      .setPlaceholder('Admin | https://...');
 
-    const fields = new TextInputBuilder()
-      .setCustomId('fields')
-      .setLabel('Pola: nazwa|wartość|inline ; ...')
-      .setStyle(TextInputStyle.Paragraph)
-      .setPlaceholder('Nagroda|Nitro 🎁|true; Czas|24h|true');
+    const image = new TextInputBuilder()
+      .setCustomId('image')
+      .setLabel('GIF / obraz URL')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setPlaceholder('https://i.imgur.com/...gif');
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(title),
       new ActionRowBuilder().addComponents(description),
       new ActionRowBuilder().addComponents(color),
       new ActionRowBuilder().addComponents(author),
-      new ActionRowBuilder().addComponents(fields)
+      new ActionRowBuilder().addComponents(image)
     );
 
     await interaction.showModal(modal);
