@@ -2,13 +2,21 @@ const { EmbedBuilder } = require('discord.js');
 
 module.exports = {
   name: 'interactionCreate',
-  async execute(interaction) {
+
+  async execute(interaction, client) {
 
     if (!interaction.isModalSubmit()) return;
     if (!interaction.customId.startsWith('embedModal_')) return;
 
     const channelId = interaction.customId.split('_')[1];
     const channel = interaction.guild.channels.cache.get(channelId);
+
+    if (!channel) {
+      return interaction.reply({
+        content: '❌ Nie znaleziono kanału!',
+        ephemeral: true
+      });
+    }
 
     const title = interaction.fields.getTextInputValue('title');
     const description = interaction.fields.getTextInputValue('description');
@@ -24,9 +32,10 @@ module.exports = {
     // AUTHOR
     if (authorRaw) {
       const [name, iconURL] = authorRaw.split('|');
+
       embed.setAuthor({
         name: name?.trim(),
-        iconURL: iconURL?.trim() || null
+        iconURL: iconURL?.trim() || undefined
       });
     }
 
@@ -52,6 +61,8 @@ module.exports = {
       ephemeral: true
     });
 
-    await channel.send({ embeds: [embed] });
+    await channel.send({
+      embeds: [embed]
+    });
   }
 };
