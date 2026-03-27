@@ -211,7 +211,7 @@ async function reroll(client, messageId) {
 
   const winner = data.users[Math.floor(Math.random() * data.users.length)];
 
-  const channel = await client.channels.fetch(data.channelId).catch(()=>null);
+  const channel = await client.channels.fetch(data.channelId).catch(() => null);
   if (channel) {
     await channel.send(`🎉 Nowy zwycięzca: <@${winner}>`);
   }
@@ -246,7 +246,7 @@ async function handleGiveaway(interaction) {
 
     interaction.message.edit({
       embeds: [buildEmbed(data)]
-    }).catch(()=>{});
+    }).catch(() => {});
   }
 
   if (interaction.customId === "gw_leave") {
@@ -258,7 +258,7 @@ async function handleGiveaway(interaction) {
 
     interaction.message.edit({
       embeds: [buildEmbed(data)]
-    }).catch(()=>{});
+    }).catch(() => {});
   }
 }
 
@@ -267,8 +267,4 @@ module.exports = {
   handleGiveaway,
   loadGiveaways,
   reroll
-};
-  handleGiveaway,
-  loadGiveaways,
-  resumeGiveaway
 };
