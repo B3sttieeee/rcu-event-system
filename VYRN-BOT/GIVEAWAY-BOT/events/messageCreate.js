@@ -5,11 +5,7 @@ const {
 
 const {
   addXP,
-  loadConfig,
-  setMessageXP,
-  setVoiceXP,
-  setLengthBonus,
-  setGlobalMultiplier
+  loadConfig
 } = require("../utils/levelSystem");
 
 const fs = require("fs");
@@ -18,6 +14,7 @@ const fs = require("fs");
 const PREFIX = ".";
 const LEVEL_CHANNEL = "1475999590716018719";
 
+// 🔥 TEN SAM PLIK CO LEVEL SYSTEM
 const DB_PATH = "/data/levels.json";
 
 const cooldown = new Map();
@@ -28,6 +25,7 @@ function loadDB() {
   return JSON.parse(fs.readFileSync(DB_PATH));
 }
 
+// ===== XP FORMULA =====
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
@@ -43,11 +41,11 @@ module.exports = {
     const isCommand = message.content.startsWith(PREFIX);
 
     // =========================
-    // 💬 KOMENDY (NAJPIERW)
+    // 💬 KOMENDY
     // =========================
     if (isCommand) {
       const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-      const cmd = args.shift().toLowerCase();
+      const cmd = args.shift()?.toLowerCase();
 
       const db = loadDB();
       const data = db.xp[message.author.id] || { xp: 0, level: 0 };
@@ -55,13 +53,18 @@ module.exports = {
       // ===== RANK =====
       if (cmd === "rank" || cmd === "r") {
         const needed = neededXP(data.level);
-        const progress = Math.floor((data.xp / needed) * 100);
+        const progress = Math.min(
+          100,
+          Math.floor((data.xp / needed) * 100)
+        );
 
-        const barSize = 10;
+        const barSize = 12;
         const filled = Math.round((progress / 100) * barSize);
         const empty = barSize - filled;
 
-        const bar = "🟩".repeat(filled) + "⬛".repeat(empty);
+        const bar =
+          "🟩".repeat(filled) +
+          "⬛".repeat(empty);
 
         const cfg = loadConfig();
         const hasBoost = message.member.roles.cache.has("1476000398107217980");
@@ -69,68 +72,68 @@ module.exports = {
         const embed = new EmbedBuilder()
           .setColor("#0f172a")
           .setAuthor({
-            name: `${message.author.username} • Level ${data.level}`,
+            name: `${message.author.username}`,
             iconURL: message.author.displayAvatarURL()
           })
-          .setThumbnail(message.author.displayAvatarURL())
           .setDescription(
-            `🏆 **LEVEL SYSTEM**\n\n` +
-            `📊 ${bar} **${progress}%**\n` +
+            `🔥 **LEVEL ${data.level}**\n\n` +
+            `${bar} **${progress}%**\n` +
             `\`${data.xp} / ${needed} XP\`\n\n` +
+
             `⚡ Boost: ${
               hasBoost
                 ? `✅ Active (1.75x)`
                 : `❌ No Active`
             }\n` +
-            `🌍 Global: ${cfg.globalMultiplier}x`
+
+            `🌍 Global Multiplier: \`${cfg.globalMultiplier}x\``
           )
-          .setFooter({
-            text: "VYRN System • Grind Mode 🔥"
-          });
+          .setThumbnail(message.author.displayAvatarURL())
+          .setFooter({ text: "VYRN • Level System" });
 
         return message.reply({ embeds: [embed] });
       }
 
-      // ===== ADMIN ONLY =====
+      // ===== ADMIN =====
       if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
 
       if (cmd === "setxp") {
         const val = parseInt(args[0]);
-        if (isNaN(val)) return message.reply("❌ Usage: .setxp 5");
+        if (isNaN(val)) return message.reply("❌ .setxp 5");
 
-        setMessageXP(val);
-        return message.reply(`✅ Message XP set to ${val}`);
+        require("../utils/levelSystem").setMessageXP(val);
+        return message.reply(`✅ Message XP: ${val}`);
       }
 
       if (cmd === "setvcxp") {
         const val = parseInt(args[0]);
-        if (isNaN(val)) return message.reply("❌ Usage: .setvcxp 5");
+        if (isNaN(val)) return message.reply("❌ .setvcxp 5");
 
-        setVoiceXP(val);
-        return message.reply(`✅ Voice XP set to ${val}`);
+        require("../utils/levelSystem").setVoiceXP(val);
+        return message.reply(`✅ Voice XP: ${val}`);
       }
 
       if (cmd === "setlengthbonus") {
         const val = parseFloat(args[0]);
-        if (isNaN(val)) return message.reply("❌ Usage: .setlengthbonus 0.3");
+        if (isNaN(val)) return message.reply("❌ .setlengthbonus 0.3");
 
-        setLengthBonus(val);
-        return message.reply(`✅ Length bonus set to ${val}`);
+        require("../utils/levelSystem").setLengthBonus(val);
+        return message.reply(`✅ Bonus: ${val}`);
       }
 
       if (cmd === "multixp") {
         const val = parseFloat(args[0]);
-        if (isNaN(val)) return message.reply("❌ Usage: .multixp 2");
+        if (isNaN(val)) return message.reply("❌ .multixp 2");
 
-        setGlobalMultiplier(val);
-        return message.reply(`🔥 Global multiplier set to ${val}x`);
+        require("../utils/levelSystem").setGlobalMultiplier(val);
+        return message.reply(`🔥 Multiplier: ${val}x`);
       }
 
       return;
     }
 
     // =========================
-    // 💰 XP SYSTEM (TYLKO NORMALNE WIADOMOŚCI)
+    // 💰 XP SYSTEM
     // =========================
 
     const now = Date.now();
@@ -139,7 +142,7 @@ module.exports = {
       if (now < cooldown.get(message.author.id)) return;
     }
 
-    cooldown.set(message.author.id, now + 10000); // 10s
+    cooldown.set(message.author.id, now + 8000); // 🔥 8s cooldown
 
     const cfg = loadConfig();
 
@@ -149,21 +152,24 @@ module.exports = {
       message.content.length
     );
 
+    // ===== DEBUG (możesz usunąć)
+    console.log(`[XP] ${message.author.username} +${result.gained}`);
+
     // ===== LEVEL UP =====
     if (result.leveledUp) {
       const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
 
       if (channel) {
         const embed = new EmbedBuilder()
-          .setColor("#facc15")
+          .setColor("#22c55e")
           .setAuthor({
-            name: `${message.author.username} • Level Up`,
+            name: `${message.author.username}`,
             iconURL: message.author.displayAvatarURL()
           })
           .setDescription(
-            `🏆 **LEVEL UP!**\n` +
-            `🎯 Level **${result.level}**\n\n` +
-            `➕ +${result.gained} XP`
+            `🚀 **LEVEL UP!**\n\n` +
+            `🏆 Level: **${result.level}**\n` +
+            `➕ Gained: **${result.gained} XP**`
           )
           .setThumbnail(message.author.displayAvatarURL());
 
