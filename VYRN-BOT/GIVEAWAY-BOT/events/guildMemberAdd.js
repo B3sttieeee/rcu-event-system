@@ -32,7 +32,7 @@ module.exports = {
         const embed = new EmbedBuilder()
           .setColor("#b8a672")
           .setAuthor({
-            name: "VYRN SYSTEM",
+            name: "VYRN CLAN",
             iconURL: member.guild.iconURL()
           })
           .setDescription(
