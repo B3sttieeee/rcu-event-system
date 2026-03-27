@@ -10,23 +10,20 @@ const fs = require("fs");
 
 // ===== CONFIG =====
 const CHANNEL_ID = "1484937784283369502";
-
-// ===== PANEL IMAGE =====
-const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
-
-// ===== MERCHANT DATA =====
-const EVENT = {
-  name: "BOSS / HONEY MERCHANT",
-  color: "#ef4444",
-  image: "https://i.imgur.com/NEW_IMAGE.png", // 🔥 podmień
-  tip: "Przygotuj walutę!"
-};
-
-// ===== ROLE =====
 const ROLE_ID = "1476000993660502139";
 
-// ===== GODZINY MERCHANT =====
-const MERCHANT_HOURS = [1, 4, 7, 10, 13, 16, 19, 22];
+// 🔥 GODZINY MERCHANTA
+const MERCHANT_HOURS = [1,4,7,10,13,16,19,22];
+
+// ===== IMAGE =====
+const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
+
+const EVENT = {
+  name: "HONEY MERCHANT",
+  color: "#ef4444",
+  image: "https://imgur.com/GQIFzx7.png",
+  tip: "Przygotuj walutę!"
+};
 
 // ===== DB =====
 const DB_PATH = "./eventDB.json";
@@ -49,53 +46,46 @@ function getNow() {
   );
 }
 
-// 🔥 NAJBLIŻSZY MERCHANT
 function getNextMerchant() {
   const now = getNow();
-  const currentHour = now.getHours();
+  const hour = now.getHours();
 
-  let nextHour = MERCHANT_HOURS.find(h => h > currentHour);
-
-  const next = new Date(now);
-
-  if (nextHour !== undefined) {
-    next.setHours(nextHour, 0, 0, 0);
-  } else {
-    next.setDate(next.getDate() + 1);
-    next.setHours(MERCHANT_HOURS[0], 0, 0, 0);
-  }
-
-  return next;
+  const next = MERCHANT_HOURS.find(h => h > hour);
+  return next !== undefined ? next : MERCHANT_HOURS[0];
 }
 
-// ===== COUNTDOWN =====
 function getCountdown() {
   const now = getNow();
-  const next = getNextMerchant();
 
-  const diff = next - now;
+  let nextHour = getNextMerchant();
+  let target = new Date(now);
+  target.setHours(nextHour, 0, 0, 0);
 
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  const s = Math.floor((diff % 60000) / 1000);
+  if (nextHour <= now.getHours()) {
+    target.setDate(target.getDate() + 1);
+  }
 
-  if (h > 0) return `${h}h ${m}m`;
-  return `${m}m ${s}s`;
+  const diff = target - now;
+
+  const total = Math.floor(diff / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+
+  return `${h}h ${m}m ${s}s`;
 }
 
-// ===== PANEL EMBED =====
+// ===== PANEL =====
 function panelEmbed() {
   return new EmbedBuilder()
     .setColor(EVENT.color)
-    .setTitle("✨ MERCHANT PANEL")
+    .setTitle("🍯 MERCHANT TRACKER")
     .setDescription(
-`🛒 **Merchant Tracker**
+`⏳ **Next Merchant**
+\`${getNextMerchant()}:00\`
 
-⏳ Następny merchant za:
-\`${getCountdown()}\`
-
-🎁 Event:
-\`${EVENT.name}\``
+🕐 Countdown:
+\`${getCountdown()}\``
     )
     .setImage(PANEL_IMAGE);
 }
@@ -110,11 +100,6 @@ function getButtons() {
         .setStyle(ButtonStyle.Secondary),
 
       new ButtonBuilder()
-        .setCustomId("roles")
-        .setLabel("🎭 Roles")
-        .setStyle(ButtonStyle.Secondary),
-
-      new ButtonBuilder()
         .setCustomId("dm")
         .setLabel("📩 Notifications")
         .setStyle(ButtonStyle.Secondary)
@@ -122,25 +107,14 @@ function getButtons() {
   ];
 }
 
-// ===== MENUS =====
-function rolesMenu() {
-  return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("roles_menu")
-      .setPlaceholder("Select role")
-      .addOptions([
-        { label: "MERCHANT", value: "merchant" }
-      ])
-  );
-}
-
+// ===== DM MENU =====
 function dmMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
-      .setPlaceholder("Select DM")
+      .setPlaceholder("DM notifications")
       .addOptions([
-        { label: "MERCHANT", value: "merchant" }
+        { label: "Merchant Alerts", value: "merchant" }
       ])
   );
 }
@@ -166,34 +140,48 @@ async function startPanel(client) {
 async function startEventSystem(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
-  let lastPing = null;
+  let lastPrePing = null;
+  let lastStartPing = null;
 
   setInterval(async () => {
     const now = getNow();
+    const hour = now.getHours();
+    const minute = now.getMinutes();
 
-    const currentHour = now.getHours();
-    const currentMin = now.getMinutes();
+    const key = `${hour}`;
 
     // ===== 5 MIN BEFORE =====
     if (
-      MERCHANT_HOURS.includes(currentHour) &&
-      currentMin === 55 &&
-      lastPing !== "pre"
+      MERCHANT_HOURS.includes(hour) &&
+      minute === 55 &&
+      lastPrePing !== key
     ) {
-      lastPing = "pre";
+      lastPrePing = key;
 
       await channel.send({
         content: `<@&${ROLE_ID}> ⏳ MERCHANT ZA 5 MIN!`
-      }).catch(()=>{});
+      });
+
+      // 🔥 DM SEND
+      const db = loadDB();
+
+      for (const userId in db.dm) {
+        if (db.dm[userId].includes("merchant")) {
+          const user = await client.users.fetch(userId).catch(()=>null);
+          if (!user) continue;
+
+          user.send("⏳ Merchant za 5 minut!").catch(()=>{});
+        }
+      }
     }
 
     // ===== START =====
     if (
-      MERCHANT_HOURS.includes(currentHour) &&
-      currentMin === 0 &&
-      lastPing !== "start"
+      MERCHANT_HOURS.includes(hour) &&
+      minute === 0 &&
+      lastStartPing !== key
     ) {
-      lastPing = "start";
+      lastStartPing = key;
 
       await channel.send({
         content: `<@&${ROLE_ID}>`,
@@ -204,12 +192,25 @@ async function startEventSystem(client) {
             .setDescription(`💡 ${EVENT.tip}`)
             .setImage(EVENT.image)
         ]
-      }).catch(()=>{});
+      });
+
+      // 🔥 DM SEND
+      const db = loadDB();
+
+      for (const userId in db.dm) {
+        if (db.dm[userId].includes("merchant")) {
+          const user = await client.users.fetch(userId).catch(()=>null);
+          if (!user) continue;
+
+          user.send("🚀 Merchant wystartował!").catch(()=>{});
+        }
+      }
     }
 
-    // reset
-    if (currentMin > 5) {
-      lastPing = null;
+    // RESET
+    if (minute === 10) {
+      lastPrePing = null;
+      lastStartPing = null;
     }
 
   }, 10000);
@@ -225,40 +226,25 @@ async function handleEventInteraction(interaction) {
     });
   }
 
-  if (interaction.customId === "roles") {
-    return interaction.reply({
-      content: "🎭 Role:",
-      components: [rolesMenu()],
-      ephemeral: true
-    });
-  }
-
   if (interaction.customId === "dm") {
     return interaction.reply({
-      content: "📩 Powiadomienia DM:",
+      content: "📩 Select DM notifications:",
       components: [dmMenu()],
       ephemeral: true
     });
   }
 
-  if (interaction.isStringSelectMenu() && interaction.customId === "roles_menu") {
-    const member = await interaction.guild.members.fetch(interaction.user.id);
-
-    await member.roles.remove(ROLE_ID).catch(()=>{});
-
-    if (interaction.values.includes("merchant")) {
-      await member.roles.add(ROLE_ID).catch(()=>{});
-    }
-
-    return interaction.reply({ content: "✅ Role updated", ephemeral: true });
-  }
-
   if (interaction.isStringSelectMenu() && interaction.customId === "dm_menu") {
     const db = loadDB();
+
     db.dm[interaction.user.id] = interaction.values;
+
     saveDB(db);
 
-    return interaction.reply({ content: "✅ DM updated", ephemeral: true });
+    return interaction.reply({
+      content: "✅ Ustawiono DM!",
+      ephemeral: true
+    });
   }
 }
 
