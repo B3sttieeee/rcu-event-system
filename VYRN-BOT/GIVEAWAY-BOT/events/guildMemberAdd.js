@@ -50,7 +50,7 @@ module.exports = {
 🔥 Good Luck!`
           )
           .setThumbnail(member.user.displayAvatarURL())
-          .setImage("https://images-ext-1.discordapp.net/external/J7ny1pxWPeRun0lz-u4Ni-rWUixUcRy0S8WdARTxz1s/https/media.tenor.com/uN8w6oRpxg0AAAPo/oden-one-piece.mp4")
+          .setImage("https://images-ext-1.discordapp.net/external/Jc1NogwAbDFJXWYk2uQ-yxEGTaK83Mo6ajhBhSsMj0I/https/media.tenor.com/yNFHYMSsqs0AAAPo/captain-jack-sparrow-pirates-of-the-carribbean.mp4")
           .setFooter({ text: "Administrations | VYRN" });
 
         await channel.send({ embeds: [embed] });
