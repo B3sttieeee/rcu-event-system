@@ -1,65 +1,142 @@
-const { EmbedBuilder } = require('discord.js');
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
+} = require('discord.js');
 
 module.exports = {
   name: 'interactionCreate',
 
   async execute(interaction, client) {
 
-    if (!interaction.isModalSubmit()) return;
-    if (!interaction.customId.startsWith('embedModal_')) return;
+    // =========================
+    // 📩 MODAL SUBMIT
+    // =========================
+    if (interaction.isModalSubmit()) {
 
-    const channelId = interaction.customId.split('_')[1];
-    const channel = interaction.guild.channels.cache.get(channelId);
+      if (!interaction.customId.startsWith('embedModal_')) return;
 
-    if (!channel) {
+      const channelId = interaction.customId.split('_')[1];
+      const channel = interaction.guild.channels.cache.get(channelId);
+
+      let title = interaction.fields.getTextInputValue('title');
+      let description = interaction.fields.getTextInputValue('description');
+      let color = interaction.fields.getTextInputValue('color') || '#2b2d31';
+      let authorRaw = interaction.fields.getTextInputValue('author');
+      let image = interaction.fields.getTextInputValue('image');
+
+      if (description === ".") description = "";
+
+      const embed = new EmbedBuilder().setColor(color);
+
+      if (title) embed.setTitle(title);
+      if (description) embed.setDescription(description);
+
+      if (authorRaw) {
+        const [name, iconURL] = authorRaw.split('|');
+        embed.setAuthor({
+          name: name?.trim(),
+          iconURL: iconURL?.trim() || undefined
+        });
+      }
+
+      if (image) embed.setImage(image);
+
+      // 🔥 BUTTONY
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`sendEmbed_${channelId}`)
+          .setLabel('📨 Wyślij')
+          .setStyle(ButtonStyle.Success),
+
+        new ButtonBuilder()
+          .setCustomId(`editEmbed_${channelId}`)
+          .setLabel('✏️ Edytuj')
+          .setStyle(ButtonStyle.Secondary)
+      );
+
       return interaction.reply({
-        content: '❌ Nie znaleziono kanału!',
+        content: '👀 Podgląd embeda:',
+        embeds: [embed],
+        components: [row],
         ephemeral: true
       });
     }
 
-    let title = interaction.fields.getTextInputValue('title');
-    let description = interaction.fields.getTextInputValue('description');
-    let color = interaction.fields.getTextInputValue('color') || '#2b2d31';
-    let authorRaw = interaction.fields.getTextInputValue('author');
-    let image = interaction.fields.getTextInputValue('image');
+    // =========================
+    // 🔘 BUTTONY
+    // =========================
+    if (interaction.isButton()) {
 
-    // 🔥 usuwa "." hack
-    if (description === ".") description = "";
+      // WYŚLIJ
+      if (interaction.customId.startsWith('sendEmbed_')) {
 
-    const embed = new EmbedBuilder().setColor(color);
+        const channelId = interaction.customId.split('_')[1];
+        const channel = interaction.guild.channels.cache.get(channelId);
 
-    if (title) embed.setTitle(title);
-    if (description) embed.setDescription(description);
+        const embed = interaction.message.embeds[0];
 
-    // AUTHOR
-    if (authorRaw) {
-      const [name, iconURL] = authorRaw.split('|');
+        await channel.send({ embeds: [embed] });
 
-      embed.setAuthor({
-        name: name?.trim(),
-        iconURL: iconURL?.trim() || undefined
-      });
-    }
-
-    // 🔥 GIF FIX (Tenor itp.)
-    if (image) {
-      let fixedImage = image;
-
-      if (image.includes("tenor.com")) {
-        fixedImage = image.replace("https://tenor.com/view/", "https://media.tenor.com/") + ".gif";
+        return interaction.update({
+          content: '✅ Wysłano!',
+          components: [],
+          embeds: []
+        });
       }
 
-      embed.setImage(fixedImage);
+      // EDYTUJ (otwiera modal od nowa)
+      if (interaction.customId.startsWith('editEmbed_')) {
+
+        const channelId = interaction.customId.split('_')[1];
+        const oldEmbed = interaction.message.embeds[0];
+
+        const modal = new ModalBuilder()
+          .setCustomId(`embedModal_${channelId}`)
+          .setTitle('✏️ Edytuj embed');
+
+        const title = new TextInputBuilder()
+          .setCustomId('title')
+          .setLabel('Tytuł')
+          .setStyle(TextInputStyle.Short)
+          .setValue(oldEmbed.title || '');
+
+        const description = new TextInputBuilder()
+          .setCustomId('description')
+          .setLabel('Opis')
+          .setStyle(TextInputStyle.Paragraph)
+          .setValue(oldEmbed.description || '.');
+
+        const color = new TextInputBuilder()
+          .setCustomId('color')
+          .setLabel('Kolor HEX')
+          .setStyle(TextInputStyle.Short)
+          .setValue(oldEmbed.hexColor || '#2b2d31');
+
+        const author = new TextInputBuilder()
+          .setCustomId('author')
+          .setLabel('Autor (nazwa|iconURL)')
+          .setStyle(TextInputStyle.Short);
+
+        const image = new TextInputBuilder()
+          .setCustomId('image')
+          .setLabel('Obraz URL')
+          .setStyle(TextInputStyle.Short);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(title),
+          new ActionRowBuilder().addComponents(description),
+          new ActionRowBuilder().addComponents(color),
+          new ActionRowBuilder().addComponents(author),
+          new ActionRowBuilder().addComponents(image)
+        );
+
+        return interaction.showModal(modal);
+      }
     }
-
-    await interaction.reply({
-      content: '✅ Embed wysłany!',
-      ephemeral: true
-    });
-
-    await channel.send({
-      embeds: [embed]
-    });
   }
 };
