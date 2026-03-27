@@ -1,6 +1,7 @@
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 require("dotenv").config();
 const fs = require("fs");
+const path = require("path");
 
 // ===== CLIENT =====
 const client = new Client({
@@ -9,66 +10,123 @@ const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates // 🔥 VC XP (WAŻNE)
+    GatewayIntentBits.GuildVoiceStates
   ]
 });
 
-// ===== COMMANDS MAP =====
+// ===== COMMANDS =====
 client.commands = new Collection();
 
 // =========================
-// 📦 LOAD COMMANDS (RAZ!)
+// 📦 LOAD COMMANDS
 // =========================
-const commandFiles = fs.readdirSync("./commands").filter(file => file.endsWith(".js"));
+const commandsPath = path.join(__dirname, "commands");
 
-for (const file of commandFiles) {
-  try {
-    const command = require(`./commands/${file}`);
+if (!fs.existsSync(commandsPath)) {
+  console.log("❌ Brak folderu /commands");
+} else {
+  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
 
-    if (command?.data?.name) {
+  for (const file of commandFiles) {
+    const filePath = path.join(commandsPath, file);
+
+    try {
+      const command = require(filePath);
+
+      if (!command?.data?.name || typeof command.execute !== "function") {
+        console.log(`⚠️ Invalid command: ${file}`);
+        continue;
+      }
+
       client.commands.set(command.data.name, command);
       console.log(`📦 Loaded command: ${command.data.name}`);
-    } else {
-      console.log(`⚠️ Invalid command file: ${file}`);
-    }
 
-  } catch (err) {
-    console.log(`❌ Error loading command ${file}:`, err);
+    } catch (err) {
+      console.log(`❌ Error loading command ${file}:`, err);
+    }
   }
 }
 
 // =========================
 // ⚡ LOAD EVENTS
 // =========================
-const eventFiles = fs.readdirSync("./events").filter(file => file.endsWith(".js"));
+const eventsPath = path.join(__dirname, "events");
 
-for (const file of eventFiles) {
-  try {
-    const event = require(`./events/${file}`);
+if (!fs.existsSync(eventsPath)) {
+  console.log("❌ Brak folderu /events");
+} else {
+  const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
 
-    if (!event.name || typeof event.execute !== "function") {
-      console.log(`⚠️ Invalid event file: ${file}`);
-      continue;
+  for (const file of eventFiles) {
+    const filePath = path.join(eventsPath, file);
+
+    try {
+      const event = require(filePath);
+
+      if (!event.name || typeof event.execute !== "function") {
+        console.log(`⚠️ Invalid event: ${file}`);
+        continue;
+      }
+
+      if (event.once) {
+        client.once(event.name, (...args) => event.execute(...args, client));
+      } else {
+        client.on(event.name, (...args) => event.execute(...args, client));
+      }
+
+      console.log(`✅ Loaded event: ${event.name}`);
+
+    } catch (err) {
+      console.log(`❌ Error loading event ${file}:`, err);
     }
-
-    if (event.once) {
-      client.once(event.name, (...args) => event.execute(...args, client));
-    } else {
-      client.on(event.name, (...args) => event.execute(...args, client));
-    }
-
-    console.log(`✅ Loaded event: ${event.name}`);
-
-  } catch (err) {
-    console.log(`❌ Error loading event ${file}:`, err);
   }
 }
 
 // =========================
-// 🔥 READY LOG
+// 🔥 BACKUP HANDLER (WAŻNE!)
+// jeśli nie masz interactionCreate w events
+// =========================
+client.on("interactionCreate", async (interaction) => {
+  try {
+
+    // SLASH COMMAND
+    if (interaction.isChatInputCommand()) {
+      const command = client.commands.get(interaction.commandName);
+      if (!command) return;
+
+      await command.execute(interaction, client);
+    }
+
+  } catch (err) {
+    console.error("❌ Interaction error:", err);
+
+    if (interaction.replied || interaction.deferred) {
+      interaction.followUp({ content: "❌ Błąd!", ephemeral: true });
+    } else {
+      interaction.reply({ content: "❌ Błąd!", ephemeral: true });
+    }
+  }
+});
+
+// =========================
+// 🔥 READY
 // =========================
 client.once("ready", () => {
-  console.log(`🔥 Logged in as ${client.user.tag}`);
+  console.log("=================================");
+  console.log(`🔥 Zalogowano jako: ${client.user.tag}`);
+  console.log(`📊 Serwery: ${client.guilds.cache.size}`);
+  console.log("=================================");
+});
+
+// =========================
+// ❌ GLOBAL ERROR HANDLING
+// =========================
+process.on("unhandledRejection", err => {
+  console.error("❌ Unhandled Rejection:", err);
+});
+
+process.on("uncaughtException", err => {
+  console.error("❌ Uncaught Exception:", err);
 });
 
 // =========================
