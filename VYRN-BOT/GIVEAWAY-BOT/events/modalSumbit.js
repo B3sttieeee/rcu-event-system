@@ -18,11 +18,14 @@ module.exports = {
       });
     }
 
-    const title = interaction.fields.getTextInputValue('title');
-    const description = interaction.fields.getTextInputValue('description');
-    const color = interaction.fields.getTextInputValue('color') || '#2b2d31';
-    const authorRaw = interaction.fields.getTextInputValue('author');
-    const fieldsRaw = interaction.fields.getTextInputValue('fields');
+    let title = interaction.fields.getTextInputValue('title');
+    let description = interaction.fields.getTextInputValue('description');
+    let color = interaction.fields.getTextInputValue('color') || '#2b2d31';
+    let authorRaw = interaction.fields.getTextInputValue('author');
+    let image = interaction.fields.getTextInputValue('image');
+
+    // 🔥 usuwa "." hack
+    if (description === ".") description = "";
 
     const embed = new EmbedBuilder().setColor(color);
 
@@ -39,21 +42,15 @@ module.exports = {
       });
     }
 
-    // FIELDS
-    if (fieldsRaw) {
-      const fields = fieldsRaw.split(';');
+    // 🔥 GIF FIX (Tenor itp.)
+    if (image) {
+      let fixedImage = image;
 
-      for (let field of fields) {
-        const [name, value, inline] = field.split('|');
-
-        if (!name || !value) continue;
-
-        embed.addFields({
-          name: name.trim(),
-          value: value.trim(),
-          inline: inline?.trim() === 'true'
-        });
+      if (image.includes("tenor.com")) {
+        fixedImage = image.replace("https://tenor.com/view/", "https://media.tenor.com/") + ".gif";
       }
+
+      embed.setImage(fixedImage);
     }
 
     await interaction.reply({
