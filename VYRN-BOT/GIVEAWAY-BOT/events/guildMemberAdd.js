@@ -30,7 +30,7 @@ module.exports = {
       } else {
 
         const embed = new EmbedBuilder()
-          .setColor("#ff6600")
+          .setColor("#b8a672")
           .setAuthor({
             name: "VYRN SYSTEM",
             iconURL: member.guild.iconURL()
