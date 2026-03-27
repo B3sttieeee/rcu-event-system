@@ -7,7 +7,7 @@ const eventSystem = require("../utils/eventSystem");
 const { loadGiveaways } = require("../utils/giveawaySystem");
 const levelSystem = require("../utils/levelSystem");
 
-// 🔐 SAFE IMPORT (żeby bot nie crashował)
+// 🔐 SAFE IMPORT
 let resetDaily = null;
 try {
   ({ resetDaily } = require("../utils/profileSystem"));
@@ -16,7 +16,7 @@ try {
 }
 
 // ===== CONFIG =====
-const GUILD_ID = "1475521240058953830"; // 🔥 WAŻNE
+const GUILD_ID = "1475521240058953830";
 
 // ===== LOGGER =====
 function log(type, msg) {
@@ -37,6 +37,8 @@ async function loadCommands() {
 
   for (const file of files) {
     try {
+      delete require.cache[require.resolve(`../commands/${file}`)];
+
       const cmd = require(`../commands/${file}`);
 
       if (cmd?.data) {
@@ -58,13 +60,12 @@ async function registerCommands(client, commands) {
   try {
     const rest = new REST({ version: "10" }).setToken(process.env.TOKEN);
 
-    // 🔥 GUILD COMMANDS = NATYCHMIAST DZIAŁA
     await rest.put(
       Routes.applicationGuildCommands(client.user.id, GUILD_ID),
       { body: commands }
     );
 
-    log("✅", `Slash commands deployed instantly (${commands.length})`);
+    log("✅", `Slash commands deployed (${commands.length})`);
 
   } catch (err) {
     log("❌", "Slash register error");
@@ -72,71 +73,63 @@ async function registerCommands(client, commands) {
   }
 }
 
-// ===== SYSTEMS =====
+// ===== INIT SYSTEMS =====
 async function initSystems(client) {
 
-  // 🎫 Ticket
+  // 🎫 TICKETS
   try {
     await createTicketPanel(client);
-    log("🎟", "Ticket panel loaded");
+    log("🎟", "Ticket system ready");
   } catch (err) {
-    log("❌", "Ticket error");
+    log("❌", "Ticket system failed");
     console.log(err);
   }
 
-  // 🎮 Event System
+  // 🎮 EVENTS
   try {
     if (eventSystem) {
+      await eventSystem.startPanel?.(client);
+      await eventSystem.startEventSystem?.(client);
 
-      if (typeof eventSystem.startPanel === "function") {
-        await eventSystem.startPanel(client);
-      }
-
-      if (typeof eventSystem.startEventSystem === "function") {
-        await eventSystem.startEventSystem(client);
-      }
-
-      log("✨", "Event system started");
+      log("✨", "Event system ready");
     }
   } catch (err) {
-    log("❌", "Event system error");
+    log("❌", "Event system failed");
     console.log(err);
   }
 
-  // 🎁 Giveaways
+  // 🎁 GIVEAWAYS
   try {
-    if (typeof loadGiveaways === "function") {
-      await loadGiveaways(client);
-      log("🎁", "Giveaways loaded");
-    }
+    await loadGiveaways?.(client);
+    log("🎁", "Giveaways ready");
   } catch (err) {
-    log("❌", "Giveaway error");
+    log("❌", "Giveaways failed");
     console.log(err);
   }
 
-  // 🎤 Voice XP
+  // 🎤 VOICE XP
   try {
-    if (levelSystem?.startVoiceXP) {
-      levelSystem.startVoiceXP(client);
-      log("🎤", "Voice XP started");
-    }
+    levelSystem?.startVoiceXP?.(client);
+    log("🎤", "Voice XP ready");
   } catch (err) {
-    log("❌", "Voice XP error");
+    log("❌", "Voice XP failed");
     console.log(err);
   }
 
   // 🎯 DAILY RESET
   try {
     if (resetDaily) {
-      resetDaily(); // 🔥 od razu przy starcie
+      resetDaily();
 
       setInterval(() => {
         resetDaily();
-        log("🔄", "Daily quests reset");
+        log("🔄", "Daily reset executed");
       }, 86400000);
+
+      log("🎯", "Daily system ready");
     }
   } catch (err) {
-    log("❌", "Daily reset error");
+    log("❌", "Daily system failed");
   }
 }
 
@@ -146,22 +139,22 @@ module.exports = {
   once: true,
 
   async execute(client) {
-    log("🔥", `${client.user.tag} READY`);
+    log("🔥", `${client.user.tag} logged in`);
 
     try {
-      // 1️⃣ Load commands
+      // 1️⃣ COMMANDS
       const commands = await loadCommands();
 
-      // 2️⃣ Register slash (INSTANT)
+      // 2️⃣ REGISTER
       await registerCommands(client, commands);
 
-      // 3️⃣ Start systems
+      // 3️⃣ SYSTEMS
       await initSystems(client);
 
-      log("🚀", "BOT FULLY READY");
+      log("🚀", "BOT FULLY INITIALIZED");
 
     } catch (err) {
-      log("💀", "CRITICAL READY ERROR");
+      log("💀", "CRITICAL ERROR");
       console.log(err);
     }
   }
