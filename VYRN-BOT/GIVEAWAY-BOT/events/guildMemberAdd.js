@@ -50,7 +50,7 @@ module.exports = {
 🔥 Good Luck!`
           )
           .setThumbnail(member.user.displayAvatarURL())
-          .setImage("https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif")
+          .setImage("https://media1.tenor.com/m/uN8w6oRpxg0AAAAd/oden-one-piece.gif")
           .setFooter({ text: "Administrations | VYRN" });
 
         await channel.send({ embeds: [embed] });
