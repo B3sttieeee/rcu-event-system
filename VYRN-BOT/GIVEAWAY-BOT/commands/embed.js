@@ -3,60 +3,64 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder,
-  EmbedBuilder
+  ActionRowBuilder
 } = require('discord.js');
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Tworzy embed przez formularz'),
+    .setDescription('Tworzy embed (zaawansowany)')
+    .addChannelOption(opt =>
+      opt.setName('kanal')
+        .setDescription('Gdzie wysłać embed')
+        .setRequired(false)
+    ),
 
   async execute(interaction) {
 
-    // Tworzenie modala (formularza)
-    const modal = new ModalBuilder()
-      .setCustomId('embedModal')
-      .setTitle('Tworzenie embedu');
+    const channel = interaction.options.getChannel('kanal');
 
-    // POLA
-    const titleInput = new TextInputBuilder()
+    const modal = new ModalBuilder()
+      .setCustomId(`embedModal_${channel?.id || interaction.channel.id}`)
+      .setTitle('Embed Builder');
+
+    const title = new TextInputBuilder()
       .setCustomId('title')
       .setLabel('Tytuł')
       .setStyle(TextInputStyle.Short)
       .setRequired(false);
 
-    const descriptionInput = new TextInputBuilder()
+    const description = new TextInputBuilder()
       .setCustomId('description')
-      .setLabel('Opis (możesz używać emoji 🎉)')
+      .setLabel('Opis (emoji 🎉 działają)')
       .setStyle(TextInputStyle.Paragraph)
       .setRequired(false);
 
-    const colorInput = new TextInputBuilder()
+    const color = new TextInputBuilder()
       .setCustomId('color')
       .setLabel('Kolor HEX (#ff0000)')
       .setStyle(TextInputStyle.Short)
       .setRequired(false);
 
-    const imageInput = new TextInputBuilder()
-      .setCustomId('image')
-      .setLabel('URL obrazka')
+    const author = new TextInputBuilder()
+      .setCustomId('author')
+      .setLabel('Autor (nazwa | iconURL)')
       .setStyle(TextInputStyle.Short)
       .setRequired(false);
 
-    const footerInput = new TextInputBuilder()
-      .setCustomId('footer')
-      .setLabel('Footer')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false);
+    const fields = new TextInputBuilder()
+      .setCustomId('fields')
+      .setLabel('Pola: nazwa|wartość|inline (oddziel ; )')
+      .setStyle(TextInputStyle.Paragraph)
+      .setRequired(false)
+      .setPlaceholder('Np: Nagroda|Nitro 🎁|true; Czas|24h|true');
 
-    // ROWS (max 5!)
     modal.addComponents(
-      new ActionRowBuilder().addComponents(titleInput),
-      new ActionRowBuilder().addComponents(descriptionInput),
-      new ActionRowBuilder().addComponents(colorInput),
-      new ActionRowBuilder().addComponents(imageInput),
-      new ActionRowBuilder().addComponents(footerInput)
+      new ActionRowBuilder().addComponents(title),
+      new ActionRowBuilder().addComponents(description),
+      new ActionRowBuilder().addComponents(color),
+      new ActionRowBuilder().addComponents(author),
+      new ActionRowBuilder().addComponents(fields)
     );
 
     await interaction.showModal(modal);
