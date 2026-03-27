@@ -25,7 +25,7 @@ const EVENT_DATA = {
   merchant: {
     name: "BOSS / HONEY MERCHANT",
     color: "#ef4444",
-    image: "https://imgur.com/GQIFzx7.png",
+    image: "https://i.imgur.com/NEW_IMAGE.png", // 🔥 TU DAJ SWOJE NOWE ZDJĘCIE
     tip: "Przygotuj walutę!"
   },
   spin: {
@@ -38,9 +38,7 @@ const EVENT_DATA = {
 
 // ===== ROLE IDs =====
 const ROLES = {
-  egg: "1476000993119568105",
-  merchant: "1476000993660502139",
-  spin: "1484911421903999127"
+  merchant: "1476000993660502139"
 };
 
 // ===== DB =====
@@ -105,7 +103,7 @@ function panelEmbed() {
 \`${EVENT_DATA[next].name}\`
 ⏱️ ${getCountdown()}`
     )
-    .setImage(PANEL_IMAGE); // 🔥 TUTAJ TWOJE ZDJĘCIE PANELU
+    .setImage(PANEL_IMAGE);
 }
 
 // ===== BUTTONS =====
@@ -130,18 +128,16 @@ function getButtons() {
   ];
 }
 
-// ===== MENUS =====
+// ===== MENUS (TYLKO MERCHANT) =====
 function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
       .setPlaceholder("Select roles")
       .setMinValues(0)
-      .setMaxValues(3)
+      .setMaxValues(1)
       .addOptions([
-        { label: "RNG EGG", value: "egg" },
-        { label: "MERCHANT", value: "merchant" },
-        { label: "DEV SPIN", value: "spin" }
+        { label: "MERCHANT", value: "merchant" }
       ])
   );
 }
@@ -152,11 +148,9 @@ function dmMenu() {
       .setCustomId("dm_menu")
       .setPlaceholder("Select DM notifications")
       .setMinValues(0)
-      .setMaxValues(3)
+      .setMaxValues(1)
       .addOptions([
-        { label: "RNG EGG", value: "egg" },
-        { label: "MERCHANT", value: "merchant" },
-        { label: "DEV SPIN", value: "spin" }
+        { label: "MERCHANT", value: "merchant" }
       ])
   );
 }
@@ -196,8 +190,8 @@ async function startEventSystem(client) {
     const NEXT = getEventByHour((hour + 1) % 24);
     const CURRENT = getEventByHour(hour);
 
-    // ===== 5 MIN BEFORE =====
-    if (min === 55 && lastPrePingHour !== hour) {
+    // ===== 5 MIN BEFORE (TYLKO MERCHANT)
+    if (min === 55 && lastPrePingHour !== hour && NEXT === "merchant") {
       lastPrePingHour = hour;
 
       const data = EVENT_DATA[NEXT];
@@ -208,8 +202,8 @@ async function startEventSystem(client) {
       }).catch(()=>{});
     }
 
-    // ===== START =====
-    if (min === 0 && lastStartHour !== hour) {
+    // ===== START (TYLKO MERCHANT)
+    if (min === 0 && lastStartHour !== hour && CURRENT === "merchant") {
       lastStartHour = hour;
 
       if (prePingMsg) {
@@ -271,12 +265,12 @@ async function handleEventInteraction(interaction) {
   if (interaction.isStringSelectMenu() && interaction.customId === "roles_menu") {
     const member = await interaction.guild.members.fetch(interaction.user.id);
 
-    for (const key in ROLES) {
-      await member.roles.remove(ROLES[key]).catch(()=>{});
-    }
+    // usuń stare
+    await member.roles.remove(ROLES.merchant).catch(()=>{});
 
-    for (const val of interaction.values) {
-      await member.roles.add(ROLES[val]).catch(()=>{});
+    // dodaj jeśli wybrane
+    if (interaction.values.includes("merchant")) {
+      await member.roles.add(ROLES.merchant).catch(()=>{});
     }
 
     return interaction.reply({ content: "✅ Roles updated", ephemeral: true });
