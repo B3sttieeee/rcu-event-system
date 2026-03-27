@@ -1,6 +1,3 @@
-const fs = require("fs");
-
-// SYSTEMY
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const giveawaySystem = require("../utils/giveawaySystem");
@@ -12,7 +9,7 @@ module.exports = {
     try {
 
       // =========================
-      // 🎫 TICKETS
+      // 🎫 TICKETS (PRIORITY)
       // =========================
       if (
         interaction.isButton() ||
@@ -25,10 +22,10 @@ module.exports = {
       }
 
       // =========================
-      // 🎁 GIVEAWAY (NAPRAWIONE)
+      // 🎁 GIVEAWAY
       // =========================
       if (interaction.isButton()) {
-        if (interaction.customId.startsWith("gw_")) {
+        if (interaction.customId?.startsWith("gw_")) {
           return giveawaySystem.handleGiveaway(interaction);
         }
       }
@@ -46,24 +43,21 @@ module.exports = {
       }
 
       // =========================
-      // ⚡ SLASH COMMANDS
+      // ⚡ SLASH COMMANDS (OPTYMALNIE)
       // =========================
       if (!interaction.isChatInputCommand()) return;
 
-      const commandFiles = fs.readdirSync("./commands");
-      const commands = new Map();
+      // 🔥 używamy client.commands zamiast fs
+      const command = client.commands.get(interaction.commandName);
 
-      for (const file of commandFiles) {
-        const command = require(`../commands/${file}`);
-        if (command?.data?.name) {
-          commands.set(command.data.name, command);
-        }
+      if (!command) {
+        return interaction.reply({
+          content: "❌ Komenda nie istnieje",
+          ephemeral: true
+        });
       }
 
-      const cmd = commands.get(interaction.commandName);
-      if (!cmd) return;
-
-      await cmd.execute(interaction, client);
+      await command.execute(interaction, client);
 
     } catch (err) {
       console.log("❌ INTERACTION ERROR:", err);
@@ -71,12 +65,12 @@ module.exports = {
       try {
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp({
-            content: "❌ Error",
+            content: "❌ Wystąpił błąd",
             ephemeral: true
           });
         } else {
           await interaction.reply({
-            content: "❌ Error",
+            content: "❌ Wystąpił błąd",
             ephemeral: true
           });
         }
