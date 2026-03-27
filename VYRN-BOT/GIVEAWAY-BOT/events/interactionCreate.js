@@ -9,50 +9,43 @@ module.exports = {
     try {
 
       // =========================
-      // 📦 EMBED SYSTEM (TWÓJ MODAL)
+      // 📦 EMBED SYSTEM (TYLKO IGNORUJEMY)
       // =========================
       if (
         interaction.customId?.startsWith("embedModal_") ||
         interaction.customId?.startsWith("sendEmbed_") ||
         interaction.customId?.startsWith("editEmbed_")
       ) {
-        // 👉 MASZ modalSubmit jako event
-        return; // 🔥 NIE rób nic tutaj (już obsługiwane gdzie indziej)
+        return; // obsługiwane gdzie indziej
       }
 
       // =========================
-      // 🎁 GIVEAWAY (PRIORITY)
+      // 🎁 GIVEAWAY (NAJPIERW!)
       // =========================
       if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
         return giveawaySystem.handleGiveaway(interaction);
       }
 
       // =========================
-      // 🎫 TICKETS
+      // 🎮 EVENT SYSTEM (PANEL / ROLE / DM)
       // =========================
       if (
-        (interaction.isButton() ||
-        interaction.isModalSubmit() ||
-        interaction.isStringSelectMenu())
-        &&
-        !interaction.customId?.startsWith("gw_") &&
-        !interaction.customId?.startsWith("embed")
+        (interaction.isButton() || interaction.isStringSelectMenu()) &&
+        ["refresh", "roles", "dm", "roles_menu", "dm_menu"].includes(interaction.customId)
       ) {
-        if (ticketSystem?.handle) {
-          return await ticketSystem.handle(interaction, client);
-        }
+        return handleEventInteraction(interaction);
       }
 
       // =========================
-      // 🎮 EVENT SYSTEM
+      // 🎫 TICKETS
       // =========================
       if (
-        (interaction.isButton() || interaction.isStringSelectMenu())
-        &&
-        !interaction.customId?.startsWith("gw_")
+        interaction.isButton() ||
+        interaction.isModalSubmit() ||
+        interaction.isStringSelectMenu()
       ) {
-        if (handleEventInteraction) {
-          return await handleEventInteraction(interaction);
+        if (ticketSystem?.handle) {
+          return await ticketSystem.handle(interaction, client);
         }
       }
 
