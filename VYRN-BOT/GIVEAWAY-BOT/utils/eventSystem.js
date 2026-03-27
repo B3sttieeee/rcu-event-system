@@ -46,7 +46,7 @@ function getNow() {
   );
 }
 
-// 🔥 Merchant co 3h (00, 03, 06, 09, 12, 15, 18, 21)
+// 🔥 Merchant co 3h (00, 03, 06, 09, 10, 13, 16, 19, 22)
 function getNextMerchant() {
   const now = getNow();
   const hour = now.getHours();
