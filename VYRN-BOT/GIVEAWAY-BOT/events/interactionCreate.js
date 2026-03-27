@@ -9,37 +9,37 @@ module.exports = {
     try {
 
       // =========================
-      // 📦 EMBED SYSTEM (NAJPIERW!)
+      // 📦 EMBED SYSTEM (TWÓJ MODAL)
       // =========================
       if (
         interaction.customId?.startsWith("embedModal_") ||
         interaction.customId?.startsWith("sendEmbed_") ||
         interaction.customId?.startsWith("editEmbed_")
       ) {
-        // 👉 załaduj embed system
-        const embedSystem = require("../events/embedSystem");
-        return embedSystem.execute(interaction, client);
+        // 👉 MASZ modalSubmit jako event
+        return; // 🔥 NIE rób nic tutaj (już obsługiwane gdzie indziej)
+      }
+
+      // =========================
+      // 🎁 GIVEAWAY (PRIORITY)
+      // =========================
+      if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
+        return giveawaySystem.handleGiveaway(interaction);
       }
 
       // =========================
       // 🎫 TICKETS
       // =========================
       if (
-        interaction.isButton() ||
+        (interaction.isButton() ||
         interaction.isModalSubmit() ||
-        interaction.isStringSelectMenu()
+        interaction.isStringSelectMenu())
+        &&
+        !interaction.customId?.startsWith("gw_") &&
+        !interaction.customId?.startsWith("embed")
       ) {
         if (ticketSystem?.handle) {
-          await ticketSystem.handle(interaction, client);
-        }
-      }
-
-      // =========================
-      // 🎁 GIVEAWAY
-      // =========================
-      if (interaction.isButton()) {
-        if (interaction.customId?.startsWith("gw_")) {
-          return giveawaySystem.handleGiveaway(interaction);
+          return await ticketSystem.handle(interaction, client);
         }
       }
 
@@ -47,11 +47,12 @@ module.exports = {
       // 🎮 EVENT SYSTEM
       // =========================
       if (
-        interaction.isButton() ||
-        interaction.isStringSelectMenu()
+        (interaction.isButton() || interaction.isStringSelectMenu())
+        &&
+        !interaction.customId?.startsWith("gw_")
       ) {
         if (handleEventInteraction) {
-          await handleEventInteraction(interaction);
+          return await handleEventInteraction(interaction);
         }
       }
 
@@ -63,10 +64,17 @@ module.exports = {
       const command = client.commands.get(interaction.commandName);
 
       if (!command) {
-        return interaction.reply({
-          content: "❌ Komenda nie istnieje",
-          ephemeral: true
-        });
+        if (interaction.replied || interaction.deferred) {
+          return interaction.followUp({
+            content: "❌ Komenda nie istnieje",
+            ephemeral: true
+          });
+        } else {
+          return interaction.reply({
+            content: "❌ Komenda nie istnieje",
+            ephemeral: true
+          });
+        }
       }
 
       await command.execute(interaction, client);
