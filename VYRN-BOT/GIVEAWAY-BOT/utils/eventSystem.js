@@ -14,32 +14,16 @@ const CHANNEL_ID = "1484937784283369502";
 // ===== PANEL IMAGE =====
 const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
 
-// ===== EVENT DATA =====
-const EVENT_DATA = {
-  egg: {
-    name: "RNG EGG",
-    color: "#f59e0b",
-    image: "https://imgur.com/PfhYZnf.png",
-    tip: "Znajdź serwer i farm Tier!"
-  },
-  merchant: {
-    name: "BOSS / HONEY MERCHANT",
-    color: "#ef4444",
-    image: "https://i.imgur.com/NEW_IMAGE.png", // 🔥 TU DAJ SWOJE NOWE ZDJĘCIE
-    tip: "Przygotuj walutę!"
-  },
-  spin: {
-    name: "DEV SPIN",
-    color: "#dc2626",
-    image: "https://imgur.com/mGVojBN.png",
-    tip: "Zakręć kołem!"
-  }
+// ===== MERCHANT DATA =====
+const EVENT = {
+  name: "HONEY MERCHANT",
+  color: "#ef4444",
+  image: "https://imgur.com/txWUEQE.png", // 🔥 podmień na swoje
+  tip: "Przygotuj walutę!"
 };
 
-// ===== ROLE IDs =====
-const ROLES = {
-  merchant: "1476000993660502139"
-};
+// ===== ROLE =====
+const ROLE_ID = "1476000993660502139";
 
 // ===== DB =====
 const DB_PATH = "./eventDB.json";
@@ -62,46 +46,52 @@ function getNow() {
   );
 }
 
-function getEventByHour(h) {
-  if ([0,3,6,9,12,15,18,21].includes(h)) return "egg";
-  if ([1,4,7,10,13,16,19,22].includes(h)) return "merchant";
-  if ([2,5,8,11,14,17,20,23].includes(h)) return "spin";
-}
+// 🔥 Merchant co 3h (00, 03, 06, 09, 12, 15, 18, 21)
+function getNextMerchant() {
+  const now = getNow();
+  const hour = now.getHours();
 
-function getCurrent() {
-  return getEventByHour(getNow().getHours());
-}
+  let nextHour = Math.ceil(hour / 3) * 3;
 
-function getNext() {
-  return getEventByHour((getNow().getHours() + 1) % 24);
+  const next = new Date(now);
+  next.setMinutes(0, 0, 0);
+
+  if (nextHour >= 24) nextHour = 0;
+
+  next.setHours(nextHour);
+
+  if (next <= now) {
+    next.setHours(nextHour + 3);
+  }
+
+  return next;
 }
 
 function getCountdown() {
   const now = getNow();
-  let m = 59 - now.getMinutes();
-  let s = 60 - now.getSeconds();
-  if (s === 60) s = 0; else m--;
+  const next = getNextMerchant();
+
+  const diff = next - now;
+
+  const m = Math.floor(diff / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+
   return `${m}m ${s}s`;
 }
 
 // ===== PANEL EMBED =====
 function panelEmbed() {
-  const current = getCurrent();
-  const next = getNext();
-
   return new EmbedBuilder()
-    .setColor(EVENT_DATA[current].color)
-    .setTitle("✨ EVENT PANEL")
+    .setColor(EVENT.color)
+    .setTitle("✨ MERCHANT PANEL")
     .setDescription(
-`🎮 **Live Event Tracking**
+`🛒 **Merchant Tracker**
 
-🟢 **Current**
-\`${EVENT_DATA[current].name}\`
-⏳ ${getCountdown()}
+⏳ Następny merchant za:
+\`${getCountdown()}\`
 
-⏭️ **Next**
-\`${EVENT_DATA[next].name}\`
-⏱️ ${getCountdown()}`
+🎁 Event:
+\`${EVENT.name}\``
     )
     .setImage(PANEL_IMAGE);
 }
@@ -128,14 +118,12 @@ function getButtons() {
   ];
 }
 
-// ===== MENUS (TYLKO MERCHANT) =====
+// ===== MENUS =====
 function rolesMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("roles_menu")
-      .setPlaceholder("Select roles")
-      .setMinValues(0)
-      .setMaxValues(1)
+      .setPlaceholder("Select role")
       .addOptions([
         { label: "MERCHANT", value: "merchant" }
       ])
@@ -146,16 +134,14 @@ function dmMenu() {
   return new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
-      .setPlaceholder("Select DM notifications")
-      .setMinValues(0)
-      .setMaxValues(1)
+      .setPlaceholder("Select DM")
       .addOptions([
         { label: "MERCHANT", value: "merchant" }
       ])
   );
 }
 
-// ===== PANEL =====
+// ===== PANEL START =====
 async function startPanel(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
@@ -176,61 +162,43 @@ async function startPanel(client) {
 async function startEventSystem(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
-  let lastPrePingHour = null;
-  let lastStartHour = null;
-
-  let prePingMsg = null;
-  let startMsg = null;
+  let lastPing = null;
 
   setInterval(async () => {
     const now = getNow();
-    const hour = now.getHours();
-    const min = now.getMinutes();
+    const next = getNextMerchant();
 
-    const NEXT = getEventByHour((hour + 1) % 24);
-    const CURRENT = getEventByHour(hour);
+    const diff = next - now;
+    const minutes = Math.floor(diff / 60000);
 
-    // ===== 5 MIN BEFORE (TYLKO MERCHANT)
-    if (min === 55 && lastPrePingHour !== hour && NEXT === "merchant") {
-      lastPrePingHour = hour;
+    // 🔔 5 min before
+    if (minutes === 5 && lastPing !== "pre") {
+      lastPing = "pre";
 
-      const data = EVENT_DATA[NEXT];
-      const role = ROLES[NEXT];
-
-      prePingMsg = await channel.send({
-        content: `<@&${role}> ⏳ EVENT ZA 5 MIN: **${data.name}**`
+      await channel.send({
+        content: `<@&${ROLE_ID}> ⏳ MERCHANT ZA 5 MIN!`
       }).catch(()=>{});
     }
 
-    // ===== START (TYLKO MERCHANT)
-    if (min === 0 && lastStartHour !== hour && CURRENT === "merchant") {
-      lastStartHour = hour;
+    // 🚀 start
+    if (minutes === 0 && lastPing !== "start") {
+      lastPing = "start";
 
-      if (prePingMsg) {
-        prePingMsg.delete().catch(()=>{});
-        prePingMsg = null;
-      }
-
-      const data = EVENT_DATA[CURRENT];
-      const role = ROLES[CURRENT];
-
-      startMsg = await channel.send({
-        content: `<@&${role}>`,
+      await channel.send({
+        content: `<@&${ROLE_ID}>`,
         embeds: [
           new EmbedBuilder()
-            .setColor(data.color)
-            .setTitle(`🚀 ${data.name} START!`)
-            .setDescription(`💡 ${data.tip}`)
-            .setImage(data.image)
+            .setColor(EVENT.color)
+            .setTitle(`🚀 ${EVENT.name} START!`)
+            .setDescription(`💡 ${EVENT.tip}`)
+            .setImage(EVENT.image)
         ]
       }).catch(()=>{});
+    }
 
-      setTimeout(() => {
-        if (startMsg) {
-          startMsg.delete().catch(()=>{});
-          startMsg = null;
-        }
-      }, 15 * 60 * 1000);
+    // reset blokady
+    if (minutes > 5) {
+      lastPing = null;
     }
 
   }, 10000);
@@ -248,7 +216,7 @@ async function handleEventInteraction(interaction) {
 
   if (interaction.customId === "roles") {
     return interaction.reply({
-      content: "🎭 Select roles:",
+      content: "🎭 Role:",
       components: [rolesMenu()],
       ephemeral: true
     });
@@ -256,7 +224,7 @@ async function handleEventInteraction(interaction) {
 
   if (interaction.customId === "dm") {
     return interaction.reply({
-      content: "📩 Select DM notifications:",
+      content: "📩 Powiadomienia DM:",
       components: [dmMenu()],
       ephemeral: true
     });
@@ -265,15 +233,13 @@ async function handleEventInteraction(interaction) {
   if (interaction.isStringSelectMenu() && interaction.customId === "roles_menu") {
     const member = await interaction.guild.members.fetch(interaction.user.id);
 
-    // usuń stare
-    await member.roles.remove(ROLES.merchant).catch(()=>{});
+    await member.roles.remove(ROLE_ID).catch(()=>{});
 
-    // dodaj jeśli wybrane
     if (interaction.values.includes("merchant")) {
-      await member.roles.add(ROLES.merchant).catch(()=>{});
+      await member.roles.add(ROLE_ID).catch(()=>{});
     }
 
-    return interaction.reply({ content: "✅ Roles updated", ephemeral: true });
+    return interaction.reply({ content: "✅ Role updated", ephemeral: true });
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === "dm_menu") {
