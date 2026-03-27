@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require("discord.js");
+const { Client, GatewayIntentBits, Collection } = require("discord.js");
 require("dotenv").config();
 const fs = require("fs");
 
@@ -6,13 +6,40 @@ const fs = require("fs");
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers, // ✅ welcome + role
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates // 🔥 VC XP (WAŻNE)
   ]
 });
 
-// ===== LOAD EVENTS =====
+// ===== COMMANDS MAP =====
+client.commands = new Collection();
+
+// =========================
+// 📦 LOAD COMMANDS (RAZ!)
+// =========================
+const commandFiles = fs.readdirSync("./commands").filter(file => file.endsWith(".js"));
+
+for (const file of commandFiles) {
+  try {
+    const command = require(`./commands/${file}`);
+
+    if (command?.data?.name) {
+      client.commands.set(command.data.name, command);
+      console.log(`📦 Loaded command: ${command.data.name}`);
+    } else {
+      console.log(`⚠️ Invalid command file: ${file}`);
+    }
+
+  } catch (err) {
+    console.log(`❌ Error loading command ${file}:`, err);
+  }
+}
+
+// =========================
+// ⚡ LOAD EVENTS
+// =========================
 const eventFiles = fs.readdirSync("./events").filter(file => file.endsWith(".js"));
 
 for (const file of eventFiles) {
@@ -37,10 +64,14 @@ for (const file of eventFiles) {
   }
 }
 
-// ===== READY (fallback log) =====
+// =========================
+// 🔥 READY LOG
+// =========================
 client.once("ready", () => {
   console.log(`🔥 Logged in as ${client.user.tag}`);
 });
 
-// ===== LOGIN =====
+// =========================
+// 🚀 LOGIN
+// =========================
 client.login(process.env.TOKEN);
