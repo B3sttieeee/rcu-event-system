@@ -51,18 +51,26 @@ module.exports = {
           }
         };
 
+        const isHex = /^#?[0-9A-Fa-f]{6}$/;
+
         // ===== EMBED =====
         const embed = new EmbedBuilder();
 
         // COLOR SAFE
-        try {
-          embed.setColor(color);
-        } catch {
+        if (isHex.test(color)) {
+          embed.setColor(color.startsWith("#") ? color : `#${color}`);
+        } else {
           embed.setColor("#2b2d31");
         }
 
+        // CONTENT
         if (title.trim()) embed.setTitle(title.trim());
         if (description.trim()) embed.setDescription(description.trim());
+
+        // 👉 jeśli pusty embed
+        if (!title.trim() && !description.trim()) {
+          embed.setDescription("‎"); // invisible char
+        }
 
         // ===== AUTHOR SAFE =====
         if (authorRaw.includes("|")) {
@@ -90,7 +98,7 @@ module.exports = {
         }
 
         // ===== IMAGE SAFE =====
-        if (image && isValidURL(image)) {
+        if (image && isValidURL(image) && image.startsWith("http")) {
           embed.setImage(image.trim());
         }
 
@@ -205,17 +213,10 @@ module.exports = {
       console.log("❌ MODALSUBMIT ERROR:", err);
 
       try {
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({
-            content: "❌ Błąd przy embedzie",
-            ephemeral: true
-          });
-        } else {
-          await interaction.reply({
-            content: "❌ Błąd przy embedzie",
-            ephemeral: true
-          });
-        }
+        await interaction.reply({
+          content: `❌ Błąd:\n\`\`\`${err.message}\`\`\``,
+          ephemeral: true
+        });
       } catch {}
     }
   }
