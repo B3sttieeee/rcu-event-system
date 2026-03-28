@@ -9,29 +9,29 @@ module.exports = {
     try {
 
       // =========================
-      // 📦 EMBED SYSTEM (TYLKO IGNORUJEMY)
+      // 📦 EMBED SYSTEM (IGNORE)
       // =========================
       if (
         interaction.customId?.startsWith("embedModal_") ||
         interaction.customId?.startsWith("sendEmbed_") ||
         interaction.customId?.startsWith("editEmbed_")
       ) {
-        return; // obsługiwane gdzie indziej
+        return;
       }
 
       // =========================
-      // 🎁 GIVEAWAY (NAJPIERW!)
+      // 🎁 GIVEAWAY (PRIORITY)
       // =========================
       if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
         return giveawaySystem.handleGiveaway(interaction);
       }
 
       // =========================
-      // 🎮 EVENT SYSTEM (PANEL / ROLE / DM)
+      // 🍯 EVENT SYSTEM (NOWY)
       // =========================
       if (
-        (interaction.isButton() || interaction.isStringSelectMenu()) &&
-        ["refresh", "roles", "dm", "roles_menu", "dm_menu"].includes(interaction.customId)
+        interaction.isButton() &&
+        ["refresh", "role", "dm"].includes(interaction.customId)
       ) {
         return handleEventInteraction(interaction);
       }
