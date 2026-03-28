@@ -2,8 +2,7 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle,
-  StringSelectMenuBuilder
+  ButtonStyle
 } = require("discord.js");
 
 const fs = require("fs");
@@ -12,16 +11,17 @@ const fs = require("fs");
 const CHANNEL_ID = "1484937784283369502";
 const ROLE_ID = "1476000993660502139";
 
-// 🔥 GODZINY MERCHANTA
+// 🔥 GODZINY
 const MERCHANT_HOURS = [1,4,7,10,13,16,19,22];
 
 // ===== IMAGE =====
 const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
+const START_IMAGE = "https://imgur.com/7GBAq8Z.png";
 
+// ===== EVENT =====
 const EVENT = {
   name: "HONEY MERCHANT",
-  color: "#ef4444",
-  image: "https://imgur.com/GQIFzx7.png",
+  color: "#f59e0b", // 🔥 gold/orange (pasuje do honey)
   tip: "Przygotuj walutę!"
 };
 
@@ -33,10 +33,6 @@ function loadDB() {
     fs.writeFileSync(DB_PATH, JSON.stringify({ dm: {} }, null, 2));
   }
   return JSON.parse(fs.readFileSync(DB_PATH));
-}
-
-function saveDB(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
 // ===== TIME =====
@@ -81,10 +77,10 @@ function panelEmbed() {
     .setColor(EVENT.color)
     .setTitle("🍯 MERCHANT TRACKER")
     .setDescription(
-`⏳ **Next Merchant**
+`🎯 **Next Merchant**
 \`${getNextMerchant()}:00\`
 
-🕐 Countdown:
+⏳ **Countdown**
 \`${getCountdown()}\``
     )
     .setImage(PANEL_IMAGE);
@@ -100,23 +96,16 @@ function getButtons() {
         .setStyle(ButtonStyle.Secondary),
 
       new ButtonBuilder()
+        .setCustomId("role")
+        .setLabel("🍯 Merchant Role")
+        .setStyle(ButtonStyle.Success),
+
+      new ButtonBuilder()
         .setCustomId("dm")
-        .setLabel("📩 Notifications")
-        .setStyle(ButtonStyle.Secondary)
+        .setLabel("📩 DM Alerts")
+        .setStyle(ButtonStyle.Primary)
     )
   ];
-}
-
-// ===== DM MENU =====
-function dmMenu() {
-  return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("dm_menu")
-      .setPlaceholder("DM notifications")
-      .addOptions([
-        { label: "Merchant Alerts", value: "merchant" }
-      ])
-  );
 }
 
 // ===== PANEL START =====
@@ -140,77 +129,53 @@ async function startPanel(client) {
 async function startEventSystem(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
-  let lastPrePing = null;
-  let lastStartPing = null;
+  let lastPre = null;
+  let lastStart = null;
 
   setInterval(async () => {
     const now = getNow();
     const hour = now.getHours();
-    const minute = now.getMinutes();
+    const min = now.getMinutes();
 
     const key = `${hour}`;
 
     // ===== 5 MIN BEFORE =====
     if (
       MERCHANT_HOURS.includes(hour) &&
-      minute === 55 &&
-      lastPrePing !== key
+      min === 55 &&
+      lastPre !== key
     ) {
-      lastPrePing = key;
+      lastPre = key;
 
       await channel.send({
-        content: `<@&${ROLE_ID}> ⏳ MERCHANT ZA 5 MIN!`
+        content: `<@&${ROLE_ID}> ⏳ Merchant za 5 minut!`
       });
-
-      // 🔥 DM SEND
-      const db = loadDB();
-
-      for (const userId in db.dm) {
-        if (db.dm[userId].includes("merchant")) {
-          const user = await client.users.fetch(userId).catch(()=>null);
-          if (!user) continue;
-
-          user.send("⏳ Merchant za 5 minut!").catch(()=>{});
-        }
-      }
     }
 
     // ===== START =====
     if (
       MERCHANT_HOURS.includes(hour) &&
-      minute === 0 &&
-      lastStartPing !== key
+      min === 0 &&
+      lastStart !== key
     ) {
-      lastStartPing = key;
+      lastStart = key;
 
       await channel.send({
         content: `<@&${ROLE_ID}>`,
         embeds: [
           new EmbedBuilder()
             .setColor(EVENT.color)
-            .setTitle(`🚀 ${EVENT.name} START!`)
+            .setTitle("🍯 HONEY MERCHANT START!")
             .setDescription(`💡 ${EVENT.tip}`)
-            .setImage(EVENT.image)
+            .setImage(START_IMAGE)
         ]
       });
-
-      // 🔥 DM SEND
-      const db = loadDB();
-
-      for (const userId in db.dm) {
-        if (db.dm[userId].includes("merchant")) {
-          const user = await client.users.fetch(userId).catch(()=>null);
-          if (!user) continue;
-
-          user.send("🚀 Merchant wystartował!").catch(()=>{});
-        }
-      }
     }
 
     // RESET
-    if (minute === 10) {
-      lastPrePing = null;
-      lastStartPing = null;
+    if (min === 10) {
+      lastPre = null;
+      lastStart = null;
     }
 
   }, 10000);
@@ -219,6 +184,7 @@ async function startEventSystem(client) {
 // ===== INTERACTION =====
 async function handleEventInteraction(interaction) {
 
+  // 🔄 REFRESH
   if (interaction.customId === "refresh") {
     return interaction.update({
       embeds: [panelEmbed()],
@@ -226,25 +192,46 @@ async function handleEventInteraction(interaction) {
     });
   }
 
-  if (interaction.customId === "dm") {
-    return interaction.reply({
-      content: "📩 Select DM notifications:",
-      components: [dmMenu()],
-      ephemeral: true
-    });
+  // 🍯 ROLE TOGGLE
+  if (interaction.customId === "role") {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+
+    if (member.roles.cache.has(ROLE_ID)) {
+      await member.roles.remove(ROLE_ID);
+      return interaction.reply({
+        content: "❌ Usunięto rolę Merchant",
+        ephemeral: true
+      });
+    } else {
+      await member.roles.add(ROLE_ID);
+      return interaction.reply({
+        content: "✅ Dodano rolę Merchant",
+        ephemeral: true
+      });
+    }
   }
 
-  if (interaction.isStringSelectMenu() && interaction.customId === "dm_menu") {
+  // 📩 DM TOGGLE
+  if (interaction.customId === "dm") {
     const db = loadDB();
 
-    db.dm[interaction.user.id] = interaction.values;
+    if (!db.dm[interaction.user.id]) {
+      db.dm[interaction.user.id] = ["merchant"];
+      fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
-    saveDB(db);
+      return interaction.reply({
+        content: "✅ Włączono DM powiadomienia",
+        ephemeral: true
+      });
+    } else {
+      delete db.dm[interaction.user.id];
+      fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
-    return interaction.reply({
-      content: "✅ Ustawiono DM!",
-      ephemeral: true
-    });
+      return interaction.reply({
+        content: "❌ Wyłączono DM powiadomienia",
+        ephemeral: true
+      });
+    }
   }
 }
 
