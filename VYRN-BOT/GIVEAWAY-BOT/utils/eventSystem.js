@@ -11,17 +11,17 @@ const fs = require("fs");
 const CHANNEL_ID = "1484937784283369502";
 const ROLE_ID = "1476000993660502139";
 
-// 🔥 GODZINY
+// 🔥 GODZINY MERCHANTA
 const MERCHANT_HOURS = [1,4,7,10,13,16,19,22];
 
-// ===== IMAGE =====
+// ===== IMAGES =====
 const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
 const START_IMAGE = "https://imgur.com/7GBAq8Z.png";
 
 // ===== EVENT =====
 const EVENT = {
   name: "HONEY MERCHANT",
-  color: "#f59e0b", // 🔥 gold/orange (pasuje do honey)
+  color: "#f59e0b",
   tip: "Przygotuj walutę!"
 };
 
@@ -33,6 +33,10 @@ function loadDB() {
     fs.writeFileSync(DB_PATH, JSON.stringify({ dm: {} }, null, 2));
   }
   return JSON.parse(fs.readFileSync(DB_PATH));
+}
+
+function saveDB(data) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
 // ===== TIME =====
@@ -137,11 +141,12 @@ async function startEventSystem(client) {
     const hour = now.getHours();
     const min = now.getMinutes();
 
+    const nextHour = (hour + 1) % 24;
     const key = `${hour}`;
 
-    // ===== 5 MIN BEFORE =====
+    // ===== 5 MIN BEFORE (FIXED) =====
     if (
-      MERCHANT_HOURS.includes(hour) &&
+      MERCHANT_HOURS.includes(nextHour) &&
       min === 55 &&
       lastPre !== key
     ) {
@@ -150,6 +155,17 @@ async function startEventSystem(client) {
       await channel.send({
         content: `<@&${ROLE_ID}> ⏳ Merchant za 5 minut!`
       });
+
+      // DM
+      const db = loadDB();
+      for (const userId in db.dm) {
+        if (db.dm[userId]?.includes("merchant")) {
+          const user = await client.users.fetch(userId).catch(()=>null);
+          if (user) {
+            user.send("⏳ Merchant za 5 minut!").catch(()=>{});
+          }
+        }
+      }
     }
 
     // ===== START =====
@@ -170,6 +186,17 @@ async function startEventSystem(client) {
             .setImage(START_IMAGE)
         ]
       });
+
+      // DM
+      const db = loadDB();
+      for (const userId in db.dm) {
+        if (db.dm[userId]?.includes("merchant")) {
+          const user = await client.users.fetch(userId).catch(()=>null);
+          if (user) {
+            user.send("🚀 Merchant wystartował!").catch(()=>{});
+          }
+        }
+      }
     }
 
     // RESET
@@ -217,7 +244,7 @@ async function handleEventInteraction(interaction) {
 
     if (!db.dm[interaction.user.id]) {
       db.dm[interaction.user.id] = ["merchant"];
-      fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+      saveDB(db);
 
       return interaction.reply({
         content: "✅ Włączono DM powiadomienia",
@@ -225,7 +252,7 @@ async function handleEventInteraction(interaction) {
       });
     } else {
       delete db.dm[interaction.user.id];
-      fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+      saveDB(db);
 
       return interaction.reply({
         content: "❌ Wyłączono DM powiadomienia",
