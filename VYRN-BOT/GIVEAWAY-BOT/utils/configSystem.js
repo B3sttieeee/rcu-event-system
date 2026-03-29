@@ -19,6 +19,7 @@ function getConfig(guildId) {
 
 function setConfig(guildId, key, value) {
   const data = load();
+
   if (!data[guildId]) data[guildId] = {};
 
   data[guildId][key] = value;
