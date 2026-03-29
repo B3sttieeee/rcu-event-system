@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require("discord.js");
+const { getConfig } = require("../utils/configSystem");
 
 module.exports = {
   name: "messageUpdate",
@@ -7,7 +8,10 @@ module.exports = {
     if (!oldMsg.guild || oldMsg.author?.bot) return;
     if (oldMsg.content === newMsg.content) return;
 
-    const ch = oldMsg.guild.channels.cache.get("1475992778554216448");
+    const config = getConfig(oldMsg.guild.id);
+    if (!config.logChannel) return;
+
+    const ch = oldMsg.guild.channels.cache.get(config.logChannel);
     if (!ch) return;
 
     const embed = new EmbedBuilder()
@@ -18,8 +22,8 @@ module.exports = {
       })
       .setTitle("✏️ Message Edited")
       .addFields(
-        { name: "Before", value: oldMsg.content || "brak", inline: false },
-        { name: "After", value: newMsg.content || "brak", inline: false }
+        { name: "Before", value: oldMsg.content || "brak" },
+        { name: "After", value: newMsg.content || "brak" }
       )
       .setFooter({ text: `User ID: ${oldMsg.author.id}` })
       .setTimestamp();
