@@ -27,7 +27,7 @@ module.exports = {
       }
 
       // =========================
-      // 🍯 EVENT SYSTEM (POPRAWKA)
+      // 🍯 EVENT SYSTEM
       // =========================
       if (
         (interaction.isButton() || interaction.isStringSelectMenu()) &&
@@ -37,7 +37,7 @@ module.exports = {
       }
 
       // =========================
-      // 🎫 TICKETS (bez konfliktów)
+      // 🎫 TICKETS
       // =========================
       if (
         (interaction.isButton() ||
@@ -59,7 +59,7 @@ module.exports = {
       const command = client.commands.get(interaction.commandName);
 
       if (!command) {
-        if (interaction.replied || interaction.deferred) {
+        if (interaction.deferred || interaction.replied) {
           return interaction.followUp({
             content: "❌ Komenda nie istnieje",
             ephemeral: true
@@ -72,13 +72,18 @@ module.exports = {
         }
       }
 
+      // 🔥 KLUCZOWY FIX
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
+
       await command.execute(interaction, client);
 
     } catch (err) {
       console.log("❌ INTERACTION ERROR:", err);
 
       try {
-        if (interaction.replied || interaction.deferred) {
+        if (interaction.deferred || interaction.replied) {
           await interaction.followUp({
             content: "❌ Wystąpił błąd",
             ephemeral: true
