@@ -9,61 +9,46 @@ const fs = require("fs");
 
 // ===== CONFIG =====
 const CHANNEL_ID = "1484937784283369502";
-const ROLE_ID = "1476000993660502139";
-
-// 🔥 GODZINY MERCHANTA
-const MERCHANT_HOURS = [1,4,7,10,13,16,19,22];
+const MERCHANT_ROLE = "TU_DAJ_ID_ROLI";
 
 // ===== IMAGES =====
 const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
 const START_IMAGE = "https://imgur.com/7GBAq8Z.png";
 
-// ===== EVENT =====
-const EVENT = {
-  name: "HONEY MERCHANT",
-  color: "#f59e0b",
-  tip: "Przygotuj walutę!"
-};
+// ===== GODZINY (PO ZMIANIE CZASU) =====
+const HOURS = [2, 5, 8, 11, 14, 17, 20, 23];
 
-// ===== DB =====
-const DB_PATH = "./eventDB.json";
-
-function loadDB() {
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ dm: {} }, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(DB_PATH));
-}
-
-function saveDB(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
-
-// ===== TIME =====
+// ===== TIME (PL) =====
 function getNow() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
   );
 }
 
-function getNextMerchant() {
+// ===== NEXT HOUR =====
+function getNextMerchantHour() {
   const now = getNow();
-  const hour = now.getHours();
+  const currentHour = now.getHours();
 
-  const next = MERCHANT_HOURS.find(h => h > hour);
-  return next !== undefined ? next : MERCHANT_HOURS[0];
+  for (let h of HOURS) {
+    if (h > currentHour) return h;
+  }
+
+  return HOURS[0];
 }
 
+// ===== COUNTDOWN =====
 function getCountdown() {
   const now = getNow();
 
-  let nextHour = getNextMerchant();
   let target = new Date(now);
-  target.setHours(nextHour, 0, 0, 0);
+  const nextHour = getNextMerchantHour();
 
   if (nextHour <= now.getHours()) {
     target.setDate(target.getDate() + 1);
   }
+
+  target.setHours(nextHour, 0, 0, 0);
 
   const diff = target - now;
 
@@ -75,14 +60,16 @@ function getCountdown() {
   return `${h}h ${m}m ${s}s`;
 }
 
-// ===== PANEL =====
+// ===== PANEL EMBED =====
 function panelEmbed() {
+  const next = getNextMerchantHour();
+
   return new EmbedBuilder()
-    .setColor(EVENT.color)
+    .setColor("#f59e0b")
     .setTitle("🍯 MERCHANT TRACKER")
     .setDescription(
-`🎯 **Next Merchant**
-\`${getNextMerchant()}:00\`
+`🏆 **Next Merchant**
+\`${next}:00\`
 
 ⏳ **Countdown**
 \`${getCountdown()}\``
@@ -100,29 +87,24 @@ function getButtons() {
         .setStyle(ButtonStyle.Secondary),
 
       new ButtonBuilder()
-        .setCustomId("role")
-        .setLabel("🍯 Merchant Role")
-        .setStyle(ButtonStyle.Success),
-
-      new ButtonBuilder()
         .setCustomId("dm")
-        .setLabel("📩 DM Alerts")
+        .setLabel("📩 Notifications")
         .setStyle(ButtonStyle.Primary)
     )
   ];
 }
 
-// ===== PANEL START =====
+// ===== PANEL =====
 async function startPanel(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
-  const panel = await channel.send({
+  const msg = await channel.send({
     embeds: [panelEmbed()],
     components: getButtons()
   });
 
   setInterval(() => {
-    panel.edit({
+    msg.edit({
       embeds: [panelEmbed()],
       components: getButtons()
     }).catch(()=>{});
@@ -133,76 +115,64 @@ async function startPanel(client) {
 async function startEventSystem(client) {
   const channel = await client.channels.fetch(CHANNEL_ID);
 
-  let lastPre = null;
+  let lastPing = null;
   let lastStart = null;
+
+  let prePingMsg = null;
+  let startMsg = null;
 
   setInterval(async () => {
     const now = getNow();
     const hour = now.getHours();
     const min = now.getMinutes();
 
-    const nextHour = (hour + 1) % 24;
-    const key = `${hour}`;
+    // ===== 5 MIN BEFORE =====
+    for (let h of HOURS) {
+      if (hour === h - 1 && min === 55) {
 
-    // ===== 5 MIN BEFORE (FIXED) =====
-    if (
-      MERCHANT_HOURS.includes(nextHour) &&
-      min === 55 &&
-      lastPre !== key
-    ) {
-      lastPre = key;
+        const key = `${h}-ping`;
+        if (lastPing === key) return;
+        lastPing = key;
 
-      await channel.send({
-        content: `<@&${ROLE_ID}> ⏳ Merchant za 5 minut!`
-      });
-
-      // DM
-      const db = loadDB();
-      for (const userId in db.dm) {
-        if (db.dm[userId]?.includes("merchant")) {
-          const user = await client.users.fetch(userId).catch(()=>null);
-          if (user) {
-            user.send("⏳ Merchant za 5 minut!").catch(()=>{});
-          }
-        }
+        prePingMsg = await channel.send({
+          content: `<@&${MERCHANT_ROLE}> ⏳ Merchant za 5 minut!`
+        }).catch(()=>{});
       }
     }
 
     // ===== START =====
-    if (
-      MERCHANT_HOURS.includes(hour) &&
-      min === 0 &&
-      lastStart !== key
-    ) {
-      lastStart = key;
+    for (let h of HOURS) {
+      if (hour === h && min === 0) {
 
-      await channel.send({
-        content: `<@&${ROLE_ID}>`,
-        embeds: [
-          new EmbedBuilder()
-            .setColor(EVENT.color)
-            .setTitle("🍯 HONEY MERCHANT START!")
-            .setDescription(`💡 ${EVENT.tip}`)
-            .setImage(START_IMAGE)
-        ]
-      });
+        const key = `${h}-start`;
+        if (lastStart === key) return;
+        lastStart = key;
 
-      // DM
-      const db = loadDB();
-      for (const userId in db.dm) {
-        if (db.dm[userId]?.includes("merchant")) {
-          const user = await client.users.fetch(userId).catch(()=>null);
-          if (user) {
-            user.send("🚀 Merchant wystartował!").catch(()=>{});
-          }
+        // usuń ping
+        if (prePingMsg) {
+          prePingMsg.delete().catch(()=>{});
+          prePingMsg = null;
         }
-      }
-    }
 
-    // RESET
-    if (min === 10) {
-      lastPre = null;
-      lastStart = null;
+        startMsg = await channel.send({
+          content: `<@&${MERCHANT_ROLE}>`,
+          embeds: [
+            new EmbedBuilder()
+              .setColor("#f59e0b")
+              .setTitle("🍯 HONEY MERCHANT START!")
+              .setDescription("💡 Przygotuj walutę!")
+              .setImage(START_IMAGE)
+          ]
+        }).catch(()=>{});
+
+        // usuń po 15 min
+        setTimeout(() => {
+          if (startMsg) {
+            startMsg.delete().catch(()=>{});
+            startMsg = null;
+          }
+        }, 15 * 60 * 1000);
+      }
     }
 
   }, 10000);
@@ -211,7 +181,6 @@ async function startEventSystem(client) {
 // ===== INTERACTION =====
 async function handleEventInteraction(interaction) {
 
-  // 🔄 REFRESH
   if (interaction.customId === "refresh") {
     return interaction.update({
       embeds: [panelEmbed()],
@@ -219,46 +188,11 @@ async function handleEventInteraction(interaction) {
     });
   }
 
-  // 🍯 ROLE TOGGLE
-  if (interaction.customId === "role") {
-    const member = await interaction.guild.members.fetch(interaction.user.id);
-
-    if (member.roles.cache.has(ROLE_ID)) {
-      await member.roles.remove(ROLE_ID);
-      return interaction.reply({
-        content: "❌ Usunięto rolę Merchant",
-        ephemeral: true
-      });
-    } else {
-      await member.roles.add(ROLE_ID);
-      return interaction.reply({
-        content: "✅ Dodano rolę Merchant",
-        ephemeral: true
-      });
-    }
-  }
-
-  // 📩 DM TOGGLE
   if (interaction.customId === "dm") {
-    const db = loadDB();
-
-    if (!db.dm[interaction.user.id]) {
-      db.dm[interaction.user.id] = ["merchant"];
-      saveDB(db);
-
-      return interaction.reply({
-        content: "✅ Włączono DM powiadomienia",
-        ephemeral: true
-      });
-    } else {
-      delete db.dm[interaction.user.id];
-      saveDB(db);
-
-      return interaction.reply({
-        content: "❌ Wyłączono DM powiadomienia",
-        ephemeral: true
-      });
-    }
+    return interaction.reply({
+      content: "📩 Powiadomienia w budowie 😉",
+      ephemeral: true
+    });
   }
 }
 
