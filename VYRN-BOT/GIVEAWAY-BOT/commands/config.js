@@ -98,60 +98,77 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    const sub = interaction.options.getSubcommand();
+    try {
+      const sub = interaction.options.getSubcommand();
 
-    if (sub === "logs") {
-      const ch = interaction.options.getChannel("channel");
-      setConfig(interaction.guild.id, "logChannel", ch.id);
-      return interaction.reply({ content: `✅ Log channel: ${ch}`, ephemeral: true });
-    }
+      if (sub === "logs") {
+        const ch = interaction.options.getChannel("channel");
+        setConfig(interaction.guild.id, "logChannel", ch.id);
+        return interaction.reply({ content: `✅ Log channel: ${ch}`, ephemeral: true });
+      }
 
-    if (sub === "welcome") {
-      const ch = interaction.options.getChannel("channel");
-      setConfig(interaction.guild.id, "welcomeChannel", ch.id);
-      return interaction.reply({ content: `✅ Welcome channel: ${ch}`, ephemeral: true });
-    }
+      if (sub === "welcome") {
+        const ch = interaction.options.getChannel("channel");
+        setConfig(interaction.guild.id, "welcomeChannel", ch.id);
+        return interaction.reply({ content: `✅ Welcome channel: ${ch}`, ephemeral: true });
+      }
 
-    if (sub === "autorole") {
-      const role = interaction.options.getRole("role");
-      setConfig(interaction.guild.id, "autoRole", role.id);
-      return interaction.reply({ content: `✅ Auto role: ${role}`, ephemeral: true });
-    }
+      if (sub === "autorole") {
+        const role = interaction.options.getRole("role");
+        setConfig(interaction.guild.id, "autoRole", role.id);
+        return interaction.reply({ content: `✅ Auto role: ${role}`, ephemeral: true });
+      }
 
-    if (sub === "prefix") {
-      const val = interaction.options.getString("value");
-      setConfig(interaction.guild.id, "prefix", val);
-      return interaction.reply({ content: `✅ Prefix: ${val}`, ephemeral: true });
-    }
+      if (sub === "prefix") {
+        const val = interaction.options.getString("value");
+        setConfig(interaction.guild.id, "prefix", val);
+        return interaction.reply({ content: `✅ Prefix: ${val}`, ephemeral: true });
+      }
 
-    if (sub === "levelchannel") {
-      const ch = interaction.options.getChannel("channel");
-      setConfig(interaction.guild.id, "levelChannel", ch.id);
-      return interaction.reply({ content: `✅ Level channel: ${ch}`, ephemeral: true });
-    }
+      if (sub === "levelchannel") {
+        const ch = interaction.options.getChannel("channel");
+        setConfig(interaction.guild.id, "levelChannel", ch.id);
+        return interaction.reply({ content: `✅ Level channel: ${ch}`, ephemeral: true });
+      }
 
-    if (sub === "boostrole") {
-      const role = interaction.options.getRole("role");
-      setConfig(interaction.guild.id, "boostRole", role.id);
-      return interaction.reply({ content: `✅ Boost role: ${role}`, ephemeral: true });
-    }
+      if (sub === "boostrole") {
+        const role = interaction.options.getRole("role");
+        setConfig(interaction.guild.id, "boostRole", role.id);
+        return interaction.reply({ content: `✅ Boost role: ${role}`, ephemeral: true });
+      }
 
-    if (sub === "rules") {
-      const ch = interaction.options.getChannel("channel");
-      setConfig(interaction.guild.id, "rulesChannel", ch.id);
-      return interaction.reply({ content: `✅ Rules: ${ch}`, ephemeral: true });
-    }
+      if (sub === "rules") {
+        const ch = interaction.options.getChannel("channel");
+        setConfig(interaction.guild.id, "rulesChannel", ch.id);
+        return interaction.reply({ content: `✅ Rules: ${ch}`, ephemeral: true });
+      }
 
-    if (sub === "verify") {
-      const ch = interaction.options.getChannel("channel");
-      setConfig(interaction.guild.id, "verifyChannel", ch.id);
-      return interaction.reply({ content: `✅ Verify: ${ch}`, ephemeral: true });
-    }
+      if (sub === "verify") {
+        const ch = interaction.options.getChannel("channel");
+        setConfig(interaction.guild.id, "verifyChannel", ch.id);
+        return interaction.reply({ content: `✅ Verify: ${ch}`, ephemeral: true });
+      }
 
-    if (sub === "tickets") {
-      const ch = interaction.options.getChannel("channel");
-      setConfig(interaction.guild.id, "ticketChannel", ch.id);
-      return interaction.reply({ content: `✅ Tickets: ${ch}`, ephemeral: true });
+      if (sub === "tickets") {
+        const ch = interaction.options.getChannel("channel");
+        setConfig(interaction.guild.id, "ticketChannel", ch.id);
+        return interaction.reply({ content: `✅ Tickets: ${ch}`, ephemeral: true });
+      }
+
+    } catch (err) {
+      console.log("❌ CONFIG ERROR:", err);
+
+      if (interaction.replied || interaction.deferred) {
+        return interaction.followUp({
+          content: "❌ Wystąpił błąd",
+          ephemeral: true
+        });
+      } else {
+        return interaction.reply({
+          content: "❌ Wystąpił błąd",
+          ephemeral: true
+        });
+      }
     }
   }
 };
