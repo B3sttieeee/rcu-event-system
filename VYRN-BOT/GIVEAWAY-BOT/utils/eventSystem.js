@@ -2,36 +2,51 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  StringSelectMenuBuilder
 } = require("discord.js");
 
 const fs = require("fs");
 
 // ===== CONFIG =====
 const CHANNEL_ID = "1484937784283369502";
-const MERCHANT_ROLE = "TU_DAJ_ID_ROLI";
+const MERCHANT_ROLE = "TU_WSTAW_ID_ROLI";
 
 // ===== IMAGES =====
 const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
 const START_IMAGE = "https://imgur.com/7GBAq8Z.png";
 
-// ===== GODZINY (PO ZMIANIE CZASU) =====
+// ===== GODZINY =====
 const HOURS = [2, 5, 8, 11, 14, 17, 20, 23];
 
-// ===== TIME (PL) =====
+// ===== DB =====
+const DB_PATH = "./eventDB.json";
+
+function loadDB() {
+  if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify({ dm: {} }, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(DB_PATH));
+}
+
+function saveDB(data) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+}
+
+// ===== TIME =====
 function getNow() {
   return new Date(
     new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" })
   );
 }
 
-// ===== NEXT HOUR =====
+// ===== NEXT =====
 function getNextMerchantHour() {
   const now = getNow();
-  const currentHour = now.getHours();
+  const h = now.getHours();
 
-  for (let h of HOURS) {
-    if (h > currentHour) return h;
+  for (let x of HOURS) {
+    if (x > h) return x;
   }
 
   return HOURS[0];
@@ -40,38 +55,36 @@ function getNextMerchantHour() {
 // ===== COUNTDOWN =====
 function getCountdown() {
   const now = getNow();
-
   let target = new Date(now);
-  const nextHour = getNextMerchantHour();
 
-  if (nextHour <= now.getHours()) {
+  const next = getNextMerchantHour();
+
+  if (next <= now.getHours()) {
     target.setDate(target.getDate() + 1);
   }
 
-  target.setHours(nextHour, 0, 0, 0);
+  target.setHours(next, 0, 0, 0);
 
   const diff = target - now;
 
-  const total = Math.floor(diff / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
+  const s = Math.floor(diff / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
 
-  return `${h}h ${m}m ${s}s`;
+  return `${h}h ${m}m ${sec}s`;
 }
 
-// ===== PANEL EMBED =====
+// ===== PANEL =====
 function panelEmbed() {
-  const next = getNextMerchantHour();
-
   return new EmbedBuilder()
     .setColor("#f59e0b")
     .setTitle("🍯 MERCHANT TRACKER")
     .setDescription(
-`🏆 **Next Merchant**
-\`${next}:00\`
+`🏆 Next Merchant
+\`${getNextMerchantHour()}:00\`
 
-⏳ **Countdown**
+⏳ Countdown
 \`${getCountdown()}\``
     )
     .setImage(PANEL_IMAGE);
@@ -87,6 +100,11 @@ function getButtons() {
         .setStyle(ButtonStyle.Secondary),
 
       new ButtonBuilder()
+        .setCustomId("roles")
+        .setLabel("🎭 Role")
+        .setStyle(ButtonStyle.Secondary),
+
+      new ButtonBuilder()
         .setCustomId("dm")
         .setLabel("📩 Notifications")
         .setStyle(ButtonStyle.Primary)
@@ -94,11 +112,40 @@ function getButtons() {
   ];
 }
 
-// ===== PANEL =====
-async function startPanel(client) {
-  const channel = await client.channels.fetch(CHANNEL_ID);
+// ===== MENUS =====
+function roleMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("role_menu")
+      .setPlaceholder("Wybierz rolę")
+      .addOptions([
+        {
+          label: "Honey Merchant",
+          value: "merchant"
+        }
+      ])
+  );
+}
 
-  const msg = await channel.send({
+function dmMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("dm_menu")
+      .setPlaceholder("Powiadomienia DM")
+      .addOptions([
+        {
+          label: "Honey Merchant",
+          value: "merchant"
+        }
+      ])
+  );
+}
+
+// ===== PANEL START =====
+async function startPanel(client) {
+  const ch = await client.channels.fetch(CHANNEL_ID);
+
+  const msg = await ch.send({
     embeds: [panelEmbed()],
     components: getButtons()
   });
@@ -113,48 +160,46 @@ async function startPanel(client) {
 
 // ===== EVENT SYSTEM =====
 async function startEventSystem(client) {
-  const channel = await client.channels.fetch(CHANNEL_ID);
+  const ch = await client.channels.fetch(CHANNEL_ID);
 
   let lastPing = null;
   let lastStart = null;
 
   let prePingMsg = null;
-  let startMsg = null;
 
   setInterval(async () => {
     const now = getNow();
-    const hour = now.getHours();
-    const min = now.getMinutes();
+    const h = now.getHours();
+    const m = now.getMinutes();
 
-    // ===== 5 MIN BEFORE =====
-    for (let h of HOURS) {
-      if (hour === h - 1 && min === 55) {
+    // ===== PING 5 MIN BEFORE =====
+    for (let x of HOURS) {
+      if (h === x - 1 && m === 55) {
 
-        const key = `${h}-ping`;
+        const key = `${x}-ping`;
         if (lastPing === key) return;
         lastPing = key;
 
-        prePingMsg = await channel.send({
+        prePingMsg = await ch.send({
           content: `<@&${MERCHANT_ROLE}> ⏳ Merchant za 5 minut!`
         }).catch(()=>{});
       }
     }
 
     // ===== START =====
-    for (let h of HOURS) {
-      if (hour === h && min === 0) {
+    for (let x of HOURS) {
+      if (h === x && m === 0) {
 
-        const key = `${h}-start`;
+        const key = `${x}-start`;
         if (lastStart === key) return;
         lastStart = key;
 
-        // usuń ping
         if (prePingMsg) {
           prePingMsg.delete().catch(()=>{});
           prePingMsg = null;
         }
 
-        startMsg = await channel.send({
+        const msg = await ch.send({
           content: `<@&${MERCHANT_ROLE}>`,
           embeds: [
             new EmbedBuilder()
@@ -165,12 +210,8 @@ async function startEventSystem(client) {
           ]
         }).catch(()=>{});
 
-        // usuń po 15 min
         setTimeout(() => {
-          if (startMsg) {
-            startMsg.delete().catch(()=>{});
-            startMsg = null;
-          }
+          msg?.delete().catch(()=>{});
         }, 15 * 60 * 1000);
       }
     }
@@ -188,11 +229,40 @@ async function handleEventInteraction(interaction) {
     });
   }
 
-  if (interaction.customId === "dm") {
+  if (interaction.customId === "roles") {
     return interaction.reply({
-      content: "📩 Powiadomienia w budowie 😉",
+      content: "🎭 Wybierz rolę:",
+      components: [roleMenu()],
       ephemeral: true
     });
+  }
+
+  if (interaction.customId === "dm") {
+    return interaction.reply({
+      content: "📩 Powiadomienia:",
+      components: [dmMenu()],
+      ephemeral: true
+    });
+  }
+
+  if (interaction.isStringSelectMenu() && interaction.customId === "role_menu") {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+
+    await member.roles.remove(MERCHANT_ROLE).catch(()=>{});
+
+    if (interaction.values.includes("merchant")) {
+      await member.roles.add(MERCHANT_ROLE).catch(()=>{});
+    }
+
+    return interaction.reply({ content: "✅ Rola ustawiona", ephemeral: true });
+  }
+
+  if (interaction.isStringSelectMenu() && interaction.customId === "dm_menu") {
+    const db = loadDB();
+    db.dm[interaction.user.id] = interaction.values;
+    saveDB(db);
+
+    return interaction.reply({ content: "✅ DM zapisane", ephemeral: true });
   }
 }
 
