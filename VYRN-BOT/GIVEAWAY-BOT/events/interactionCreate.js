@@ -27,22 +27,24 @@ module.exports = {
       }
 
       // =========================
-      // 🍯 EVENT SYSTEM (NOWY)
+      // 🍯 EVENT SYSTEM (POPRAWKA)
       // =========================
       if (
-        interaction.isButton() &&
-        ["refresh", "role", "dm"].includes(interaction.customId)
+        (interaction.isButton() || interaction.isStringSelectMenu()) &&
+        ["refresh", "roles", "dm", "role_menu", "dm_menu"].includes(interaction.customId)
       ) {
         return handleEventInteraction(interaction);
       }
 
       // =========================
-      // 🎫 TICKETS
+      // 🎫 TICKETS (bez konfliktów)
       // =========================
       if (
-        interaction.isButton() ||
+        (interaction.isButton() ||
         interaction.isModalSubmit() ||
-        interaction.isStringSelectMenu()
+        interaction.isStringSelectMenu()) &&
+        !interaction.customId?.startsWith("gw_") &&
+        !["refresh", "roles", "dm", "role_menu", "dm_menu"].includes(interaction.customId)
       ) {
         if (ticketSystem?.handle) {
           return await ticketSystem.handle(interaction, client);
