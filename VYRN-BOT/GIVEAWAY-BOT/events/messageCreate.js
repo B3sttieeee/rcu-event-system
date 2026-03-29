@@ -8,14 +8,13 @@ const {
   loadConfig
 } = require("../utils/levelSystem");
 
+const { getConfig } = require("../utils/configSystem");
+
 const fs = require("fs");
+const path = require("path");
 
-// ===== CONFIG =====
-const PREFIX = ".";
-const LEVEL_CHANNEL = "1475999590716018719";
-
-// 🔥 TEN SAM PLIK CO LEVEL SYSTEM
-const DB_PATH = "/data/levels.json";
+// ===== DB PATH FIX =====
+const DB_PATH = path.join(__dirname, "../data/levels.json");
 
 const cooldown = new Map();
 
@@ -37,6 +36,13 @@ module.exports = {
   async execute(message) {
     if (!message.guild) return;
     if (message.author.bot) return;
+
+    // ===== CONFIG =====
+    const config = getConfig(message.guild.id);
+
+    const PREFIX = config.prefix || ".";
+    const LEVEL_CHANNEL = config.levelChannel;
+    const BOOST_ROLE = config.boostRole;
 
     const isCommand = message.content.startsWith(PREFIX);
 
@@ -67,7 +73,10 @@ module.exports = {
           "⬛".repeat(empty);
 
         const cfg = loadConfig();
-        const hasBoost = message.member.roles.cache.has("1476000398107217980");
+
+        const hasBoost = BOOST_ROLE
+          ? message.member.roles.cache.has(BOOST_ROLE)
+          : false;
 
         const embed = new EmbedBuilder()
           .setColor("#0f172a")
@@ -79,13 +88,11 @@ module.exports = {
             `🔥 **LEVEL ${data.level}**\n\n` +
             `${bar} **${progress}%**\n` +
             `\`${data.xp} / ${needed} XP\`\n\n` +
-
             `⚡ Boost: ${
               hasBoost
                 ? `✅ Active (1.75x)`
                 : `❌ No Active`
             }\n` +
-
             `🌍 Global Multiplier: \`${cfg.globalMultiplier}x\``
           )
           .setThumbnail(message.author.displayAvatarURL())
@@ -142,7 +149,7 @@ module.exports = {
       if (now < cooldown.get(message.author.id)) return;
     }
 
-    cooldown.set(message.author.id, now + 8000); // 🔥 8s cooldown
+    cooldown.set(message.author.id, now + 8000);
 
     const cfg = loadConfig();
 
@@ -152,11 +159,10 @@ module.exports = {
       message.content.length
     );
 
-    // ===== DEBUG (możesz usunąć)
     console.log(`[XP] ${message.author.username} +${result.gained}`);
 
     // ===== LEVEL UP =====
-    if (result.leveledUp) {
+    if (result.leveledUp && LEVEL_CHANNEL) {
       const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
 
       if (channel) {
@@ -180,4 +186,5 @@ module.exports = {
       }
     }
   }
+};
 };
