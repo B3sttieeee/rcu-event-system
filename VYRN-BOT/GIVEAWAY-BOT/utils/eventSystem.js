@@ -10,7 +10,7 @@ const fs = require("fs");
 
 // ===== CONFIG =====
 const CHANNEL_ID = "1484937784283369502";
-const MERCHANT_ROLE = "TU_WSTAW_ID_ROLI";
+const MERCHANT_ROLE = "1476000993660502139";
 
 // ===== IMAGES =====
 const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
