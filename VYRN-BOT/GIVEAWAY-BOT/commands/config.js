@@ -1,28 +1,96 @@
+const { SlashCommandBuilder } = require("discord.js");
 const { setConfig } = require("../utils/configSystem");
 
 module.exports = {
-  name: "config",
-  description: "Ustawienia bota",
+  data: new SlashCommandBuilder()
+    .setName("config")
+    .setDescription("Ustawienia bota")
 
-  options: [
-    {
-      name: "logs",
-      type: 7, // CHANNEL
-      description: "Ustaw kanał logów",
-      required: false
-    }
-  ],
+    .addSubcommand(cmd =>
+      cmd.setName("logs")
+        .setDescription("Kanał logów")
+        .addChannelOption(opt =>
+          opt.setName("channel").setRequired(true)
+        )
+    )
+
+    .addSubcommand(cmd =>
+      cmd.setName("welcome")
+        .setDescription("Kanał powitalny")
+        .addChannelOption(opt =>
+          opt.setName("channel").setRequired(true)
+        )
+    )
+
+    .addSubcommand(cmd =>
+      cmd.setName("autorole")
+        .setDescription("Auto rola")
+        .addRoleOption(opt =>
+          opt.setName("role").setRequired(true)
+        )
+    )
+
+    .addSubcommand(cmd =>
+      cmd.setName("prefix")
+        .setDescription("Prefix bota")
+        .addStringOption(opt =>
+          opt.setName("value").setRequired(true)
+        )
+    )
+
+    .addSubcommand(cmd =>
+      cmd.setName("levelchannel")
+        .setDescription("Kanał leveli")
+        .addChannelOption(opt =>
+          opt.setName("channel").setRequired(true)
+        )
+    )
+
+    .addSubcommand(cmd =>
+      cmd.setName("boostrole")
+        .setDescription("Rola boost XP")
+        .addRoleOption(opt =>
+          opt.setName("role").setRequired(true)
+        )
+    ),
 
   async execute(interaction) {
-    const channel = interaction.options.getChannel("logs");
+    const sub = interaction.options.getSubcommand();
 
-    if (channel) {
-      setConfig(interaction.guild.id, "logChannel", channel.id);
+    if (sub === "logs") {
+      const ch = interaction.options.getChannel("channel");
+      setConfig(interaction.guild.id, "logChannel", ch.id);
+      return interaction.reply({ content: "✅ Log channel ustawiony", ephemeral: true });
+    }
 
-      return interaction.reply({
-        content: `✅ Ustawiono kanał logów na ${channel}`,
-        ephemeral: true
-      });
+    if (sub === "welcome") {
+      const ch = interaction.options.getChannel("channel");
+      setConfig(interaction.guild.id, "welcomeChannel", ch.id);
+      return interaction.reply({ content: "✅ Welcome channel ustawiony", ephemeral: true });
+    }
+
+    if (sub === "autorole") {
+      const role = interaction.options.getRole("role");
+      setConfig(interaction.guild.id, "autoRole", role.id);
+      return interaction.reply({ content: "✅ Auto role ustawiona", ephemeral: true });
+    }
+
+    if (sub === "prefix") {
+      const val = interaction.options.getString("value");
+      setConfig(interaction.guild.id, "prefix", val);
+      return interaction.reply({ content: "✅ Prefix ustawiony", ephemeral: true });
+    }
+
+    if (sub === "levelchannel") {
+      const ch = interaction.options.getChannel("channel");
+      setConfig(interaction.guild.id, "levelChannel", ch.id);
+      return interaction.reply({ content: "✅ Level channel ustawiony", ephemeral: true });
+    }
+
+    if (sub === "boostrole") {
+      const role = interaction.options.getRole("role");
+      setConfig(interaction.guild.id, "boostRole", role.id);
+      return interaction.reply({ content: "✅ Boost role ustawiona", ephemeral: true });
     }
   }
 };
