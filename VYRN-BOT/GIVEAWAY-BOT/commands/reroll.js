@@ -13,15 +13,29 @@ module.exports = {
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction, client) {
+    try {
+      await interaction.deferReply();
 
-    await interaction.deferReply(); // 🔥 FIX
+      const id = interaction.options.getString("messageid");
 
-    const id = interaction.options.getString("messageid");
+      const result = await reroll(client, id);
 
-    const result = await reroll(client, id);
+      if (!result) {
+        return interaction.editReply({
+          content: "❌ Nie udało się wylosować zwycięzcy"
+        });
+      }
 
-    await interaction.editReply({
-      content: `🎉 New winner: ${result}`
-    });
+      await interaction.editReply({
+        content: `🎉 New winner: ${result}`
+      });
+
+    } catch (err) {
+      console.log("❌ REROLL ERROR:", err);
+
+      await interaction.editReply({
+        content: "❌ Wystąpił błąd podczas rerolla"
+      });
+    }
   }
 };
