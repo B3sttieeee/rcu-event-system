@@ -1,22 +1,19 @@
 const { EmbedBuilder } = require("discord.js");
+const { getConfig } = require("../utils/configSystem");
 
 module.exports = {
   name: "guildMemberRemove",
 
   async execute(member) {
-    const ch = member.guild.channels.cache.get("1475992846912721018");
+    const config = getConfig(member.guild.id);
+    if (!config.logChannel) return;
 
+    const ch = member.guild.channels.cache.get(config.logChannel);
     if (!ch) return;
 
     const embed = new EmbedBuilder()
       .setColor("Red")
-      .setAuthor({
-        name: "Member Left",
-        iconURL: member.user.displayAvatarURL()
-      })
-      .setDescription(
-        `${member.user.tag}\n\n🆔 ID: ${member.id}`
-      )
+      .setDescription(`${member.user.tag} left`)
       .setTimestamp();
 
     ch.send({ embeds: [embed] });
