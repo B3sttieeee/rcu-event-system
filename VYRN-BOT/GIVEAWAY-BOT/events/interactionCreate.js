@@ -37,15 +37,18 @@ module.exports = {
       }
 
       // =========================
-      // 🎫 TICKETS (FIX)
+      // 🎫 TICKETS (FINAL FIX)
       // =========================
       if (
-        (interaction.isButton() ||
+        interaction.isButton() ||
         interaction.isModalSubmit() ||
-        interaction.isStringSelectMenu()) &&
-        interaction.customId?.startsWith("ticket_")
+        interaction.isStringSelectMenu()
       ) {
-        if (ticketSystem?.handle) {
+        if (
+          interaction.customId === "open_ticket" ||
+          interaction.customId === "close_ticket" ||
+          interaction.customId === "ticket_modal"
+        ) {
           return await ticketSystem.handle(interaction, client);
         }
       }
@@ -55,7 +58,7 @@ module.exports = {
       // =========================
       if (!interaction.isChatInputCommand()) return;
 
-      // 🔥 SAFE DEFER (NAJWAŻNIEJSZE)
+      // 🔥 SAFE DEFER
       if (!interaction.deferred && !interaction.replied) {
         await interaction.deferReply({ ephemeral: true });
       }
