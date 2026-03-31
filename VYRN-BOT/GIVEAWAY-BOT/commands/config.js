@@ -86,16 +86,14 @@ module.exports = {
 
         if (!role) {
           return interaction.editReply({
-            content: "❌ Podaj rolę lub ID",
-            ephemeral: true
+            content: "❌ Podaj rolę lub ID"
           });
         }
 
         setConfig(interaction.guild.id, "autoRole", role.id);
 
         return interaction.editReply({
-          content: `✅ Auto role: ${role}`,
-          ephemeral: true
+          content: `✅ Auto role: ${role}`
         });
       }
 
@@ -110,16 +108,14 @@ module.exports = {
 
         if (!ch) {
           return interaction.editReply({
-            content: "❌ Podaj kanał lub ID",
-            ephemeral: true
+            content: "❌ Podaj kanał lub ID"
           });
         }
 
         setConfig(interaction.guild.id, "logChannel", ch.id);
 
         return interaction.editReply({
-          content: `✅ Log channel: ${ch}`,
-          ephemeral: true
+          content: `✅ Log channel: ${ch}`
         });
       }
 
@@ -134,16 +130,14 @@ module.exports = {
 
         if (!ch) {
           return interaction.editReply({
-            content: "❌ Podaj kanał lub ID",
-            ephemeral: true
+            content: "❌ Podaj kanał lub ID"
           });
         }
 
         setConfig(interaction.guild.id, "levelChannel", ch.id);
 
         return interaction.editReply({
-          content: `✅ Level channel: ${ch}`,
-          ephemeral: true
+          content: `✅ Level channel: ${ch}`
         });
       }
 
@@ -158,16 +152,14 @@ module.exports = {
 
         if (!role) {
           return interaction.editReply({
-            content: "❌ Podaj rolę lub ID",
-            ephemeral: true
+            content: "❌ Podaj rolę lub ID"
           });
         }
 
         setConfig(interaction.guild.id, "boostRole", role.id);
 
         return interaction.editReply({
-          content: `✅ Boost role: ${role}`,
-          ephemeral: true
+          content: `✅ Boost role: ${role}`
         });
       }
 
@@ -176,13 +168,11 @@ module.exports = {
 
       if (interaction.deferred || interaction.replied) {
         return interaction.followUp({
-          content: "❌ Wystąpił błąd",
-          ephemeral: true
+          content: "❌ Wystąpił błąd"
         });
       } else {
         return interaction.reply({
-          content: "❌ Wystąpił błąd",
-          ephemeral: true
+          content: "❌ Wystąpił błąd"
         });
       }
     }
