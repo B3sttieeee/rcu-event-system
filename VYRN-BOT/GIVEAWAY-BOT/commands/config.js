@@ -68,6 +68,12 @@ module.exports = {
     ),
 
   async execute(interaction) {
+
+    // 🔥 SAFE DEFER (zabezpieczenie)
+    if (!interaction.deferred && !interaction.replied) {
+      await interaction.deferReply({ ephemeral: true });
+    }
+
     try {
       const sub = interaction.options.getSubcommand();
 
