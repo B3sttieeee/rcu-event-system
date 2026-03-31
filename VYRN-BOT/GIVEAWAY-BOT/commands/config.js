@@ -7,7 +7,6 @@ module.exports = {
     .setDescription("⚙️ Ustawienia bota")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
-    // ===== AUTOROLE =====
     .addSubcommand(cmd =>
       cmd.setName("autorole")
         .setDescription("Ustaw auto rolę")
@@ -23,7 +22,6 @@ module.exports = {
         )
     )
 
-    // ===== LOGS =====
     .addSubcommand(cmd =>
       cmd.setName("logs")
         .setDescription("Kanał logów")
@@ -39,7 +37,6 @@ module.exports = {
         )
     )
 
-    // ===== LEVEL =====
     .addSubcommand(cmd =>
       cmd.setName("levelchannel")
         .setDescription("Kanał level")
@@ -55,7 +52,6 @@ module.exports = {
         )
     )
 
-    // ===== BOOST =====
     .addSubcommand(cmd =>
       cmd.setName("boostrole")
         .setDescription("Rola boost")
@@ -72,13 +68,9 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    // 🔥 KLUCZOWY FIX — zawsze defer tutaj
-    await interaction.deferReply({ ephemeral: true });
-
     try {
       const sub = interaction.options.getSubcommand();
 
-      // ===== AUTOROLE =====
       if (sub === "autorole") {
         let role = interaction.options.getRole("role");
         let id = interaction.options.getString("id");
@@ -100,7 +92,6 @@ module.exports = {
         });
       }
 
-      // ===== LOGS =====
       if (sub === "logs") {
         let ch = interaction.options.getChannel("channel");
         let id = interaction.options.getString("id");
@@ -122,7 +113,6 @@ module.exports = {
         });
       }
 
-      // ===== LEVEL =====
       if (sub === "levelchannel") {
         let ch = interaction.options.getChannel("channel");
         let id = interaction.options.getString("id");
@@ -144,7 +134,6 @@ module.exports = {
         });
       }
 
-      // ===== BOOST =====
       if (sub === "boostrole") {
         let role = interaction.options.getRole("role");
         let id = interaction.options.getString("id");
