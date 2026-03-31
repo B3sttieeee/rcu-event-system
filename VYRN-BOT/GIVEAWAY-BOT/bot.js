@@ -83,32 +83,6 @@ if (!fs.existsSync(eventsPath)) {
 }
 
 // =========================
-// 🔥 BACKUP HANDLER (WAŻNE!)
-// jeśli nie masz interactionCreate w events
-// =========================
-client.on("interactionCreate", async (interaction) => {
-  try {
-
-    // SLASH COMMAND
-    if (interaction.isChatInputCommand()) {
-      const command = client.commands.get(interaction.commandName);
-      if (!command) return;
-
-      await command.execute(interaction, client);
-    }
-
-  } catch (err) {
-    console.error("❌ Interaction error:", err);
-
-    if (interaction.replied || interaction.deferred) {
-      interaction.followUp({ content: "❌ Błąd!", ephemeral: true });
-    } else {
-      interaction.reply({ content: "❌ Błąd!", ephemeral: true });
-    }
-  }
-});
-
-// =========================
 // 🔥 READY
 // =========================
 client.once("ready", () => {
