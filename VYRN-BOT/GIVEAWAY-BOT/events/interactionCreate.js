@@ -37,13 +37,13 @@ module.exports = {
       }
 
       // =========================
-      // 🎫 TICKETS
+      // 🎫 TICKETS (NAPRAWIONE)
       // =========================
       if (
         (interaction.isButton() ||
         interaction.isModalSubmit() ||
         interaction.isStringSelectMenu()) &&
-        interaction.customId?.startsWith("ticket_") // 🔥 FIX
+        interaction.customId?.startsWith("ticket_")
       ) {
         if (ticketSystem?.handle) {
           return await ticketSystem.handle(interaction, client);
@@ -55,23 +55,16 @@ module.exports = {
       // =========================
       if (!interaction.isChatInputCommand()) return;
 
+      // 🔥 NAJWAŻNIEJSZE — defer OD RAZU
+      await interaction.deferReply({ ephemeral: true });
+
       const command = client.commands.get(interaction.commandName);
 
       if (!command) {
-        if (interaction.deferred || interaction.replied) {
-          return interaction.followUp({
-            content: "❌ Komenda nie istnieje",
-            ephemeral: true
-          });
-        } else {
-          return interaction.reply({
-            content: "❌ Komenda nie istnieje",
-            ephemeral: true
-          });
-        }
+        return interaction.editReply({
+          content: "❌ Komenda nie istnieje"
+        });
       }
-
-      // ❌ USUNIĘTY GLOBALNY DEFER (to powodowało błędy)
 
       await command.execute(interaction, client);
 
@@ -81,13 +74,11 @@ module.exports = {
       try {
         if (interaction.deferred || interaction.replied) {
           await interaction.followUp({
-            content: "❌ Wystąpił błąd",
-            ephemeral: true
+            content: "❌ Wystąpił błąd"
           });
         } else {
           await interaction.reply({
-            content: "❌ Wystąpił błąd",
-            ephemeral: true
+            content: "❌ Wystąpił błąd"
           });
         }
       } catch {}
