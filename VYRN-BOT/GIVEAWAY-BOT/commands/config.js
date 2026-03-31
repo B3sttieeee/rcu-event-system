@@ -7,6 +7,7 @@ module.exports = {
     .setDescription("⚙️ Ustawienia bota")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
 
+    // AUTOROLE
     .addSubcommand(cmd =>
       cmd.setName("autorole")
         .setDescription("Ustaw auto rolę")
@@ -18,6 +19,7 @@ module.exports = {
         )
     )
 
+    // LOGS
     .addSubcommand(cmd =>
       cmd.setName("logs")
         .setDescription("Kanał logów")
@@ -29,6 +31,7 @@ module.exports = {
         )
     )
 
+    // LEVEL
     .addSubcommand(cmd =>
       cmd.setName("levelchannel")
         .setDescription("Kanał level")
@@ -40,6 +43,7 @@ module.exports = {
         )
     )
 
+    // BOOST
     .addSubcommand(cmd =>
       cmd.setName("boostrole")
         .setDescription("Rola boost")
@@ -53,10 +57,12 @@ module.exports = {
 
   async execute(interaction) {
     try {
+      // 🔥 TERAZ defer działa bo configSystem jest async
       await interaction.deferReply({ ephemeral: true });
 
       const sub = interaction.options.getSubcommand();
 
+      // AUTOROLE
       if (sub === "autorole") {
         let role = interaction.options.getRole("role");
         let id = interaction.options.getString("id");
@@ -71,13 +77,14 @@ module.exports = {
           });
         }
 
-        setConfig(interaction.guild.id, "autoRole", role.id);
+        await setConfig(interaction.guild.id, "autoRole", role.id);
 
         return interaction.editReply({
           content: `✅ Auto role: ${role}`
         });
       }
 
+      // LOGS
       if (sub === "logs") {
         let ch = interaction.options.getChannel("channel");
         let id = interaction.options.getString("id");
@@ -92,13 +99,14 @@ module.exports = {
           });
         }
 
-        setConfig(interaction.guild.id, "logChannel", ch.id);
+        await setConfig(interaction.guild.id, "logChannel", ch.id);
 
         return interaction.editReply({
           content: `✅ Log channel: ${ch}`
         });
       }
 
+      // LEVEL
       if (sub === "levelchannel") {
         let ch = interaction.options.getChannel("channel");
         let id = interaction.options.getString("id");
@@ -113,13 +121,14 @@ module.exports = {
           });
         }
 
-        setConfig(interaction.guild.id, "levelChannel", ch.id);
+        await setConfig(interaction.guild.id, "levelChannel", ch.id);
 
         return interaction.editReply({
           content: `✅ Level channel: ${ch}`
         });
       }
 
+      // BOOST
       if (sub === "boostrole") {
         let role = interaction.options.getRole("role");
         let id = interaction.options.getString("id");
@@ -134,7 +143,7 @@ module.exports = {
           });
         }
 
-        setConfig(interaction.guild.id, "boostRole", role.id);
+        await setConfig(interaction.guild.id, "boostRole", role.id);
 
         return interaction.editReply({
           content: `✅ Boost role: ${role}`
