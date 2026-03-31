@@ -43,8 +43,7 @@ module.exports = {
         (interaction.isButton() ||
         interaction.isModalSubmit() ||
         interaction.isStringSelectMenu()) &&
-        !interaction.customId?.startsWith("gw_") &&
-        !["refresh", "roles", "dm", "role_menu", "dm_menu"].includes(interaction.customId)
+        interaction.customId?.startsWith("ticket_") // 🔥 FIX
       ) {
         if (ticketSystem?.handle) {
           return await ticketSystem.handle(interaction, client);
@@ -72,10 +71,7 @@ module.exports = {
         }
       }
 
-      // 🔥 KLUCZOWY FIX
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
+      // ❌ USUNIĘTY GLOBALNY DEFER (to powodowało błędy)
 
       await command.execute(interaction, client);
 
