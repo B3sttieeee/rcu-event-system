@@ -37,7 +37,7 @@ module.exports = {
       }
 
       // =========================
-      // 🎫 TICKETS (NAPRAWIONE)
+      // 🎫 TICKETS (FIX)
       // =========================
       if (
         (interaction.isButton() ||
@@ -55,8 +55,10 @@ module.exports = {
       // =========================
       if (!interaction.isChatInputCommand()) return;
 
-      // 🔥 NAJWAŻNIEJSZE — defer OD RAZU
-      await interaction.deferReply({ ephemeral: true });
+      // 🔥 SAFE DEFER (NAJWAŻNIEJSZE)
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
 
       const command = client.commands.get(interaction.commandName);
 
