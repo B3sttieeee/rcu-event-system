@@ -20,7 +20,7 @@ module.exports = {
       }
 
       // =========================
-      // 🎁 GIVEAWAY (PRIORITY)
+      // 🎁 GIVEAWAY
       // =========================
       if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
         return giveawaySystem.handleGiveaway(interaction);
@@ -37,7 +37,7 @@ module.exports = {
       }
 
       // =========================
-      // 🎫 TICKETS (FINAL FIX)
+      // 🎫 TICKETS
       // =========================
       if (
         interaction.isButton() ||
@@ -49,7 +49,7 @@ module.exports = {
           interaction.customId === "close_ticket" ||
           interaction.customId === "ticket_modal"
         ) {
-          return await ticketSystem.handle(interaction, client);
+          return ticketSystem.handle(interaction, client);
         }
       }
 
@@ -58,16 +58,12 @@ module.exports = {
       // =========================
       if (!interaction.isChatInputCommand()) return;
 
-      // 🔥 SAFE DEFER
-      if (!interaction.deferred && !interaction.replied) {
-        await interaction.deferReply({ ephemeral: true });
-      }
-
       const command = client.commands.get(interaction.commandName);
 
       if (!command) {
-        return interaction.editReply({
-          content: "❌ Komenda nie istnieje"
+        return interaction.reply({
+          content: "❌ Komenda nie istnieje",
+          ephemeral: true
         });
       }
 
@@ -83,7 +79,8 @@ module.exports = {
           });
         } else {
           await interaction.reply({
-            content: "❌ Wystąpił błąd"
+            content: "❌ Wystąpił błąd",
+            ephemeral: true
           });
         }
       } catch {}
