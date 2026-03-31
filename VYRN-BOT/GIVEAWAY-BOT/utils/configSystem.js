@@ -1,26 +1,26 @@
-const fs = require("fs");
+const fs = require("fs").promises;
 const path = require("path");
 
 const filePath = path.join(__dirname, "../data/config.json");
 
 // AUTO CREATE
-function ensureFile() {
+async function ensureFile() {
   const dir = path.dirname(filePath);
 
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, "{}");
+  try {
+    await fs.mkdir(dir, { recursive: true });
+    await fs.access(filePath);
+  } catch {
+    await fs.writeFile(filePath, "{}");
   }
 }
 
 // LOAD
-function load() {
+async function load() {
   try {
-    ensureFile();
-    return JSON.parse(fs.readFileSync(filePath, "utf8"));
+    await ensureFile();
+    const data = await fs.readFile(filePath, "utf8");
+    return JSON.parse(data);
   } catch (err) {
     console.log("❌ CONFIG LOAD ERROR:", err);
     return {};
@@ -28,29 +28,29 @@ function load() {
 }
 
 // SAVE
-function save(data) {
+async function save(data) {
   try {
-    ensureFile();
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+    await ensureFile();
+    await fs.writeFile(filePath, JSON.stringify(data, null, 2));
   } catch (err) {
     console.log("❌ CONFIG SAVE ERROR:", err);
   }
 }
 
 // GET
-function getConfig(guildId) {
-  const data = load();
+async function getConfig(guildId) {
+  const data = await load();
   return data[guildId] || {};
 }
 
 // SET
-function setConfig(guildId, key, value) {
-  const data = load();
+async function setConfig(guildId, key, value) {
+  const data = await load();
 
   if (!data[guildId]) data[guildId] = {};
   data[guildId][key] = value;
 
-  save(data);
+  await save(data);
 }
 
 module.exports = {
