@@ -8,10 +8,9 @@ module.exports = {
   async execute(interaction, client) {
     try {
 
-      // =========================
-      // ⚡ SLASH COMMANDS (PRIORYTET)
-      // =========================
+      // ===== SLASH COMMANDS =====
       if (interaction.isChatInputCommand()) {
+
         const command = client.commands.get(interaction.commandName);
 
         if (!command) {
@@ -21,30 +20,27 @@ module.exports = {
           });
         }
 
+        // 🔥 TYLKO TU defer
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferReply({ ephemeral: true });
+        }
+
         return await command.execute(interaction, client);
       }
 
-      // =========================
-      // 📦 EMBED SYSTEM (IGNORE)
-      // =========================
+      // ===== EMBED SYSTEM =====
       if (
         interaction.customId?.startsWith("embedModal_") ||
         interaction.customId?.startsWith("sendEmbed_") ||
         interaction.customId?.startsWith("editEmbed_")
-      ) {
-        return;
-      }
+      ) return;
 
-      // =========================
-      // 🎁 GIVEAWAY
-      // =========================
+      // ===== GIVEAWAY =====
       if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
         return giveawaySystem.handleGiveaway(interaction);
       }
 
-      // =========================
-      // 🍯 EVENT SYSTEM
-      // =========================
+      // ===== EVENT SYSTEM =====
       if (
         (interaction.isButton() || interaction.isStringSelectMenu()) &&
         ["refresh", "roles", "dm", "role_menu", "dm_menu"].includes(interaction.customId)
@@ -52,9 +48,7 @@ module.exports = {
         return handleEventInteraction(interaction);
       }
 
-      // =========================
-      // 🎫 TICKETS
-      // =========================
+      // ===== TICKETS =====
       if (
         interaction.isButton() &&
         ["open_ticket", "close_ticket"].includes(interaction.customId)
@@ -74,14 +68,9 @@ module.exports = {
 
       try {
         if (interaction.deferred || interaction.replied) {
-          await interaction.followUp({
-            content: "❌ Wystąpił błąd"
-          });
+          await interaction.followUp({ content: "❌ Wystąpił błąd" });
         } else {
-          await interaction.reply({
-            content: "❌ Wystąpił błąd",
-            ephemeral: true
-          });
+          await interaction.reply({ content: "❌ Wystąpił błąd", ephemeral: true });
         }
       } catch {}
     }
