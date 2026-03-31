@@ -9,6 +9,22 @@ module.exports = {
     try {
 
       // =========================
+      // ⚡ SLASH COMMANDS (PRIORYTET)
+      // =========================
+      if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName);
+
+        if (!command) {
+          return interaction.reply({
+            content: "❌ Komenda nie istnieje",
+            ephemeral: true
+          });
+        }
+
+        return await command.execute(interaction, client);
+      }
+
+      // =========================
       // 📦 EMBED SYSTEM (IGNORE)
       // =========================
       if (
@@ -40,34 +56,18 @@ module.exports = {
       // 🎫 TICKETS
       // =========================
       if (
-        interaction.isButton() ||
-        interaction.isModalSubmit() ||
-        interaction.isStringSelectMenu()
+        interaction.isButton() &&
+        ["open_ticket", "close_ticket"].includes(interaction.customId)
       ) {
-        if (
-          interaction.customId === "open_ticket" ||
-          interaction.customId === "close_ticket" ||
-          interaction.customId === "ticket_modal"
-        ) {
-          return ticketSystem.handle(interaction, client);
-        }
+        return ticketSystem.handle(interaction, client);
       }
 
-      // =========================
-      // ⚡ SLASH COMMANDS
-      // =========================
-      if (!interaction.isChatInputCommand()) return;
-
-      const command = client.commands.get(interaction.commandName);
-
-      if (!command) {
-        return interaction.reply({
-          content: "❌ Komenda nie istnieje",
-          ephemeral: true
-        });
+      if (
+        interaction.isModalSubmit() &&
+        interaction.customId === "ticket_modal"
+      ) {
+        return ticketSystem.handle(interaction, client);
       }
-
-      await command.execute(interaction, client);
 
     } catch (err) {
       console.log("❌ INTERACTION ERROR:", err);
