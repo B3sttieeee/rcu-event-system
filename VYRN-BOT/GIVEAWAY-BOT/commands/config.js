@@ -72,6 +72,9 @@ module.exports = {
     ),
 
   async execute(interaction) {
+    // 🔥 KLUCZOWY FIX — zawsze defer tutaj
+    await interaction.deferReply({ ephemeral: true });
+
     try {
       const sub = interaction.options.getSubcommand();
 
@@ -166,12 +169,12 @@ module.exports = {
     } catch (err) {
       console.log("❌ CONFIG ERROR:", err);
 
-      if (interaction.deferred || interaction.replied) {
-        return interaction.followUp({
+      try {
+        return interaction.editReply({
           content: "❌ Wystąpił błąd"
         });
-      } else {
-        return interaction.reply({
+      } catch {
+        return interaction.followUp({
           content: "❌ Wystąpił błąd"
         });
       }
