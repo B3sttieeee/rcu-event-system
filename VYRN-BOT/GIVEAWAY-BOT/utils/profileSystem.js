@@ -19,13 +19,15 @@ function saveProfile(data) {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== GET USER (ANTI-UNDEFINED FIX 🔥)
-function getUser(db, userId) {
-  if (!db.users[userId]) {
-    db.users[userId] = {
+// ===== GET USER =====
+function getUser(id) {
+  const db = loadProfile();
+
+  if (!db.users[id]) {
+    db.users[id] = {
       voice: 0,
-      lastDaily: 0,
       streak: 0,
+      lastDaily: 0,
       daily: {
         msgs: 0,
         vc: 0,
@@ -34,66 +36,32 @@ function getUser(db, userId) {
     };
   }
 
-  // 🔥 FIX brakujących danych (stare konta)
-  const user = db.users[userId];
-
-  if (!user.daily) {
-    user.daily = { msgs: 0, vc: 0, completed: false };
-  }
-
-  if (typeof user.streak !== "number") user.streak = 0;
-  if (typeof user.lastDaily !== "number") user.lastDaily = 0;
-
-  return user;
-}
-
-// ===== TIER SYSTEM (DYNAMIC 🔥)
-function getDailyRequirement(streak) {
-  const tier = Math.floor(streak / 5);
-
-  const voiceRequired = 10 + (tier * 10); // 10,20,30...
-  const messagesRequired = tier >= 1 ? 20 + (tier * 10) : 0; // od 5 streaka
-
-  return {
-    voice: voiceRequired * 60,
-    messages: messagesRequired
-  };
-}
-
-// ===== PROGRESS =====
-function getProgress(userId) {
-  const db = loadProfile();
-  const user = getUser(db, userId);
-
-  const req = getDailyRequirement(user.streak);
-
-  const voicePercent = Math.min(100, Math.floor((user.daily.vc / req.voice) * 100 || 0));
-  const msgPercent = req.messages > 0
-    ? Math.min(100, Math.floor((user.daily.msgs / req.messages) * 100 || 0))
-    : 100;
-
-  const completed = voicePercent >= 100 && msgPercent >= 100;
-
-  if (completed) user.daily.completed = true;
-
   saveProfile(db);
+  return db.users[id];
+}
+
+// ===== DAILY TIER SYSTEM (DYNAMIC 🔥) =====
+function getDailyTier(streak = 0) {
+  const tier = Math.floor(streak / 2);
 
   return {
-    voice: user.daily.vc,
-    messages: user.daily.msgs,
-    voiceRequired: req.voice,
-    messagesRequired: req.messages,
-    voicePercent,
-    msgPercent,
-    completed,
-    streak: user.streak
+    tier,
+
+    // 🎤 rośnie zawsze
+    voiceRequired: 10 + tier * 5,
+
+    // 💬 od tier 5
+    messagesRequired: tier >= 5 ? 20 + (tier - 5) * 10 : 0,
+
+    // 💰 XP rośnie mocno
+    rewardXP: 100 + (tier * 150) + (streak * 50)
   };
 }
 
 // ===== ADD VOICE =====
 function addVoiceTime(userId, seconds) {
   const db = loadProfile();
-  const user = getUser(db, userId);
+  const user = getUser(userId);
 
   user.voice += seconds;
   user.daily.vc += seconds;
@@ -104,43 +72,48 @@ function addVoiceTime(userId, seconds) {
 // ===== ADD MESSAGE =====
 function addMessage(userId) {
   const db = loadProfile();
-  const user = getUser(db, userId);
+  const user = getUser(userId);
 
   user.daily.msgs++;
 
   saveProfile(db);
 }
 
+// ===== CHECK READY =====
+function isDailyReady(userId) {
+  const user = getUser(userId);
+  const tier = getDailyTier(user.streak);
+
+  const vcOK = user.daily.vc >= tier.voiceRequired * 60;
+  const msgOK = user.daily.msgs >= tier.messagesRequired;
+
+  return vcOK && msgOK;
+}
+
 // ===== CLAIM DAILY =====
 function claimDaily(userId) {
   const db = loadProfile();
-  const user = getUser(db, userId);
+  const user = getUser(userId);
+  const tier = getDailyTier(user.streak);
 
   const now = Date.now();
-  const day = 86400000;
 
-  const progress = getProgress(userId);
-
-  if (!progress.completed) {
-    return { error: true, msg: "❌ Daily not completed!" };
+  if (!isDailyReady(userId)) {
+    return {
+      error: true,
+      msg: "❌ Daily nie jest jeszcze ukończone!"
+    };
   }
 
-  // 🔥 STREAK RESET (jeśli minął dzień)
-  if (user.lastDaily && now - user.lastDaily > day * 2) {
+  // 🔥 streak reset jeśli minął dzień
+  if (user.lastDaily && now - user.lastDaily > 86400000 * 2) {
     user.streak = 0;
   }
 
   user.streak++;
-
-  // 🎁 XP SCALING
-  const base = 100 + (user.streak * 50);
-  const random = Math.floor(Math.random() * base);
-
-  const xp = base + random;
-
   user.lastDaily = now;
 
-  // RESET DAILY
+  // reset progressu
   user.daily = {
     msgs: 0,
     vc: 0,
@@ -150,30 +123,31 @@ function claimDaily(userId) {
   saveProfile(db);
 
   return {
-    xp,
+    xp: tier.rewardXP,
     streak: user.streak
   };
 }
 
-// ===== CHECK READY =====
-function isDailyReady(userId) {
-  const progress = getProgress(userId);
-  return progress.completed;
-}
+// ===== AUTO RESET O PÓŁNOCY =====
+function startDailyReset() {
+  setInterval(() => {
+    const now = new Date();
 
-// ===== RESET ALL (opcjonalny cron)
-function resetDailyAll() {
-  const db = loadProfile();
+    if (now.getHours() === 0 && now.getMinutes() === 0) {
+      const db = loadProfile();
 
-  for (const id in db.users) {
-    db.users[id].daily = {
-      msgs: 0,
-      vc: 0,
-      completed: false
-    };
-  }
+      for (const id in db.users) {
+        db.users[id].daily = {
+          msgs: 0,
+          vc: 0,
+          completed: false
+        };
+      }
 
-  saveProfile(db);
+      saveProfile(db);
+      console.log("🌙 Daily reset wykonany");
+    }
+  }, 60000);
 }
 
 // ===== EXPORT =====
@@ -181,8 +155,8 @@ module.exports = {
   loadProfile,
   addVoiceTime,
   addMessage,
-  claimDaily,
   isDailyReady,
-  getProgress,
-  resetDailyAll
+  claimDaily,
+  getDailyTier,
+  startDailyReset
 };
