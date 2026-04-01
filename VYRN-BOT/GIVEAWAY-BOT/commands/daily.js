@@ -1,37 +1,85 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require("discord.js");
 
-const { claimDaily } = require("../utils/profileSystem");
-const { addXP } = require("../utils/levelSystem");
+const {
+  loadProfile,
+  isDailyReady,
+  claimDaily
+} = require("../utils/profileSystem");
+
+// ===== PROGRESS BAR
+function getBar(current, max) {
+  const size = 10;
+  const percent = Math.min(100, Math.floor((current / max) * 100));
+  const filled = Math.round((percent / 100) * size);
+  const empty = size - filled;
+
+  return "🟩".repeat(filled) + "⬛".repeat(empty) + ` ${percent}%`;
+}
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("daily")
-    .setDescription("🎯 Claim your daily reward"),
+    .setDescription("🎯 Daily quests & reward"),
 
   async execute(interaction) {
-    const result = claimDaily(interaction.user.id);
 
-    if (result.error) {
-      return interaction.reply({
-        content: result.msg,
-        flags: 64
-      });
-    }
+    const db = loadProfile();
+    const user = db.users[interaction.user.id] || {
+      voice: 0,
+      daily: { msgs: 0, vc: 0, completed: false, streak: 0 }
+    };
 
-    // 🔥 DODAJ XP DO LEVELA
-    await addXP(interaction.member, result.xp);
+    const msgs = user.daily.msgs || 0;
+    const vc = Math.floor((user.daily.vc || 0) / 60);
 
+    const msgGoal = 50;
+    const vcGoal = 30;
+
+    const ready = isDailyReady(interaction.user.id);
+
+    // ===== EMBED
     const embed = new EmbedBuilder()
-      .setColor("#22c55e")
+      .setColor("#0f172a")
+      .setAuthor({
+        name: interaction.user.username,
+        iconURL: interaction.user.displayAvatarURL()
+      })
       .setDescription(
-`🎯 **Daily Claimed!**
+`<:Zadania:1488763408026435594> **Daily Quests**
 
-<a:XP:1488763317857161377> **+${result.xp} XP**
-🔥 Streak: **${result.streak}**
+<:Messages:1488763434966192242> Messages  
+${getBar(msgs, msgGoal)} (${msgs}/${msgGoal})
 
-<:PEPENOTE:1488765551038959677> *Come back tomorrow to increase streak!*`
+<a:TimeS:1488760889560797314> Voice  
+${getBar(vc, vcGoal)} (${vc}/${vcGoal} min)
+
+━━━━━━━━━━━━━━━━━━
+
+🔥 Streak: **${user.daily.streak || 0}**
+
+${ready 
+? "✅ **Reward ready to claim!**" 
+: "❌ Complete quests to unlock reward"}`
       );
 
-    interaction.reply({ embeds: [embed] });
+    // ===== BUTTON
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("daily_claim")
+        .setLabel("CLAIM")
+        .setStyle(ButtonStyle.Success)
+        .setDisabled(!ready)
+    );
+
+    await interaction.reply({
+      embeds: [embed],
+      components: [row]
+    });
   }
 };
