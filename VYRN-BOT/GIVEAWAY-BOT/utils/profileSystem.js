@@ -2,15 +2,20 @@ const fs = require("fs");
 
 const PROFILE_PATH = "/data/profile.json";
 
-function loadProfile() {
-  if (!fs.existsSync("/data")) fs.mkdirSync("/data");
+// ===== INIT =====
+function ensure() {
+  if (!fs.existsSync("/data")) fs.mkdirSync("/data", { recursive: true });
 
   if (!fs.existsSync(PROFILE_PATH)) {
     fs.writeFileSync(PROFILE_PATH, JSON.stringify({
       users: {}
     }, null, 2));
   }
+}
 
+// ===== LOAD / SAVE =====
+function loadProfile() {
+  ensure();
   return JSON.parse(fs.readFileSync(PROFILE_PATH));
 }
 
@@ -18,81 +23,112 @@ function saveProfile(data) {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== INIT USER =====
-function ensureUser(db, userId) {
-  if (!db.users[userId]) {
-    db.users[userId] = {
+// ===== GET USER =====
+function getUser(db, id) {
+  if (!db.users[id]) {
+    db.users[id] = {
       voice: 0,
+      lastDaily: 0,
+      streak: 0,
       daily: {
         msgs: 0,
-        vc: 0,
-        claimed: false
+        vc: 0
       }
     };
   }
+  return db.users[id];
 }
 
-// ===== VOICE TIME =====
-function addVoiceTime(userId, seconds) {
-  const db = loadProfile();
-  ensureUser(db, userId);
-
-  db.users[userId].voice += seconds;
-  db.users[userId].daily.vc += seconds;
-
-  saveProfile(db);
-}
-
-// ===== MESSAGE COUNT =====
+// ===== MESSAGE =====
 function addMessage(userId) {
   const db = loadProfile();
-  ensureUser(db, userId);
+  const user = getUser(db, userId);
 
-  db.users[userId].daily.msgs++;
+  user.daily.msgs++;
 
   saveProfile(db);
 }
 
-// ===== CHECK DAILY READY =====
+// ===== VOICE =====
+function addVoiceTime(member, seconds) {
+  const db = loadProfile();
+  const user = getUser(db, member.id);
+
+  user.voice += seconds;
+  user.daily.vc += seconds;
+
+  saveProfile(db);
+}
+
+// ===== DAILY READY =====
 function isDailyReady(userId) {
   const db = loadProfile();
-  ensureUser(db, userId);
+  const user = getUser(db, userId);
 
-  const user = db.users[userId];
-
-  return (
-    user.daily.msgs >= 50 &&
-    user.daily.vc >= 1800 && // 30 min
-    !user.daily.claimed
-  );
+  return user.daily.msgs >= 50 && user.daily.vc >= 1800;
 }
 
 // ===== CLAIM DAILY =====
 function claimDaily(userId) {
   const db = loadProfile();
-  ensureUser(db, userId);
+  const user = getUser(db, userId);
 
-  if (!isDailyReady(userId)) return false;
+  const now = Date.now();
+  const oneDay = 86400000;
 
-  db.users[userId].daily.claimed = true;
-
-  saveProfile(db);
-  return true;
-}
-
-// ===== RESET DAILY =====
-function resetDaily() {
-  const db = loadProfile();
-
-  for (const id in db.users) {
-    db.users[id].daily = {
-      msgs: 0,
-      vc: 0,
-      claimed: false
-    };
+  if (now - user.lastDaily < oneDay) {
+    return { error: true, msg: "⏳ Already claimed today" };
   }
 
+  if (!isDailyReady(userId)) {
+    return { error: true, msg: "❌ Complete daily tasks first!" };
+  }
+
+  // ===== STREAK SYSTEM
+  if (now - user.lastDaily < oneDay * 2) {
+    user.streak++;
+  } else {
+    user.streak = 1;
+  }
+
+  user.lastDaily = now;
+
+  // ===== RANDOM XP BASED ON STREAK
+  const base = 100;
+  const bonus = user.streak * 50;
+
+  const xp = Math.floor(Math.random() * (base + bonus)) + base;
+
+  // reset daily progress
+  user.daily.msgs = 0;
+  user.daily.vc = 0;
+
   saveProfile(db);
+
+  return {
+    xp,
+    streak: user.streak
+  };
+}
+
+// ===== AUTO RESET (MIDNIGHT)
+function startDailyReset() {
+  setInterval(() => {
+    const now = new Date();
+
+    if (now.getHours() === 0 && now.getMinutes() === 0) {
+      const db = loadProfile();
+
+      for (const id in db.users) {
+        db.users[id].daily.msgs = 0;
+        db.users[id].daily.vc = 0;
+      }
+
+      saveProfile(db);
+      console.log("🌙 Daily reset executed");
+    }
+
+  }, 60000);
 }
 
 module.exports = {
@@ -101,5 +137,5 @@ module.exports = {
   addMessage,
   isDailyReady,
   claimDaily,
-  resetDaily
+  startDailyReset
 };
