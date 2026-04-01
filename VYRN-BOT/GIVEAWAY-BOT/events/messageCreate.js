@@ -9,10 +9,11 @@ const {
 } = require("../utils/levelSystem");
 
 const { getConfig } = require("../utils/configSystem");
+const { addMessage } = require("../utils/profileSystem");
 
 const fs = require("fs");
 
-// ===== DB PATH (ZGODNY Z LEVEL SYSTEM)
+// ===== DB PATH
 const DB_PATH = "/data/levels.json";
 
 const cooldown = new Map();
@@ -41,7 +42,6 @@ module.exports = {
 
   async execute(message) {
     try {
-
       if (!message.guild) return;
       if (message.author.bot) return;
 
@@ -169,7 +169,19 @@ module.exports = {
 
       console.log(`[XP] ${message.author.username} +${result.gained}`);
 
-      // ===== LEVEL UP
+      // =========================
+      // 🎯 DAILY QUEST SYSTEM (NOWE)
+      // =========================
+
+      const completed = await addMessage(message.member);
+
+      if (completed) {
+        message.reply("🎯 Daily quest completed! +50 XP").catch(() => {});
+      }
+
+      // =========================
+      // 🚀 LEVEL UP
+      // =========================
       if (result.leveledUp && LEVEL_CHANNEL) {
         const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
 
@@ -190,7 +202,7 @@ module.exports = {
           channel.send({
             content: `🎉 ${message.author}`,
             embeds: [embed]
-          }).catch(()=>{});
+          }).catch(() => {});
         }
       }
 
