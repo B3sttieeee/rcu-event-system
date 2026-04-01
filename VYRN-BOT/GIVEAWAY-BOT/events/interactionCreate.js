@@ -1,6 +1,6 @@
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
-const giveawaySystem = require("../utils/giveawaySystem");
+const { handleGiveaway } = require("../utils/giveawaySystem");
 
 module.exports = {
   name: "interactionCreate",
@@ -8,20 +8,16 @@ module.exports = {
   async execute(interaction, client) {
     try {
 
-      // ===== SLASH COMMAND =====
-      if (interaction.isChatInputCommand()) {
-        const command = client.commands.get(interaction.commandName);
-        if (!command) return;
-
-        return await command.execute(interaction, client);
+      // =========================
+      // 🎁 GIVEAWAY (NAJPIERW)
+      // =========================
+      if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
+        return handleGiveaway(interaction);
       }
 
-      // ===== GIVEAWAY =====
-      if (interaction.isButton() && interaction.customId.startsWith("gw_")) {
-        return giveawaySystem.handleGiveaway(interaction);
-      }
-
-      // ===== EVENT SYSTEM =====
+      // =========================
+      // 🍯 EVENT SYSTEM
+      // =========================
       if (
         (interaction.isButton() || interaction.isStringSelectMenu()) &&
         ["refresh", "roles", "dm", "role_menu", "dm_menu"].includes(interaction.customId)
@@ -29,26 +25,31 @@ module.exports = {
         return handleEventInteraction(interaction);
       }
 
-      // ===== TICKETS =====
+      // =========================
+      // 🎫 TICKETS (PEŁNA OBSŁUGA)
+      // =========================
       if (
-        interaction.isButton() &&
-        ["open_ticket", "close_ticket"].includes(interaction.customId)
+        interaction.isButton() ||
+        interaction.isModalSubmit()
       ) {
         return ticketSystem.handle(interaction, client);
       }
 
-      if (
-        interaction.isModalSubmit() &&
-        interaction.customId === "ticket_modal"
-      ) {
-        return ticketSystem.handle(interaction, client);
+      // =========================
+      // ⚡ SLASH COMMANDS
+      // =========================
+      if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName);
+        if (!command) return;
+
+        return await command.execute(interaction, client);
       }
 
     } catch (err) {
-      console.log("❌ INTERACTION ERROR:", err);
+      console.error("❌ INTERACTION ERROR:", err);
 
       try {
-        if (interaction.deferred || interaction.replied) {
+        if (interaction.replied || interaction.deferred) {
           await interaction.followUp({
             content: "❌ Wystąpił błąd",
             flags: 64
