@@ -11,7 +11,6 @@ const {
 } = require("discord.js");
 
 // ===== CONFIG =====
-const REQUIRED_ROLE = "1475998527191519302";
 const ADMIN_ROLE = "1475998527191519302";
 const PANEL_CHANNEL_ID = "1475558248487583805";
 const CATEGORY_ID = "1475985874385899530";
@@ -33,24 +32,25 @@ async function createTicketPanel(client) {
 
     const embed = new EmbedBuilder()
       .setColor("#ff6600")
-      .setTitle("📌 Clan VYRN • Ticket System")
+      .setTitle("📌 VYRN • Recruitment Ticket")
       .setDescription(
-`📩 **Open a ticket to apply for clan**
+`📩 **Open ticket to join VYRN**
 
 ━━━━━━━━━━━━━━━━━━
 
-📋 **Requirements**
-• Good Team  
-• Good GamePass  
-• 🔄 1.5N Rebirth+  
-• 🕒 3–8h AFK  
+⚔️ **Requirements**
+• 500 O+ Power  
+• Active & loyal player  
+• Good team setup  
+• Gamepasses recommended  
+• Ability to AFK / grind  
 
 ━━━━━━━━━━━━━━━━━━
 
-🚀 Click button below to start`
+🚀 Click button below to apply`
       )
-      .setImage("https://media.discordapp.net/attachments/1475993508535074816/1476584792048013312/Fallen-Knight-in-Burning-Forest.gif")
-      .setFooter({ text: "VYRN SYSTEM • Tickets" });
+      .setImage("https://media.tenor.com/Fo9Wajlr7XMAAAPo/fgo-agravain.gif")
+      .setFooter({ text: "VYRN SYSTEM • Recruitment" });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -77,14 +77,9 @@ async function handle(interaction) {
   // ===== OPEN BUTTON =====
   if (interaction.isButton() && interaction.customId === "open_ticket") {
 
-    if (!interaction.member.roles.cache.has(REQUIRED_ROLE)) {
-      return interaction.reply({
-        content: "❌ Nie masz roli do tworzenia ticketów",
-        ephemeral: true
-      });
-    }
+    // ❌ USUNIĘTO REQUIRE ROLE
 
-    // 🔥 POPRAWIONA BLOKADA DUPLIKATÓW (topic)
+    // 🔥 BLOKADA DUPLIKATÓW
     const existing = interaction.guild.channels.cache.find(
       c => c.topic === interaction.user.id
     );
@@ -127,8 +122,8 @@ async function handle(interaction) {
     const lang = interaction.fields.getTextInputValue("lang").toLowerCase();
 
     const channel = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.id}`, // 🔥 stabilna nazwa
-      topic: interaction.user.id, // 🔥 klucz do wykrywania
+      name: `ticket-${interaction.user.id}`,
+      topic: interaction.user.id,
       type: ChannelType.GuildText,
       parent: CATEGORY_ID || null,
       permissionOverwrites: [
@@ -164,11 +159,21 @@ async function handle(interaction) {
           ? `👤 **User:** ${interaction.user}
 📝 **Nickname:** ${nick}
 
-📸 Send screenshots of stats, gamepasses and team.`
+📸 Send screenshots of:
+• Stats
+• Gamepasses
+• Team
+
+⚡ We will review your application soon.`
           : `👤 **Użytkownik:** ${interaction.user}
 📝 **Nick:** ${nick}
 
-📸 Wyślij screeny statystyk, gamepassów i teamu.`
+📸 Wyślij screeny:
+• Statystyk
+• Gamepassów
+• Teamu
+
+⚡ Administracja wkrótce odpowie.`
       )
       .setFooter({ text: "VYRN Recruitment System" });
 
