@@ -1,6 +1,16 @@
-const { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require("discord.js");
 
-const { loadProfile, getDailyTier, isDailyReady } = require("../utils/profileSystem");
+const {
+  loadProfile,
+  getDailyTier,
+  isDailyReady
+} = require("../utils/profileSystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -10,22 +20,37 @@ module.exports = {
   async execute(interaction) {
 
     const db = loadProfile();
+
     const user = db.users[interaction.user.id] || {
-      streak: 0,
-      daily: { msgs: 0, vc: 0 }
+      voice: 0,
+      daily: {
+        msgs: 0,
+        vc: 0,
+        streak: 0
+      }
     };
 
-    const tier = getDailyTier(user.streak);
+    const streak = user.daily.streak || 0;
 
-    const vcMin = Math.floor(user.daily.vc / 60);
-    const msgs = user.daily.msgs;
+    const tier = getDailyTier(streak);
 
-    const vcPercent = Math.min(100, Math.floor((vcMin / tier.vc) * 100));
-    const msgPercent = tier.msgs > 0
-      ? Math.min(100, Math.floor((msgs / tier.msgs) * 100))
+    const vcMin = Math.floor((user.daily.vc || 0) / 60);
+    const msgs = user.daily.msgs || 0;
+
+    const vcRequired = tier.vcRequired;
+    const msgRequired = tier.msgRequired;
+
+    const vcPercent = vcRequired > 0
+      ? Math.min(100, Math.floor((vcMin / vcRequired) * 100))
       : 0;
 
-    const bar = (p) => "🟩".repeat(Math.floor(p / 10)) + "⬛".repeat(10 - Math.floor(p / 10));
+    const msgPercent = msgRequired > 0
+      ? Math.min(100, Math.floor((msgs / msgRequired) * 100))
+      : 0;
+
+    const bar = (p) =>
+      "🟩".repeat(Math.floor(p / 10)) +
+      "⬛".repeat(10 - Math.floor(p / 10));
 
     const ready = isDailyReady(interaction.user.id);
 
@@ -39,19 +64,19 @@ module.exports = {
 `🎯 **Daily Quests**
 
 🎤 Voice  
-${bar(vcPercent)} ${vcPercent}% (${vcMin}/${tier.vc} min)
+${bar(vcPercent)} ${vcPercent}% (${vcMin}/${vcRequired} min)
 
 ${
-  tier.msgs > 0
-  ? `💬 Messages  
-${bar(msgPercent)} ${msgPercent}% (${msgs}/${tier.msgs})`
-  : `💬 Messages  
+  msgRequired > 0
+    ? `💬 Messages  
+${bar(msgPercent)} ${msgPercent}% (${msgs}/${msgRequired})`
+    : `💬 Messages  
 🔒 Unlock at streak 5`
 }
 
 ━━━━━━━━━━━━━━
 
-🔥 Streak: **${user.streak}**
+🔥 Streak: **${streak}**
 
 ${
   ready
@@ -68,7 +93,7 @@ ${
         .setDisabled(!ready)
     );
 
-    interaction.reply({
+    await interaction.reply({
       embeds: [embed],
       components: [row],
       flags: 64
