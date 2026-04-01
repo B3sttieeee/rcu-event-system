@@ -15,24 +15,24 @@ module.exports = {
 
       if (result.reason === "claimed") {
         return interaction.reply({
-          content: "❌ Już odebrałeś daily dzisiaj",
+          content: "❌ Już odebrałeś daily",
           ephemeral: true
         });
       }
 
       if (result.reason === "not_ready") {
         return interaction.reply({
-          content: "❌ Nie spełniłeś wymagań (50 msg + 30 min VC)",
+          content: "❌ Wymagania: 50 msg + 30 min VC",
           ephemeral: true
         });
       }
     }
 
     // 🔥 NAGRODA
-    await addXP(interaction.member, 50);
+    await addXP(interaction.member, 100);
 
     return interaction.reply({
-      content: "🎉 Daily odebrane! +50 XP"
+      content: "🎉 Daily odebrane! +100 XP"
     });
   }
 };
