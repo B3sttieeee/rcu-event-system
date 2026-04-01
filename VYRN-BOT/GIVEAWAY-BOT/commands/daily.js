@@ -1,85 +1,184 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} = require("discord.js");
+const fs = require("fs");
 
-const {
-  loadProfile,
-  isDailyReady,
-  claimDaily
-} = require("../utils/profileSystem");
+const PROFILE_PATH = "/data/profile.json";
 
-// ===== PROGRESS BAR
-function getBar(current, max) {
-  const size = 10;
-  const percent = Math.min(100, Math.floor((current / max) * 100));
-  const filled = Math.round((percent / 100) * size);
-  const empty = size - filled;
+// ===== INIT =====
+function ensure() {
+  if (!fs.existsSync("/data")) fs.mkdirSync("/data", { recursive: true });
 
-  return "🟩".repeat(filled) + "⬛".repeat(empty) + ` ${percent}%`;
+  if (!fs.existsSync(PROFILE_PATH)) {
+    fs.writeFileSync(PROFILE_PATH, JSON.stringify({
+      users: {}
+    }, null, 2));
+  }
+}
+
+// ===== LOAD / SAVE =====
+function loadProfile() {
+  ensure();
+  return JSON.parse(fs.readFileSync(PROFILE_PATH));
+}
+
+function saveProfile(data) {
+  fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
+}
+
+// ===== USER =====
+function getUser(db, id) {
+  if (!db.users[id]) {
+    db.users[id] = {
+      voice: 0,
+      lastDaily: 0,
+      streak: 0,
+      notified: false,
+      daily: {
+        msgs: 0,
+        vc: 0
+      }
+    };
+  }
+  return db.users[id];
+}
+
+// ===== 🔥 DYNAMIC TIER =====
+function getDailyTier(streak) {
+
+  // 🎤 VOICE zawsze rośnie
+  const vc = Math.min(10 + streak * 3, 180); // max 180 min
+
+  // 💬 wiadomości dopiero od 5 streaka
+  let msgs = 0;
+  if (streak >= 5) {
+    msgs = Math.floor(5 + streak * 2);
+  }
+
+  // 🎁 reward skaluje się
+  const min = 100 + streak * 40;
+  const max = 200 + streak * 80;
+
+  return {
+    vc,
+    msgs,
+    reward: [min, max]
+  };
+}
+
+// ===== MESSAGE =====
+function addMessage(userId) {
+  const db = loadProfile();
+  const user = getUser(db, userId);
+
+  user.daily.msgs++;
+  user.notified = false;
+
+  saveProfile(db);
+}
+
+// ===== VOICE =====
+function addVoiceTime(member, seconds) {
+  const db = loadProfile();
+  const user = getUser(db, member.id);
+
+  user.voice += seconds;
+  user.daily.vc += seconds;
+  user.notified = false;
+
+  saveProfile(db);
+}
+
+// ===== READY CHECK =====
+function isDailyReady(userId) {
+  const db = loadProfile();
+  const user = getUser(db, userId);
+
+  const tier = getDailyTier(user.streak);
+  const vcMinutes = Math.floor(user.daily.vc / 60);
+
+  return (
+    vcMinutes >= tier.vc &&
+    user.daily.msgs >= tier.msgs
+  );
+}
+
+// ===== CLAIM =====
+function claimDaily(userId) {
+  const db = loadProfile();
+  const user = getUser(db, userId);
+
+  const now = Date.now();
+  const oneDay = 86400000;
+
+  // ❌ reset streak jeśli przegapi
+  if (user.lastDaily && (now - user.lastDaily > oneDay * 2)) {
+    user.streak = 0;
+  }
+
+  // ❌ już odebrane
+  if (now - user.lastDaily < oneDay) {
+    return { error: true, msg: "⏳ Already claimed today" };
+  }
+
+  // ❌ nie ukończono
+  if (!isDailyReady(userId)) {
+    return { error: true, msg: "❌ Complete daily first!" };
+  }
+
+  // 🔥 streak++
+  user.streak++;
+
+  user.lastDaily = now;
+
+  // 🎁 REWARD
+  const tier = getDailyTier(user.streak);
+  const [min, max] = tier.reward;
+
+  let xp = Math.floor(Math.random() * (max - min + 1)) + min;
+
+  // 🔥 BONUS ZA STREAK
+  const bonus = Math.floor(user.streak * 15);
+  xp += bonus;
+
+  // 🔄 RESET DAILY
+  user.daily.msgs = 0;
+  user.daily.vc = 0;
+  user.notified = false;
+
+  saveProfile(db);
+
+  return {
+    xp,
+    streak: user.streak,
+    bonus,
+    tier
+  };
+}
+
+// ===== RESET MIDNIGHT =====
+function startDailyReset() {
+  setInterval(() => {
+    const now = new Date();
+
+    if (now.getHours() === 0 && now.getMinutes() === 0) {
+      const db = loadProfile();
+
+      for (const id in db.users) {
+        db.users[id].daily.msgs = 0;
+        db.users[id].daily.vc = 0;
+        db.users[id].notified = false;
+      }
+
+      saveProfile(db);
+      console.log("🌙 Daily reset!");
+    }
+  }, 60000);
 }
 
 module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("daily")
-    .setDescription("🎯 Daily quests & reward"),
-
-  async execute(interaction) {
-
-    const db = loadProfile();
-    const user = db.users[interaction.user.id] || {
-      voice: 0,
-      daily: { msgs: 0, vc: 0, completed: false, streak: 0 }
-    };
-
-    const msgs = user.daily.msgs || 0;
-    const vc = Math.floor((user.daily.vc || 0) / 60);
-
-    const msgGoal = 50;
-    const vcGoal = 30;
-
-    const ready = isDailyReady(interaction.user.id);
-
-    // ===== EMBED
-    const embed = new EmbedBuilder()
-      .setColor("#0f172a")
-      .setAuthor({
-        name: interaction.user.username,
-        iconURL: interaction.user.displayAvatarURL()
-      })
-      .setDescription(
-`<:Zadania:1488763408026435594> **Daily Quests**
-
-<:Messages:1488763434966192242> Messages  
-${getBar(msgs, msgGoal)} (${msgs}/${msgGoal})
-
-<a:TimeS:1488760889560797314> Voice  
-${getBar(vc, vcGoal)} (${vc}/${vcGoal} min)
-
-━━━━━━━━━━━━━━━━━━
-
-🔥 Streak: **${user.daily.streak || 0}**
-
-${ready 
-? "✅ **Reward ready to claim!**" 
-: "❌ Complete quests to unlock reward"}`
-      );
-
-    // ===== BUTTON
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("daily_claim")
-        .setLabel("CLAIM")
-        .setStyle(ButtonStyle.Success)
-        .setDisabled(!ready)
-    );
-
-    await interaction.reply({
-      embeds: [embed],
-      components: [row]
-    });
-  }
+  loadProfile,
+  addVoiceTime,
+  addMessage,
+  isDailyReady,
+  claimDaily,
+  getDailyTier,
+  startDailyReset
 };
