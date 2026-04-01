@@ -1,8 +1,31 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 
+// ===== PATH =====
 const LEVEL_DB = "/data/levels.json";
 const PROFILE_DB = "/data/profile.json";
+
+// ===== EMOJI =====
+const EMOJI = {
+  xp: "<a:XP:1488763317857161377>",
+  next: "<:Next:1488760924193161337>",
+  fire: "<a:FIRE:1488765514875404449>",
+  voice: "<a:TimeS:1488760889560797314>",
+  msg: "<:Messages:1488763434966192242>",
+  daily: "🎯",
+  tip: "<:PEPENOTE:1488765551038959677>"
+};
+
+// ===== RANKS =====
+function getRank(level) {
+  if (level >= 75) return "<:LegeRank:1488756343190847538> Legendary";
+  if (level >= 60) return "<:RubyRank:1488756400514404372> Ruby";
+  if (level >= 45) return "<:DiaxRank:1488756482924089404> Diamond";
+  if (level >= 30) return "<:PlatRank:1488756557863845958> Platinum";
+  if (level >= 15) return "<:GoldRank:1488756524854808686> Gold";
+  if (level >= 5) return "<:BronzeRank:1488756638285565962> Bronze";
+  return "<:Ironrank:1488756604277887039> Iron";
+}
 
 // ===== LOAD =====
 function loadLevels() {
@@ -24,27 +47,11 @@ function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
 
-// ===== RANK =====
-function getRank(level) {
-  if (level >= 75) return "<:LegeRank:1488756343190847538>";
-  if (level >= 60) return "<:RubyRank:1488756400514404372>";
-  if (level >= 45) return "<:DiaxRank:1488756482924089404>";
-  if (level >= 30) return "<:PlatRank:1488756557863845958>";
-  if (level >= 15) return "<:GoldRank:1488756524854808686>";
-  if (level >= 5) return "<:BronzeRank:1488756638285565962>";
-  return "<:Ironrank:1488756604277887039>";
-}
-
-// ===== PROGRESS =====
-function getProgress(current, needed) {
-  const percent = Math.floor((current / needed) * 100);
-  return percent > 100 ? 100 : percent;
-}
-
+// ===== COMMAND =====
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("profile")
-    .setDescription("🔥 Advanced profile"),
+    .setDescription("📊 Show your profile"),
 
   async execute(interaction) {
 
@@ -52,42 +59,48 @@ module.exports = {
     const profile = loadProfile();
 
     const lvlData = levels.xp[interaction.user.id] || { xp: 0, level: 0 };
+
     const user = profile.users?.[interaction.user.id] || {
       voice: 0,
       daily: { msgs: 0, vc: 0 }
     };
 
     const needed = neededXP(lvlData.level);
-    const percent = getProgress(lvlData.xp, needed);
+    const percent = Math.floor((lvlData.xp / needed) * 100);
+
     const vcMinutes = Math.floor(user.voice / 60);
-    const rank = getRank(lvlData.level);
 
     // ===== STATUS =====
     let status = "🔴 Low";
     if (percent >= 40) status = "🟡 Medium";
     if (percent >= 75) status = "🟢 High";
 
+    const nextXP = needed - lvlData.xp;
+
+    // ===== EMBED =====
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setAuthor({
-        name: `${interaction.user.username}`,
+        name: interaction.user.username,
         iconURL: interaction.user.displayAvatarURL()
       })
       .setThumbnail(interaction.user.displayAvatarURL({ size: 512 }))
 
       .setDescription(
-`🏆 **Level ${lvlData.level}** ${rank}
+`🏆 **Level ${lvlData.level}** • ${getRank(lvlData.level)}
 
-<a:XP:1488763317857161377> \`${lvlData.xp} / ${needed}\` (**${percent}%**)
-<:Next:1488760924193161337> \`${needed - lvlData.xp} XP to next level\`
+${EMOJI.xp} **${lvlData.xp} / ${needed} XP • ${percent}%**
+${EMOJI.next} **${nextXP} XP to next level**
 
-<a:FIRE:1488765514875404449> **${status}** • <a:TimeS:1488760889560797314> \`${vcMinutes}m\` • <:Messages:1488763434966192242> \`${user.daily.msgs}/50\` • <:Zadania:1488763408026435594> \`${Math.floor(user.daily.vc / 60)}/30\`
+──────────────
 
-<:PEPENOTE:1488765551038959677> *Stay active to gain more XP!*`
+${EMOJI.fire} ${status} | ${EMOJI.voice} ${vcMinutes}m | ${EMOJI.msg} ${user.daily.msgs}/50 | ${EMOJI.daily} ${Math.floor(user.daily.vc / 60)}/30
+
+${EMOJI.tip} *Be active to level up faster!*`
       )
 
       .setFooter({
-        text: "VYRN System",
+        text: "VYRN System • Profile",
         iconURL: interaction.client.user.displayAvatarURL()
       })
       .setTimestamp();
