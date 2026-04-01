@@ -25,9 +25,7 @@ function saveDB(data) {
 }
 
 // ===== GET USER =====
-function getUser(id) {
-  const db = loadDB();
-
+function getUser(db, id) {
   if (!db.users[id]) {
     db.users[id] = {
       voice: 0,
@@ -38,13 +36,11 @@ function getUser(id) {
         lastReset: Date.now()
       }
     };
-    saveDB(db);
   }
-
   return db.users[id];
 }
 
-// ===== RESET DAILY (JEŚLI NOWY DZIEŃ) =====
+// ===== RESET =====
 function checkReset(user) {
   const now = new Date();
   const last = new Date(user.daily.lastReset);
@@ -61,37 +57,35 @@ function checkReset(user) {
   }
 }
 
-// ===== MESSAGE COUNT =====
+// ===== MESSAGE =====
 function addMessage(member) {
   const db = loadDB();
-  const user = getUser(member.id);
+  const user = getUser(db, member.id);
 
   checkReset(user);
 
   user.daily.msgs += 1;
 
-  db.users[member.id] = user;
   saveDB(db);
 }
 
-// ===== VOICE TIME =====
+// ===== VOICE =====
 function addVoiceTime(member, seconds) {
   const db = loadDB();
-  const user = getUser(member.id);
+  const user = getUser(db, member.id);
 
   checkReset(user);
 
   user.voice += seconds;
   user.daily.vc += seconds;
 
-  db.users[member.id] = user;
   saveDB(db);
 }
 
-// ===== CLAIM DAILY =====
+// ===== CLAIM DAILY (🔥 KLUCZOWE) =====
 function claimDaily(member) {
   const db = loadDB();
-  const user = getUser(member.id);
+  const user = getUser(db, member.id);
 
   checkReset(user);
 
@@ -105,16 +99,14 @@ function claimDaily(member) {
 
   user.daily.claimed = true;
 
-  db.users[member.id] = user;
   saveDB(db);
 
   return { ok: true };
 }
 
-// ===== EXPORT =====
+// ===== EXPORT (🔥 TU BYŁ BŁĄD U CIEBIE PEWNIE)
 module.exports = {
   addMessage,
   addVoiceTime,
-  claimDaily,
-  getUser
+  claimDaily
 };
