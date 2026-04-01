@@ -2,7 +2,7 @@ const fs = require("fs");
 
 const PROFILE_PATH = "/data/profile.json";
 
-// ===== INIT =====
+// ===== INIT SAFE =====
 function loadProfile() {
   if (!fs.existsSync("/data")) fs.mkdirSync("/data");
 
@@ -10,166 +10,172 @@ function loadProfile() {
     fs.writeFileSync(PROFILE_PATH, JSON.stringify({ users: {} }, null, 2));
   }
 
-  return JSON.parse(fs.readFileSync(PROFILE_PATH));
+  const data = JSON.parse(fs.readFileSync(PROFILE_PATH));
+
+  // 🔥 AUTO FIX STARYCH DANYCH
+  for (const id in data.users) {
+    const u = data.users[id];
+
+    if (typeof u.voice !== "number") u.voice = 0;
+
+    if (!u.daily) {
+      u.daily = {
+        msgs: 0,
+        vc: 0,
+        completed: false,
+        streak: 0,
+        lastClaim: 0
+      };
+    }
+
+    if (typeof u.daily.msgs !== "number") u.daily.msgs = 0;
+    if (typeof u.daily.vc !== "number") u.daily.vc = 0;
+    if (typeof u.daily.completed !== "boolean") u.daily.completed = false;
+    if (typeof u.daily.streak !== "number") u.daily.streak = 0;
+    if (typeof u.daily.lastClaim !== "number") u.daily.lastClaim = 0;
+  }
+
+  return data;
 }
 
 function saveProfile(data) {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== INIT USER (NAJWAŻNIEJSZE 🔥)
-function ensureUser(db, userId) {
+// ===== DAILY TIERS (DYNAMIC 🔥) =====
+function getDailyTier(streak) {
+  const tier = Math.floor(streak / 3) + 1;
+
+  const voiceRequired = 300 + (tier * 120); // rośnie
+  const messagesRequired = tier >= 5 ? 20 + (tier * 5) : 0;
+
+  return {
+    tier,
+    voiceRequired,
+    messagesRequired
+  };
+}
+
+// ===== VOICE =====
+function addVoiceTime(userId, seconds) {
+  const db = loadProfile();
+
   if (!db.users[userId]) {
     db.users[userId] = {
       voice: 0,
-      streak: 0,
-      lastClaim: 0,
-      daily: {
-        msgs: 0,
-        vc: 0,
-        completed: false
-      }
+      daily: { msgs: 0, vc: 0, completed: false, streak: 0, lastClaim: 0 }
     };
   }
 
-  // FIX brakujących pól (ważne dla starej bazy)
-  const u = db.users[userId];
+  const tier = getDailyTier(db.users[userId].daily.streak);
 
-  if (u.streak === undefined) u.streak = 0;
-  if (!u.daily) {
-    u.daily = { msgs: 0, vc: 0, completed: false };
+  db.users[userId].voice += seconds;
+  db.users[userId].daily.vc += seconds;
+
+  // COMPLETE CHECK
+  if (
+    db.users[userId].daily.vc >= tier.voiceRequired &&
+    db.users[userId].daily.msgs >= tier.messagesRequired
+  ) {
+    db.users[userId].daily.completed = true;
   }
-}
-
-// ===== TIER SYSTEM 🔥
-function getDailyTier(streak = 0) {
-  const tier = Math.floor(streak / 5);
-
-  let vcRequired = 10 + tier * 5;
-  let msgRequired = tier >= 1 ? 20 + tier * 10 : 0;
-
-  return {
-    vcRequired,
-    msgRequired
-  };
-}
-
-// ===== ADD VOICE =====
-function addVoiceTime(userId, seconds) {
-  const db = loadProfile();
-  ensureUser(db, userId);
-
-  const user = db.users[userId];
-
-  user.voice += seconds;
-  user.daily.vc += seconds;
-
-  checkDaily(user);
 
   saveProfile(db);
 }
 
-// ===== ADD MESSAGE =====
+// ===== MESSAGE =====
 function addMessage(userId) {
   const db = loadProfile();
-  ensureUser(db, userId);
 
-  const user = db.users[userId];
+  if (!db.users[userId]) {
+    db.users[userId] = {
+      voice: 0,
+      daily: { msgs: 0, vc: 0, completed: false, streak: 0, lastClaim: 0 }
+    };
+  }
 
-  user.daily.msgs++;
+  const tier = getDailyTier(db.users[userId].daily.streak);
 
-  checkDaily(user);
+  db.users[userId].daily.msgs++;
+
+  // COMPLETE CHECK
+  if (
+    db.users[userId].daily.vc >= tier.voiceRequired &&
+    db.users[userId].daily.msgs >= tier.messagesRequired
+  ) {
+    db.users[userId].daily.completed = true;
+  }
 
   saveProfile(db);
 }
 
-// ===== CHECK DAILY =====
-function checkDaily(user) {
-  const tier = getDailyTier(user.streak);
-
-  const vcOk = user.daily.vc >= tier.vcRequired * 60;
-  const msgOk = tier.msgRequired === 0 || user.daily.msgs >= tier.msgRequired;
-
-  if (vcOk && msgOk) {
-    user.daily.completed = true;
-  }
-}
-
-// ===== CLAIM DAILY 🔥
+// ===== CLAIM DAILY =====
 function claimDaily(userId) {
   const db = loadProfile();
-  ensureUser(db, userId);
 
-  const user = db.users[userId];
-
-  if (!user.daily.completed) {
-    return {
-      error: true,
-      msg: "❌ Musisz najpierw ukończyć daily!"
+  if (!db.users[userId]) {
+    db.users[userId] = {
+      voice: 0,
+      daily: { msgs: 0, vc: 0, completed: false, streak: 0, lastClaim: 0 }
     };
   }
 
+  const user = db.users[userId];
   const now = Date.now();
 
-  // reset streak jeśli minął dzień
-  if (now - user.lastClaim > 86400000 * 2) {
-    user.streak = 0;
+  if (!user.daily.completed) {
+    return { error: true, msg: "❌ Daily not completed!" };
   }
 
-  user.streak++;
+  // RESET STREAK jeśli minął dzień
+  if (now - user.daily.lastClaim > 86400000 * 2) {
+    user.daily.streak = 0;
+  }
 
-  const tier = getDailyTier(user.streak);
+  user.daily.streak++;
+  user.daily.lastClaim = now;
 
-  // 🔥 LOSOWY XP (skalowany streakiem)
-  const base = 200 + user.streak * 50;
-  const xp = Math.floor(Math.random() * base) + base;
+  // 🔥 XP SKALOWANE ZE STREAKIEM
+  const baseXP = 100;
+  const xp = Math.floor(baseXP + (user.daily.streak * 50));
 
-  // reset daily
-  user.daily = {
-    msgs: 0,
-    vc: 0,
-    completed: false
-  };
-
-  user.lastClaim = now;
+  // RESET DAILY
+  user.daily.msgs = 0;
+  user.daily.vc = 0;
+  user.daily.completed = false;
 
   saveProfile(db);
 
   return {
     xp,
-    streak: user.streak,
-    tier
+    streak: user.daily.streak
   };
 }
 
-// ===== CHECK READY =====
-function isDailyReady(userId) {
-  const db = loadProfile();
-  ensureUser(db, userId);
-
-  return db.users[userId].daily.completed;
-}
-
-// ===== RESET DAILY AUTO =====
-function resetDaily() {
+// ===== GET PROGRESS =====
+function getProgress(userId) {
   const db = loadProfile();
 
-  for (const id in db.users) {
-    const user = db.users[id];
-
-    // reset streak jeśli nie odebrał
-    if (Date.now() - user.lastClaim > 86400000) {
-      user.streak = 0;
-    }
-
-    user.daily = {
+  if (!db.users[userId]) {
+    return {
       msgs: 0,
       vc: 0,
-      completed: false
+      completed: false,
+      streak: 0,
+      tier: getDailyTier(0)
     };
   }
 
-  saveProfile(db);
+  const user = db.users[userId];
+  const tier = getDailyTier(user.daily.streak);
+
+  return {
+    msgs: user.daily.msgs,
+    vc: user.daily.vc,
+    completed: user.daily.completed,
+    streak: user.daily.streak,
+    tier
+  };
 }
 
 // ===== EXPORT =====
@@ -177,7 +183,5 @@ module.exports = {
   addVoiceTime,
   addMessage,
   claimDaily,
-  isDailyReady,
-  resetDaily,
-  getDailyTier
+  getProgress
 };
