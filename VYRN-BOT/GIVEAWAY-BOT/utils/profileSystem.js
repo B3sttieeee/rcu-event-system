@@ -2,7 +2,9 @@ const fs = require("fs");
 
 const PROFILE_PATH = "/data/profile.json";
 
-// ===== LOAD =====
+// =========================
+// 📂 LOAD + AUTO FIX
+// =========================
 function loadProfile() {
   if (!fs.existsSync("/data")) {
     fs.mkdirSync("/data", { recursive: true });
@@ -14,14 +16,43 @@ function loadProfile() {
     }, null, 2));
   }
 
-  return JSON.parse(fs.readFileSync(PROFILE_PATH));
+  const data = JSON.parse(fs.readFileSync(PROFILE_PATH));
+
+  // 🔥 AUTO FIX STARYCH DANYCH
+  for (const id in data.users) {
+    const user = data.users[id];
+
+    if (!user.voice) user.voice = 0;
+
+    if (!user.daily) {
+      user.daily = {
+        msgs: 0,
+        vc: 0,
+        completed: false,
+        streak: 0,
+        lastClaim: 0
+      };
+    }
+
+    if (typeof user.daily.vc !== "number") user.daily.vc = 0;
+    if (typeof user.daily.msgs !== "number") user.daily.msgs = 0;
+    if (typeof user.daily.streak !== "number") user.daily.streak = 0;
+    if (typeof user.daily.completed !== "boolean") user.daily.completed = false;
+    if (typeof user.daily.lastClaim !== "number") user.daily.lastClaim = 0;
+  }
+
+  fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
+
+  return data;
 }
 
 function saveProfile(data) {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== ENSURE USER =====
+// =========================
+// 👤 ENSURE USER
+// =========================
 function ensureUser(db, userId) {
   if (!db.users[userId]) {
     db.users[userId] = {
@@ -36,127 +67,104 @@ function ensureUser(db, userId) {
     };
   }
 
-  // FIX starych danych
-  if (!db.users[userId].daily) {
-    db.users[userId].daily = {
-      msgs: 0,
-      vc: 0,
-      completed: false,
-      streak: 0,
-      lastClaim: 0
-    };
-  }
-
-  if (typeof db.users[userId].daily.vc !== "number") db.users[userId].daily.vc = 0;
-  if (typeof db.users[userId].daily.msgs !== "number") db.users[userId].daily.msgs = 0;
-  if (typeof db.users[userId].daily.streak !== "number") db.users[userId].daily.streak = 0;
+  return db.users[userId];
 }
 
-// ===== VOICE =====
+// =========================
+// 🎤 VOICE TIME
+// =========================
 function addVoiceTime(userId, seconds) {
   const db = loadProfile();
-  ensureUser(db, userId);
+  const user = ensureUser(db, userId);
 
-  db.users[userId].voice += seconds;
-  db.users[userId].daily.vc += seconds;
+  user.voice += seconds;
+  user.daily.vc += seconds;
 
   saveProfile(db);
 }
 
-// ===== MESSAGE =====
+// =========================
+// 💬 MESSAGE COUNT
+// =========================
 function addMessage(userId) {
   const db = loadProfile();
-  ensureUser(db, userId);
+  const user = ensureUser(db, userId);
 
-  db.users[userId].daily.msgs++;
+  user.daily.msgs++;
 
   saveProfile(db);
 }
 
-// ===== TIER SYSTEM (DYNAMICZNY 🔥)
+// =========================
+// 📊 DAILY TIER SYSTEM
+// =========================
 function getDailyTier(streak) {
-  const tier = Math.floor(streak / 2) + 1;
-
   return {
-    tier,
-    requiredVC: 10 + (tier * 5), // 10,15,20,25...
-    requiredMsgs: tier >= 5 ? (20 + tier * 5) : 0 // od tier 5
+    vcRequired: 30 + (streak * 5), // rośnie
+    msgRequired: streak >= 5 ? 20 + (streak * 2) : 0 // od 5 streak
   };
 }
 
-// ===== CHECK READY =====
+// =========================
+// 🎯 CHECK READY
+// =========================
 function isDailyReady(userId) {
   const db = loadProfile();
-  ensureUser(db, userId);
+  const user = ensureUser(db, userId);
 
-  const user = db.users[userId];
-  const tierData = getDailyTier(user.daily.streak);
+  const tier = getDailyTier(user.daily.streak);
 
-  const vcMin = user.daily.vc / 60;
+  const vcOk = (user.daily.vc || 0) >= (tier.vcRequired * 60);
+  const msgOk = tier.msgRequired === 0 || (user.daily.msgs || 0) >= tier.msgRequired;
 
-  const vcOk = vcMin >= tierData.requiredVC;
-  const msgOk = tierData.requiredMsgs === 0 || user.daily.msgs >= tierData.requiredMsgs;
-
-  if (vcOk && msgOk) {
-    user.daily.completed = true;
-    saveProfile(db);
-    return true;
-  }
-
-  return false;
+  return vcOk && msgOk;
 }
 
-// ===== CLAIM =====
+// =========================
+// 🎁 CLAIM DAILY
+// =========================
 function claimDaily(userId) {
   const db = loadProfile();
-  ensureUser(db, userId);
+  const user = ensureUser(db, userId);
 
-  const user = db.users[userId];
+  const now = Date.now();
+  const oneDay = 86400000;
 
   if (!isDailyReady(userId)) {
     return {
       error: true,
-      msg: "❌ Daily nie jest jeszcze ukończone!"
+      msg: "❌ Najpierw ukończ daily!"
     };
   }
 
-  const now = Date.now();
-
-  // 🔥 RESET STREAK jeśli minął dzień
-  if (user.daily.lastClaim) {
-    const diff = now - user.daily.lastClaim;
-
-    if (diff > 86400000 * 1.5) {
-      user.daily.streak = 0;
-    }
+  // 🔥 RESET STREAK jeśli przerwa > 48h
+  if (user.daily.lastClaim && now - user.daily.lastClaim > oneDay * 2) {
+    user.daily.streak = 0;
   }
 
   user.daily.streak++;
 
-  const tierData = getDailyTier(user.daily.streak);
+  // 🎁 LOSOWE XP (skaluje się)
+  const baseXP = 100 + (user.daily.streak * 50);
+  const randomXP = Math.floor(baseXP + Math.random() * baseXP);
 
-  // 💰 LOSOWY XP (ROSNIE ZE STREAKIEM)
-  const baseXP = 100 + (tierData.tier * 50);
-  const xp = Math.floor(baseXP + Math.random() * baseXP);
-
-  // reset daily
-  user.daily = {
-    msgs: 0,
-    vc: 0,
-    completed: false,
-    streak: user.daily.streak,
-    lastClaim: now
-  };
+  // 🔄 RESET DAILY
+  user.daily.msgs = 0;
+  user.daily.vc = 0;
+  user.daily.completed = false;
+  user.daily.lastClaim = now;
 
   saveProfile(db);
 
   return {
-    xp,
+    xp: randomXP,
     streak: user.daily.streak
   };
 }
 
-// ===== RESET AUTO O PÓŁNOCY =====
+// =========================
+// 🌙 AUTO RESET (PÓŁNOC)
+// =========================
 function startDailyReset() {
   setInterval(() => {
     const now = new Date();
@@ -171,12 +179,14 @@ function startDailyReset() {
       }
 
       saveProfile(db);
-      console.log("🌙 Daily reset!");
+      console.log("🌙 Daily reset done");
     }
   }, 60000);
 }
 
-// ===== EXPORT =====
+// =========================
+// 📤 EXPORT
+// =========================
 module.exports = {
   loadProfile,
   addVoiceTime,
