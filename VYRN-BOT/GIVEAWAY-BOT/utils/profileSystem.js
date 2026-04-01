@@ -42,11 +42,19 @@ function getUser(db, id) {
 
 // ===== 🔥 DYNAMIC TIER =====
 function getDailyTier(streak) {
-  const vc = Math.min(10 + streak * 2, 120); // max 120 min
-  const msgs = streak < 3 ? 0 : Math.floor(streak * 2);
 
-  const min = 100 + streak * 25;
-  const max = 200 + streak * 50;
+  // 🎤 VOICE zawsze rośnie
+  const vc = Math.min(10 + streak * 3, 180); // max 180 min
+
+  // 💬 wiadomości dopiero od 5 streaka
+  let msgs = 0;
+  if (streak >= 5) {
+    msgs = Math.floor(5 + streak * 2);
+  }
+
+  // 🎁 reward skaluje się
+  const min = 100 + streak * 40;
+  const max = 200 + streak * 80;
 
   return {
     vc,
@@ -100,35 +108,37 @@ function claimDaily(userId) {
   const now = Date.now();
   const oneDay = 86400000;
 
-  // ===== RESET STREAK JEŚLI PRZEGAPIŁ 🔥
+  // ❌ reset streak jeśli przegapi
   if (user.lastDaily && (now - user.lastDaily > oneDay * 2)) {
     user.streak = 0;
   }
 
+  // ❌ już odebrane
   if (now - user.lastDaily < oneDay) {
     return { error: true, msg: "⏳ Already claimed today" };
   }
 
+  // ❌ nie ukończono
   if (!isDailyReady(userId)) {
     return { error: true, msg: "❌ Complete daily first!" };
   }
 
-  // ===== STREAK++
+  // 🔥 streak++
   user.streak++;
 
   user.lastDaily = now;
 
-  // ===== REWARD
+  // 🎁 REWARD
   const tier = getDailyTier(user.streak);
   const [min, max] = tier.reward;
 
   let xp = Math.floor(Math.random() * (max - min + 1)) + min;
 
   // 🔥 BONUS ZA STREAK
-  const bonus = Math.floor(user.streak * 10);
+  const bonus = Math.floor(user.streak * 15);
   xp += bonus;
 
-  // ===== RESET DAILY
+  // 🔄 RESET DAILY
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.notified = false;
@@ -138,11 +148,12 @@ function claimDaily(userId) {
   return {
     xp,
     streak: user.streak,
-    bonus
+    bonus,
+    tier
   };
 }
 
-// ===== RESET MIDNIGHT
+// ===== RESET MIDNIGHT =====
 function startDailyReset() {
   setInterval(() => {
     const now = new Date();
