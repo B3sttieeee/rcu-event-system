@@ -7,13 +7,16 @@ const {
 
 const fs = require("fs");
 
+// ===== PATH =====
+const DATA_DIR = "/data";
+const DB_PATH = `${DATA_DIR}/giveaways.json`;
+
 const giveaways = new Map();
-const DB_PATH = "/data/giveaways.json";
 
 // ===== DB =====
 function loadDB() {
-  if (!fs.existsSync("/data")) {
-    fs.mkdirSync("/data");
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
   }
 
   if (!fs.existsSync(DB_PATH)) {
@@ -83,48 +86,52 @@ function buildEmbed(data) {
 
 // ===== CREATE =====
 async function createGiveaway(interaction, data) {
+  try {
+    const duration = parseTime(data.time);
+    if (!duration) throw new Error("Bad time");
 
-  const duration = parseTime(data.time);
-  if (!duration) throw new Error("Bad time");
+    const giveawayData = {
+      prize: data.prize,
+      winners: data.winners,
+      end: Date.now() + duration,
+      users: [],
+      channelId: interaction.channel.id,
+      messageId: null,
+      image: data.image || null
+    };
 
-  const giveawayData = {
-    prize: data.prize,
-    winners: data.winners,
-    end: Date.now() + duration,
-    users: [],
-    channelId: interaction.channel.id,
-    messageId: null,
-    image: data.image || null
-  };
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("gw_join")
+        .setLabel("🎉 Join")
+        .setStyle(ButtonStyle.Success),
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("gw_join")
-      .setLabel("🎉 Join")
-      .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId("gw_leave")
+        .setLabel("❌ Leave")
+        .setStyle(ButtonStyle.Secondary)
+    );
 
-    new ButtonBuilder()
-      .setCustomId("gw_leave")
-      .setLabel("❌ Leave")
-      .setStyle(ButtonStyle.Secondary)
-  );
+    const msg = await interaction.channel.send({
+      embeds: [buildEmbed(giveawayData)],
+      components: [row]
+    });
 
-  const msg = await interaction.channel.send({
-    embeds: [buildEmbed(giveawayData)],
-    components: [row]
-  });
+    giveawayData.messageId = msg.id;
 
-  giveawayData.messageId = msg.id;
+    giveaways.set(msg.id, giveawayData);
+    saveDB();
 
-  giveaways.set(msg.id, giveawayData);
-  saveDB();
+    startTimer(msg, giveawayData);
 
-  startTimer(msg, giveawayData);
+  } catch (err) {
+    console.log("❌ CREATE GIVEAWAY ERROR:", err);
+    throw err;
+  }
 }
 
 // ===== TIMER =====
 function startTimer(message, data) {
-
   const interval = setInterval(async () => {
     const d = giveaways.get(message.id);
     if (!d) return clearInterval(interval);
@@ -143,7 +150,6 @@ function startTimer(message, data) {
 
 // ===== END =====
 async function endGiveaway(message, data) {
-
   if (!data.users.length) {
     await message.channel.send("❌ Brak uczestników");
     giveaways.delete(message.id);
@@ -176,52 +182,8 @@ ${winners.map(w => `<@${w}>`).join("\n")}
   saveDB();
 }
 
-// ===== LOAD =====
-async function loadGiveaways(client) {
-  const db = loadDB();
-
-  for (const id in db) {
-    const data = db[id];
-
-    try {
-      const channel = await client.channels.fetch(data.channelId);
-      const message = await channel.messages.fetch(id);
-
-      giveaways.set(id, data);
-
-      if (Date.now() >= data.end) {
-        endGiveaway(message, data);
-      } else {
-        startTimer(message, data);
-      }
-
-    } catch {
-      giveaways.delete(id);
-    }
-  }
-}
-
-// ===== REROLL =====
-async function reroll(client, messageId) {
-
-  const data = giveaways.get(messageId);
-  if (!data) return "❌ Giveaway nie istnieje";
-
-  if (!data.users.length) return "❌ Brak uczestników";
-
-  const winner = data.users[Math.floor(Math.random() * data.users.length)];
-
-  const channel = await client.channels.fetch(data.channelId).catch(() => null);
-  if (channel) {
-    await channel.send(`🎉 Nowy zwycięzca: <@${winner}>`);
-  }
-
-  return `<@${winner}>`;
-}
-
 // ===== BUTTONS =====
 async function handleGiveaway(interaction) {
-
   const data = giveaways.get(interaction.message.id);
   if (!data) return;
 
@@ -242,7 +204,7 @@ async function handleGiveaway(interaction) {
       saveDB();
     }
 
-    await safeReply({ content: "✅ Dołączyłeś!", ephemeral: true });
+    await safeReply({ content: "✅ Dołączyłeś!", flags: 64 });
 
     interaction.message.edit({
       embeds: [buildEmbed(data)]
@@ -254,7 +216,7 @@ async function handleGiveaway(interaction) {
     data.users = data.users.filter(id => id !== userId);
     saveDB();
 
-    await safeReply({ content: "❌ Opuściłeś giveaway", ephemeral: true });
+    await safeReply({ content: "❌ Opuściłeś giveaway", flags: 64 });
 
     interaction.message.edit({
       embeds: [buildEmbed(data)]
@@ -264,7 +226,5 @@ async function handleGiveaway(interaction) {
 
 module.exports = {
   createGiveaway,
-  handleGiveaway,
-  loadGiveaways,
-  reroll
+  handleGiveaway
 };
