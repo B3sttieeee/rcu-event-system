@@ -23,25 +23,25 @@ async function createTicketPanel(client) {
 
     const embed = new EmbedBuilder()
       .setColor("#ff6600")
-      .setTitle("📌 VYRN • Recruitment Ticket")
+      .setTitle("📌 Clan VYRN • Ticket System")
       .setDescription(
-`📩 **Open ticket to join VYRN**
+`📩 **Open a ticket to apply for clan**
 
 ━━━━━━━━━━━━━━━━━━
 
-⚔️ **Requirements**
-• 500 O+ Power  
-• Active player  
-• Good team  
-• Gamepasses recommended  
-• Ability to AFK  
+📋 **Requirements**
+• Good Team  
+• Good GamePass  
+• 🔄 1.5N Rebirth+  
+• 🕒 3–8h AFK  
 
 ━━━━━━━━━━━━━━━━━━
 
-🚀 Click button below to apply`
+🚀 Click button below to start`
       )
-      .setImage("https://media.tenor.com/Fo9Wajlr7XMAAAPo/fgo-agravain.gif")
-      .setFooter({ text: "VYRN SYSTEM • Recruitment" });
+      // ✅ TWÓJ GIF (DZIAŁAJĄCY)
+      .setImage("https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif")
+      .setFooter({ text: "VYRN SYSTEM • Tickets" });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -50,27 +50,28 @@ async function createTicketPanel(client) {
         .setStyle(ButtonStyle.Primary)
     );
 
-    // 🔥 SZUKAMY ISTNIEJĄCEGO PANELU
+    // 🔥 SPRAWDŹ CZY PANEL JUŻ JEST
     const messages = await channel.messages.fetch({ limit: 10 });
     const existing = messages.find(m => m.author.id === client.user.id);
 
-    // ✅ UPDATE zamiast ignorowania
     if (existing) {
+      // ✅ UPDATE zamiast ignorowania
       await existing.edit({
         embeds: [embed],
         components: [row]
       });
+
       console.log("♻️ Ticket panel updated");
       return;
     }
 
-    // ✅ TWORZENIE NOWEGO
+    // ✅ NOWY PANEL
     await channel.send({
       embeds: [embed],
       components: [row]
     });
 
-    console.log("✅ Ticket panel sent");
+    console.log("✅ Ticket panel created");
 
   } catch (err) {
     console.log("❌ PANEL ERROR:", err);
@@ -80,10 +81,10 @@ async function createTicketPanel(client) {
 // ================= HANDLE =================
 async function handle(interaction) {
 
-  // ===== OPEN BUTTON =====
+  // ===== OPEN =====
   if (interaction.isButton() && interaction.customId === "open_ticket") {
 
-    // 🔥 BLOKADA DUPLIKATÓW
+    // 🔥 BLOKADA DUPLIKATU
     const existing = interaction.guild.channels.cache.find(
       c => c.topic === interaction.user.id
     );
@@ -126,7 +127,7 @@ async function handle(interaction) {
     const lang = interaction.fields.getTextInputValue("lang").toLowerCase();
 
     const channel = await interaction.guild.channels.create({
-      name: `ticket-${interaction.user.id}`,
+      name: `ticket-${interaction.user.username}`.toLowerCase(),
       topic: interaction.user.id,
       type: ChannelType.GuildText,
       parent: CATEGORY_ID || null,
@@ -163,21 +164,11 @@ async function handle(interaction) {
           ? `👤 **User:** ${interaction.user}
 📝 **Nickname:** ${nick}
 
-📸 Send screenshots of:
-• Stats
-• Gamepasses
-• Team
-
-⚡ We will review your application soon.`
+📸 Send screenshots of stats, gamepasses and team.`
           : `👤 **Użytkownik:** ${interaction.user}
 📝 **Nick:** ${nick}
 
-📸 Wyślij screeny:
-• Statystyk
-• Gamepassów
-• Teamu
-
-⚡ Administracja wkrótce odpowie.`
+📸 Wyślij screeny statystyk, gamepassów i teamu.`
       )
       .setFooter({ text: "VYRN Recruitment System" });
 
