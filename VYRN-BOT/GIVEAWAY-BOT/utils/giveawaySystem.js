@@ -86,48 +86,42 @@ function buildEmbed(data) {
 
 // ===== CREATE =====
 async function createGiveaway(interaction, data) {
-  try {
-    const duration = parseTime(data.time);
-    if (!duration) throw new Error("Bad time");
+  const duration = parseTime(data.time);
+  if (!duration) throw new Error("Bad time");
 
-    const giveawayData = {
-      prize: data.prize,
-      winners: data.winners,
-      end: Date.now() + duration,
-      users: [],
-      channelId: interaction.channel.id,
-      messageId: null,
-      image: data.image || null
-    };
+  const giveawayData = {
+    prize: data.prize,
+    winners: data.winners,
+    end: Date.now() + duration,
+    users: [],
+    channelId: interaction.channel.id,
+    messageId: null,
+    image: data.image || null
+  };
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("gw_join")
-        .setLabel("🎉 Join")
-        .setStyle(ButtonStyle.Success),
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("gw_join")
+      .setLabel("🎉 Join")
+      .setStyle(ButtonStyle.Success),
 
-      new ButtonBuilder()
-        .setCustomId("gw_leave")
-        .setLabel("❌ Leave")
-        .setStyle(ButtonStyle.Secondary)
-    );
+    new ButtonBuilder()
+      .setCustomId("gw_leave")
+      .setLabel("❌ Leave")
+      .setStyle(ButtonStyle.Secondary)
+  );
 
-    const msg = await interaction.channel.send({
-      embeds: [buildEmbed(giveawayData)],
-      components: [row]
-    });
+  const msg = await interaction.channel.send({
+    embeds: [buildEmbed(giveawayData)],
+    components: [row]
+  });
 
-    giveawayData.messageId = msg.id;
+  giveawayData.messageId = msg.id;
 
-    giveaways.set(msg.id, giveawayData);
-    saveDB();
+  giveaways.set(msg.id, giveawayData);
+  saveDB();
 
-    startTimer(msg, giveawayData);
-
-  } catch (err) {
-    console.log("❌ CREATE GIVEAWAY ERROR:", err);
-    throw err;
-  }
+  startTimer(msg, giveawayData);
 }
 
 // ===== TIMER =====
@@ -182,6 +176,50 @@ ${winners.map(w => `<@${w}>`).join("\n")}
   saveDB();
 }
 
+// ===== LOAD AFTER RESTART =====
+async function loadGiveaways(client) {
+  const db = loadDB();
+
+  for (const id in db) {
+    const data = db[id];
+
+    try {
+      const channel = await client.channels.fetch(data.channelId);
+      const message = await channel.messages.fetch(id);
+
+      giveaways.set(id, data);
+
+      if (Date.now() >= data.end) {
+        endGiveaway(message, data);
+      } else {
+        startTimer(message, data);
+      }
+
+    } catch {
+      giveaways.delete(id);
+    }
+  }
+}
+
+// ===== REROLL =====
+async function reroll(client, messageId) {
+
+  const data = giveaways.get(messageId);
+  if (!data) return "❌ Giveaway nie istnieje";
+
+  if (!data.users.length) return "❌ Brak uczestników";
+
+  const winner = data.users[Math.floor(Math.random() * data.users.length)];
+
+  const channel = await client.channels.fetch(data.channelId).catch(() => null);
+
+  if (channel) {
+    await channel.send(`🎉 Nowy zwycięzca: <@${winner}>`);
+  }
+
+  return `<@${winner}>`;
+}
+
 // ===== BUTTONS =====
 async function handleGiveaway(interaction) {
   const data = giveaways.get(interaction.message.id);
@@ -226,5 +264,7 @@ async function handleGiveaway(interaction) {
 
 module.exports = {
   createGiveaway,
-  handleGiveaway
+  handleGiveaway,
+  loadGiveaways,
+  reroll
 };
