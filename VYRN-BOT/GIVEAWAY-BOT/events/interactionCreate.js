@@ -26,6 +26,16 @@ module.exports = {
       }
 
       // =========================
+      // 🎯 DAILY BUTTON (NOWE 🔥)
+      // =========================
+      if (interaction.isButton() && interaction.customId === "daily_claim") {
+        return interaction.reply({
+          content: "🎯 Użyj komendy **/daily** aby odebrać nagrodę!",
+          flags: 64
+        });
+      }
+
+      // =========================
       // 🎫 TICKETS (PEŁNA OBSŁUGA)
       // =========================
       if (
@@ -40,7 +50,11 @@ module.exports = {
       // =========================
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
-        if (!command) return;
+
+        if (!command) {
+          console.log(`❌ Nie znaleziono komendy: ${interaction.commandName}`);
+          return;
+        }
 
         return await command.execute(interaction, client);
       }
