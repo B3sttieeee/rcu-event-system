@@ -5,6 +5,7 @@ const path = require("path");
 
 const { startVoiceXP } = require("./utils/levelSystem");
 const { createTicketPanel } = require("./utils/ticketSystem");
+const { startDailyReset } = require("./utils/profileSystem"); // 🔥 NOWE
 
 // ===== CLIENT =====
 const client = new Client({
@@ -88,6 +89,9 @@ client.once("ready", async () => {
 
   // 🎤 VOICE XP SYSTEM
   startVoiceXP(client);
+
+  // 🌙 DAILY RESET SYSTEM (NOWE 🔥)
+  startDailyReset();
 
   // 🎫 PANEL TICKET (anti spam - tylko raz)
   setTimeout(() => {
