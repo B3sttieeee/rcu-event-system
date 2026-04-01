@@ -21,15 +21,6 @@ async function createTicketPanel(client) {
     const channel = await client.channels.fetch(PANEL_CHANNEL_ID);
     if (!channel) return console.log("❌ Ticket channel not found");
 
-    // 🔥 ANTI DUPLIKAT PANELU
-    const messages = await channel.messages.fetch({ limit: 10 });
-    const exists = messages.find(m => m.author.id === client.user.id);
-
-    if (exists) {
-      console.log("⚠️ Ticket panel already exists");
-      return;
-    }
-
     const embed = new EmbedBuilder()
       .setColor("#ff6600")
       .setTitle("📌 VYRN • Recruitment Ticket")
@@ -40,10 +31,10 @@ async function createTicketPanel(client) {
 
 ⚔️ **Requirements**
 • 500 O+ Power  
-• Active & loyal player  
-• Good team setup  
+• Active player  
+• Good team  
 • Gamepasses recommended  
-• Ability to AFK / grind  
+• Ability to AFK  
 
 ━━━━━━━━━━━━━━━━━━
 
@@ -59,6 +50,21 @@ async function createTicketPanel(client) {
         .setStyle(ButtonStyle.Primary)
     );
 
+    // 🔥 SZUKAMY ISTNIEJĄCEGO PANELU
+    const messages = await channel.messages.fetch({ limit: 10 });
+    const existing = messages.find(m => m.author.id === client.user.id);
+
+    // ✅ UPDATE zamiast ignorowania
+    if (existing) {
+      await existing.edit({
+        embeds: [embed],
+        components: [row]
+      });
+      console.log("♻️ Ticket panel updated");
+      return;
+    }
+
+    // ✅ TWORZENIE NOWEGO
     await channel.send({
       embeds: [embed],
       components: [row]
@@ -76,8 +82,6 @@ async function handle(interaction) {
 
   // ===== OPEN BUTTON =====
   if (interaction.isButton() && interaction.customId === "open_ticket") {
-
-    // ❌ USUNIĘTO REQUIRE ROLE
 
     // 🔥 BLOKADA DUPLIKATÓW
     const existing = interaction.guild.channels.cache.find(
