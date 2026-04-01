@@ -10,21 +10,29 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// ===== CACHE =====
+let dbCache = null;
+let configCache = null;
+
 // ===== LOAD DB =====
 function loadDB() {
   if (!fs.existsSync(DB_PATH)) {
     fs.writeFileSync(DB_PATH, JSON.stringify({ xp: {} }, null, 2));
   }
-  return JSON.parse(fs.readFileSync(DB_PATH));
+
+  if (!dbCache) {
+    dbCache = JSON.parse(fs.readFileSync(DB_PATH));
+  }
+
+  return dbCache;
 }
 
 function saveDB(data) {
+  dbCache = data;
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== CONFIG (CACHE 🔥) =====
-let configCache = null;
-
+// ===== CONFIG =====
 function loadConfig() {
   if (!fs.existsSync(CONFIG_PATH)) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({
@@ -99,7 +107,15 @@ async function addXP(member, baseAmount, messageLength = 0) {
   // MULTIPLIER
   amount = Math.floor(amount * getMultiplier(member));
 
-  if (amount <= 0) return;
+  // 🔥 FIX: zawsze zwracaj coś
+  if (amount <= 0) {
+    return {
+      leveledUp: false,
+      level: db.xp[member.id].level,
+      xp: db.xp[member.id].xp,
+      gained: 0
+    };
+  }
 
   db.xp[member.id].xp += amount;
 
@@ -136,15 +152,17 @@ async function checkRoles(member, level) {
   }
 }
 
-// ===== VOICE XP =====
+// ===== VOICE XP (FIXED 🔥) =====
 function startVoiceXP(client) {
   const { addVoiceTime } = require("./profileSystem");
 
-  setInterval(() => {
+  setInterval(async () => {
     const cfg = loadConfig();
 
-    client.guilds.cache.forEach(guild => {
-      guild.members.cache.forEach(member => {
+    for (const guild of client.guilds.cache.values()) {
+      const members = await guild.members.fetch();
+
+      members.forEach(member => {
 
         if (!member.voice.channel) return;
 
@@ -158,7 +176,7 @@ function startVoiceXP(client) {
         // ✅ VOICE TIME
         addVoiceTime(member, 60);
       });
-    });
+    }
 
   }, 60000);
 }
