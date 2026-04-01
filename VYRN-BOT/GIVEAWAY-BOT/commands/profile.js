@@ -1,112 +1,100 @@
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 
 // ===== PATH =====
-const DB_PATH = "/data/profile.json";
+const LEVEL_DB = "/data/levels.json";
+const PROFILE_DB = "/data/profile.json";
 
 // ===== INIT =====
-function ensureDB() {
-  if (!fs.existsSync("/data")) {
-    fs.mkdirSync("/data", { recursive: true });
-  }
-
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify({ users: {} }, null, 2));
+function ensureFile(path, defaultData) {
+  if (!fs.existsSync(path)) {
+    fs.writeFileSync(path, JSON.stringify(defaultData, null, 2));
   }
 }
 
 // ===== LOAD =====
-function loadDB() {
-  ensureDB();
-  return JSON.parse(fs.readFileSync(DB_PATH));
+function loadLevels() {
+  ensureFile(LEVEL_DB, { xp: {} });
+  return JSON.parse(fs.readFileSync(LEVEL_DB));
 }
 
-function saveDB(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+function loadProfile() {
+  ensureFile(PROFILE_DB, { users: {} });
+  return JSON.parse(fs.readFileSync(PROFILE_DB));
 }
 
-// ===== GET USER =====
-function getUser(db, id) {
-  if (!db.users[id]) {
-    db.users[id] = {
-      voice: 0,
-      daily: {
-        msgs: 0,
-        vc: 0,
-        claimed: false,
-        lastReset: Date.now()
-      }
-    };
-  }
-  return db.users[id];
+// ===== XP =====
+function neededXP(level) {
+  return Math.floor(100 * Math.pow(level, 1.5));
 }
 
-// ===== RESET =====
-function checkReset(user) {
-  const now = new Date();
-  const last = new Date(user.daily.lastReset);
-
-  if (
-    now.getDate() !== last.getDate() ||
-    now.getMonth() !== last.getMonth() ||
-    now.getFullYear() !== last.getFullYear()
-  ) {
-    user.daily.msgs = 0;
-    user.daily.vc = 0;
-    user.daily.claimed = false;
-    user.daily.lastReset = Date.now();
-  }
+// ===== RANK =====
+function getRank(level) {
+  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
+  if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
+  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
+  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
+  if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
+  if (level >= 5) return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
+  return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
-// ===== MESSAGE =====
-function addMessage(member) {
-  const db = loadDB();
-  const user = getUser(db, member.id);
-
-  checkReset(user);
-
-  user.daily.msgs += 1;
-
-  saveDB(db);
+// ===== FORMAT =====
+function formatNumber(num) {
+  return num.toLocaleString("en-US");
 }
 
-// ===== VOICE =====
-function addVoiceTime(member, seconds) {
-  const db = loadDB();
-  const user = getUser(db, member.id);
-
-  checkReset(user);
-
-  user.voice += seconds;
-  user.daily.vc += seconds;
-
-  saveDB(db);
-}
-
-// ===== CLAIM DAILY (🔥 KLUCZOWE) =====
-function claimDaily(member) {
-  const db = loadDB();
-  const user = getUser(db, member.id);
-
-  checkReset(user);
-
-  if (user.daily.claimed) {
-    return { ok: false, reason: "claimed" };
-  }
-
-  if (user.daily.msgs < 50 || user.daily.vc < 1800) {
-    return { ok: false, reason: "not_ready" };
-  }
-
-  user.daily.claimed = true;
-
-  saveDB(db);
-
-  return { ok: true };
-}
-
-// ===== EXPORT (🔥 TU BYŁ BŁĄD U CIEBIE PEWNIE)
+// ===== COMMAND =====
 module.exports = {
-  addMessage,
-  addVoiceTime,
-  claimDaily
+  data: new SlashCommandBuilder()
+    .setName("profile")
+    .setDescription("📊 Show your profile"),
+
+  async execute(interaction) {
+
+    const levels = loadLevels();
+    const profile = loadProfile();
+
+    const lvlData = levels.xp[interaction.user.id] || { xp: 0, level: 0 };
+
+    const user = profile.users?.[interaction.user.id] || {
+      voice: 0,
+      daily: { msgs: 0, vc: 0 }
+    };
+
+    const needed = neededXP(lvlData.level);
+    const percent = needed > 0 ? Math.floor((lvlData.xp / needed) * 100) : 0;
+    const left = Math.max(0, needed - lvlData.xp);
+
+    const rank = getRank(lvlData.level);
+
+    const vcMinutes = Math.floor((user.voice || 0) / 60);
+    const dailyVc = Math.floor((user.daily?.vc || 0) / 60);
+
+    const embed = new EmbedBuilder()
+      .setColor("#0f172a")
+      .setAuthor({
+        name: interaction.user.username,
+        iconURL: interaction.user.displayAvatarURL()
+      })
+      .setDescription(
+`🏆 **Level ${lvlData.level}** • ${rank.emoji} ${rank.name}
+
+<a:XP:1488763317857161377> **${formatNumber(lvlData.xp)} / ${formatNumber(needed)} XP** (\`${percent}%\`)
+<:Next:1488760924193161337> **${formatNumber(left)} XP left**
+
+━━━━━━━━━━━━━━━━━━
+
+<a:TimeS:1488760889560797314> Voice: **${vcMinutes} min**
+<:Messages:1488763434966192242> Messages: **${user.daily?.msgs || 0} / 50**
+<:Zadania:1488763408026435594> Daily VC: **${dailyVc} / 30 min**
+
+━━━━━━━━━━━━━━━━━━
+
+<:PEPENOTE:1488765551038959677> *Stay active to gain XP!*`
+      )
+      .setTimestamp();
+
+    await interaction.reply({ embeds: [embed] });
+  }
 };
