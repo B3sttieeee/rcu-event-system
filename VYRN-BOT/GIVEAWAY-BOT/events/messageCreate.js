@@ -17,7 +17,7 @@ const fs = require("fs");
 const DB_PATH = "/data/levels.json";
 
 const cooldown = new Map();
-const dailyNotified = new Set(); // 🔥 żeby nie spamowało
+const dailyNotified = new Set();
 
 // ===== LOAD DB
 function loadDB() {
@@ -46,11 +46,10 @@ module.exports = {
       if (!message.guild) return;
       if (message.author.bot) return;
 
-      // ===== CONFIG
       const config = getConfig(message.guild.id);
 
       const PREFIX = config.prefix || ".";
-      const LEVEL_CHANNEL = config.levelChannel;
+      const LEVEL_CHANNEL = "1475999590716018719"; // 🔥 TWÓJ KANAŁ
       const BOOST_ROLE = config.boostRole;
 
       const isCommand = message.content.startsWith(PREFIX);
@@ -73,14 +72,6 @@ module.exports = {
             Math.floor((data.xp / needed) * 100)
           );
 
-          const barSize = 12;
-          const filled = Math.round((progress / 100) * barSize);
-          const empty = barSize - filled;
-
-          const bar =
-            "🟩".repeat(filled) +
-            "⬛".repeat(empty);
-
           const cfg = loadConfig();
 
           const hasBoost = BOOST_ROLE
@@ -94,9 +85,8 @@ module.exports = {
               iconURL: message.author.displayAvatarURL()
             })
             .setDescription(
-              `🔥 **LEVEL ${data.level}**\n\n` +
-              `${bar} **${progress}%**\n` +
-              `\`${data.xp} / ${needed} XP\`\n\n` +
+              `🏆 **LEVEL ${data.level}**\n\n` +
+              `<a:XP:1488763317857161377> \`${data.xp} / ${needed} XP\` (${progress}%)\n\n` +
               `⚡ Boost: ${hasBoost ? "✅ Active" : "❌ No Active"}\n` +
               `🌍 Multiplier: \`${cfg.globalMultiplier}x\``
             )
@@ -150,14 +140,12 @@ module.exports = {
 
       const now = Date.now();
 
-      // 🔥 ANTI-SPAM (2s)
       if (cooldown.has(message.author.id)) {
         if (now - cooldown.get(message.author.id) < 2000) return;
       }
 
       cooldown.set(message.author.id, now);
 
-      // ❌ ignoruj spam
       if (message.content.length < 3) return;
 
       const cfg = loadConfig();
@@ -169,12 +157,11 @@ module.exports = {
       );
 
       // =========================
-      // 🎯 DAILY SYSTEM (FINAL)
+      // 🎯 DAILY
       // =========================
 
       addMessage(message.author.id);
 
-      // 🔥 tylko raz notify
       if (isDailyReady(message.author.id) && !dailyNotified.has(message.author.id)) {
         dailyNotified.add(message.author.id);
 
@@ -186,30 +173,39 @@ module.exports = {
       }
 
       // =========================
-      // 🚀 LEVEL UP
+      // 🚀 LEVEL UP (NOWY 🔥)
       // =========================
-      if (result?.leveledUp && LEVEL_CHANNEL) {
+      if (result?.leveledUp) {
+
         const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
+        if (!channel) return;
 
-        if (channel) {
-          const embed = new EmbedBuilder()
-            .setColor("#22c55e")
-            .setAuthor({
-              name: `${message.author.username}`,
-              iconURL: message.author.displayAvatarURL()
-            })
-            .setDescription(
-              `🚀 **LEVEL UP!**\n\n` +
-              `🏆 Level: **${result.level}**\n` +
-              `➕ Gained: **${result.gained} XP**`
-            )
-            .setThumbnail(message.author.displayAvatarURL());
+        const nextXP = neededXP(result.level);
+        const left = Math.max(0, nextXP - result.xp);
 
-          channel.send({
-            content: `🎉 ${message.author}`,
-            embeds: [embed]
-          }).catch(() => {});
-        }
+        const embed = new EmbedBuilder()
+          .setColor("#0f172a")
+          .setAuthor({
+            name: message.author.username,
+            iconURL: message.author.displayAvatarURL()
+          })
+
+          .setDescription(
+`🏆 **Level ${result.level}**
+
+<:Next:1488760924193161337> Next level in **${left} XP**  
+<a:XP:1488763317857161377> ${result.xp} / ${nextXP} XP
+
+<:PEPENOTE:1488765551038959677> *Keep grinding and stay active*`
+          )
+
+          .setThumbnail(message.author.displayAvatarURL())
+          .setTimestamp();
+
+        channel.send({
+          content: `🎉 ${message.author}`,
+          embeds: [embed]
+        }).catch(() => {});
       }
 
     } catch (err) {
