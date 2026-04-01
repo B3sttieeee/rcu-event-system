@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { ChannelType } = require("discord.js");
 
 // ===== PATH =====
 const DATA_DIR = "/data";
@@ -99,15 +100,13 @@ async function addXP(member, baseAmount, messageLength = 0) {
 
   let amount = baseAmount || 0;
 
-  // BONUS LENGTH
   if (messageLength >= cfg.lengthThreshold) {
     amount = Math.floor(amount * (1 + cfg.lengthBonus));
   }
 
-  // MULTIPLIER
   amount = Math.floor(amount * getMultiplier(member));
 
-  // 🔥 FIX: zawsze zwracaj coś
+  // 🔥 WAŻNE: zawsze zwracaj wynik
   if (amount <= 0) {
     return {
       leveledUp: false,
@@ -152,31 +151,35 @@ async function checkRoles(member, level) {
   }
 }
 
-// ===== VOICE XP (FIXED 🔥) =====
+// ===== VOICE XP (STABLE 🔥) =====
 function startVoiceXP(client) {
   const { addVoiceTime } = require("./profileSystem");
 
-  setInterval(async () => {
+  setInterval(() => {
     const cfg = loadConfig();
 
-    for (const guild of client.guilds.cache.values()) {
-      const members = await guild.members.fetch();
+    client.guilds.cache.forEach(guild => {
 
-      members.forEach(member => {
+      guild.channels.cache.forEach(channel => {
 
-        if (!member.voice.channel) return;
+        if (channel.type !== ChannelType.GuildVoice) return;
 
-        // ❌ ANTI AFK
-        if (member.voice.channel.members.size <= 1) return;
-        if (member.voice.selfMute || member.voice.selfDeaf) return;
+        const members = channel.members;
 
-        // ✅ XP
-        addXP(member, cfg.voiceXP);
+        if (members.size <= 1) return;
 
-        // ✅ VOICE TIME
-        addVoiceTime(member, 60);
+        members.forEach(member => {
+
+          if (member.user.bot) return;
+          if (member.voice.selfMute || member.voice.selfDeaf) return;
+
+          addXP(member, cfg.voiceXP);
+          addVoiceTime(member, 60);
+        });
+
       });
-    }
+
+    });
 
   }, 60000);
 }
