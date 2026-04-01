@@ -1,4 +1,6 @@
 const { SlashCommandBuilder } = require("discord.js");
+
+// 🔥 POPRAWNY IMPORT
 const { claimDaily } = require("../utils/profileSystem");
 const { addXP } = require("../utils/levelSystem");
 
@@ -35,4 +37,5 @@ module.exports = {
       content: "🎉 Daily odebrane! +100 XP"
     });
   }
+};
 };
