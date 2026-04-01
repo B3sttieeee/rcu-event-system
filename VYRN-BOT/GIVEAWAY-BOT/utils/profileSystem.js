@@ -7,7 +7,7 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// 🔥 CACHE
+// 🔥 JEDEN CACHE NA CAŁY BOT
 let db = null;
 
 // =========================
@@ -33,8 +33,10 @@ function saveProfile() {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(db, null, 2));
 }
 
-// 🔥 autosave co 10s
-setInterval(saveProfile, 10000);
+// 🔥 AUTO SAVE
+setInterval(() => {
+  saveProfile();
+}, 5000);
 
 // =========================
 // USER
@@ -134,8 +136,6 @@ function startDailyReset() {
         data.users[id].daily.msgs = 0;
         data.users[id].daily.vc = 0;
       }
-
-      saveProfile();
     }
   }, 60000);
 }
