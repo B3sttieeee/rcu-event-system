@@ -1,15 +1,20 @@
 const fs = require("fs");
 
-const PROFILE_PATH = "/data/profile.json";
+// 🔥 RAILWAY VOLUME PATH
+const DATA_DIR = "/data";
+const PROFILE_PATH = `${DATA_DIR}/profile.json`;
+
+// =========================
+// 📂 INIT
+// =========================
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
 // =========================
 // 📂 LOAD + AUTO FIX
 // =========================
 function loadProfile() {
-  if (!fs.existsSync("/data")) {
-    fs.mkdirSync("/data", { recursive: true });
-  }
-
   if (!fs.existsSync(PROFILE_PATH)) {
     fs.writeFileSync(PROFILE_PATH, JSON.stringify({
       users: {}
@@ -18,7 +23,6 @@ function loadProfile() {
 
   const data = JSON.parse(fs.readFileSync(PROFILE_PATH));
 
-  // 🔥 AUTO FIX STARYCH DANYCH
   for (const id in data.users) {
     const user = data.users[id];
 
@@ -41,11 +45,12 @@ function loadProfile() {
     if (typeof user.daily.lastClaim !== "number") user.daily.lastClaim = 0;
   }
 
-  fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
-
   return data;
 }
 
+// =========================
+// 💾 SAVE
+// =========================
 function saveProfile(data) {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
 }
@@ -96,17 +101,17 @@ function addMessage(userId) {
 }
 
 // =========================
-// 📊 DAILY TIER SYSTEM
+// 📊 DAILY TIER
 // =========================
 function getDailyTier(streak) {
   return {
-    vcRequired: 30 + (streak * 5), // rośnie
-    msgRequired: streak >= 5 ? 20 + (streak * 2) : 0 // od 5 streak
+    vcRequired: 30 + (streak * 5),
+    msgRequired: streak >= 5 ? 20 + (streak * 2) : 0
   };
 }
 
 // =========================
-// 🎯 CHECK READY
+// 🎯 READY CHECK
 // =========================
 function isDailyReady(userId) {
   const db = loadProfile();
@@ -114,8 +119,8 @@ function isDailyReady(userId) {
 
   const tier = getDailyTier(user.daily.streak);
 
-  const vcOk = (user.daily.vc || 0) >= (tier.vcRequired * 60);
-  const msgOk = tier.msgRequired === 0 || (user.daily.msgs || 0) >= tier.msgRequired;
+  const vcOk = user.daily.vc >= (tier.vcRequired * 60);
+  const msgOk = tier.msgRequired === 0 || user.daily.msgs >= tier.msgRequired;
 
   return vcOk && msgOk;
 }
@@ -137,18 +142,17 @@ function claimDaily(userId) {
     };
   }
 
-  // 🔥 RESET STREAK jeśli przerwa > 48h
+  // 🔥 streak reset >48h
   if (user.daily.lastClaim && now - user.daily.lastClaim > oneDay * 2) {
     user.daily.streak = 0;
   }
 
   user.daily.streak++;
 
-  // 🎁 LOSOWE XP (skaluje się)
   const baseXP = 100 + (user.daily.streak * 50);
   const randomXP = Math.floor(baseXP + Math.random() * baseXP);
 
-  // 🔄 RESET DAILY
+  // reset
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.completed = false;
@@ -163,13 +167,17 @@ function claimDaily(userId) {
 }
 
 // =========================
-// 🌙 AUTO RESET (PÓŁNOC)
+// 🌙 RESET (MIDNIGHT SAFE)
 // =========================
 function startDailyReset() {
+  let lastDay = new Date().getDate();
+
   setInterval(() => {
     const now = new Date();
 
-    if (now.getHours() === 0 && now.getMinutes() === 0) {
+    if (now.getDate() !== lastDay) {
+      lastDay = now.getDate();
+
       const db = loadProfile();
 
       for (const id in db.users) {
@@ -189,6 +197,7 @@ function startDailyReset() {
 // =========================
 module.exports = {
   loadProfile,
+  saveProfile,
   addVoiceTime,
   addMessage,
   isDailyReady,
