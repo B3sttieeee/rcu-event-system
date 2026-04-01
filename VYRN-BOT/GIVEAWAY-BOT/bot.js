@@ -3,6 +3,11 @@ require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 
+// SYSTEMY
+const { handleGiveaway } = require("./utils/giveawaySystem");
+const { handleEventInteraction } = require("./utils/eventSystem");
+const { startVoiceXP } = require("./utils/levelSystem");
+
 // ===== CLIENT =====
 const client = new Client({
   intents: [
@@ -14,96 +19,58 @@ const client = new Client({
   ]
 });
 
-// ===== COMMANDS =====
 client.commands = new Collection();
 
-// =========================
-// 📦 LOAD COMMANDS
-// =========================
+// ===== LOAD COMMANDS =====
 const commandsPath = path.join(__dirname, "commands");
 
-if (!fs.existsSync(commandsPath)) {
-  console.log("❌ Brak folderu /commands");
-} else {
-  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
+const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"));
 
-  for (const file of commandFiles) {
-    const filePath = path.join(commandsPath, file);
+for (const file of commandFiles) {
+  const command = require(path.join(commandsPath, file));
+  if (!command?.data?.name) continue;
 
-    try {
-      const command = require(filePath);
-
-      if (!command?.data?.name || typeof command.execute !== "function") {
-        console.log(`⚠️ Invalid command: ${file}`);
-        continue;
-      }
-
-      client.commands.set(command.data.name, command);
-      console.log(`📦 Loaded command: ${command.data.name}`);
-
-    } catch (err) {
-      console.log(`❌ Error loading command ${file}:`, err);
-    }
-  }
+  client.commands.set(command.data.name, command);
 }
 
-// =========================
-// ⚡ LOAD EVENTS
-// =========================
-const eventsPath = path.join(__dirname, "events");
+// ===== INTERACTIONS =====
+client.on("interactionCreate", async (interaction) => {
+  try {
 
-if (!fs.existsSync(eventsPath)) {
-  console.log("❌ Brak folderu /events");
-} else {
-  const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
+    if (interaction.isChatInputCommand()) {
+      const command = client.commands.get(interaction.commandName);
+      if (!command) return;
 
-  for (const file of eventFiles) {
-    const filePath = path.join(eventsPath, file);
+      await command.execute(interaction, client);
+    }
 
-    try {
-      const event = require(filePath);
+    if (interaction.isButton()) {
+      await handleGiveaway(interaction);
+      await handleEventInteraction(interaction);
+    }
 
-      if (!event.name || typeof event.execute !== "function") {
-        console.log(`⚠️ Invalid event: ${file}`);
-        continue;
-      }
+    if (interaction.isStringSelectMenu()) {
+      await handleEventInteraction(interaction);
+    }
 
-      if (event.once) {
-        client.once(event.name, (...args) => event.execute(...args, client));
-      } else {
-        client.on(event.name, (...args) => event.execute(...args, client));
-      }
+  } catch (err) {
+    console.error("❌ Interaction error:", err);
 
-      console.log(`✅ Loaded event: ${event.name}`);
-
-    } catch (err) {
-      console.log(`❌ Error loading event ${file}:`, err);
+    if (interaction.replied || interaction.deferred) {
+      interaction.followUp({ content: "❌ Error!", flags: 64 }).catch(()=>{});
+    } else {
+      interaction.reply({ content: "❌ Error!", flags: 64 }).catch(()=>{});
     }
   }
-}
+});
 
-// =========================
-// 🔥 READY
-// =========================
+// ===== READY =====
 client.once("ready", () => {
-  console.log("=================================");
-  console.log(`🔥 Zalogowano jako: ${client.user.tag}`);
-  console.log(`📊 Serwery: ${client.guilds.cache.size}`);
-  console.log("=================================");
+  console.log(`🔥 Logged as ${client.user.tag}`);
+
+  // 🔥 START VOICE XP (NAJWAŻNIEJSZE)
+  startVoiceXP(client);
 });
 
-// =========================
-// ❌ GLOBAL ERROR HANDLING
-// =========================
-process.on("unhandledRejection", err => {
-  console.error("❌ Unhandled Rejection:", err);
-});
-
-process.on("uncaughtException", err => {
-  console.error("❌ Uncaught Exception:", err);
-});
-
-// =========================
-// 🚀 LOGIN
-// =========================
+// ===== LOGIN =====
 client.login(process.env.TOKEN);
