@@ -22,7 +22,9 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== CONFIG =====
+// ===== CONFIG (CACHE 🔥) =====
+let configCache = null;
+
 function loadConfig() {
   if (!fs.existsSync(CONFIG_PATH)) {
     fs.writeFileSync(CONFIG_PATH, JSON.stringify({
@@ -33,10 +35,16 @@ function loadConfig() {
       globalMultiplier: 1
     }, null, 2));
   }
-  return JSON.parse(fs.readFileSync(CONFIG_PATH));
+
+  if (!configCache) {
+    configCache = JSON.parse(fs.readFileSync(CONFIG_PATH));
+  }
+
+  return configCache;
 }
 
 function saveConfig(cfg) {
+  configCache = cfg;
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
 }
 
@@ -63,7 +71,7 @@ function neededXP(level) {
 function getMultiplier(member) {
   const cfg = loadConfig();
 
-  let multi = cfg.globalMultiplier;
+  let multi = cfg.globalMultiplier || 1;
 
   if (member.roles.cache.has(BOOST_ROLE)) {
     multi *= BOOST_MULTIPLIER;
@@ -81,7 +89,7 @@ async function addXP(member, baseAmount, messageLength = 0) {
     db.xp[member.id] = { xp: 0, level: 0 };
   }
 
-  let amount = baseAmount;
+  let amount = baseAmount || 0;
 
   // BONUS LENGTH
   if (messageLength >= cfg.lengthThreshold) {
@@ -90,6 +98,8 @@ async function addXP(member, baseAmount, messageLength = 0) {
 
   // MULTIPLIER
   amount = Math.floor(amount * getMultiplier(member));
+
+  if (amount <= 0) return;
 
   db.xp[member.id].xp += amount;
 
@@ -115,7 +125,7 @@ async function addXP(member, baseAmount, messageLength = 0) {
   };
 }
 
-// ===== ROLE SYSTEM FIXED =====
+// ===== ROLE SYSTEM =====
 async function checkRoles(member, level) {
   for (const lvl of Object.keys(LEVEL_ROLES).map(Number)) {
     const roleId = LEVEL_ROLES[lvl];
@@ -126,7 +136,7 @@ async function checkRoles(member, level) {
   }
 }
 
-// ===== VOICE XP (FIXED 🔥) =====
+// ===== VOICE XP =====
 function startVoiceXP(client) {
   const { addVoiceTime } = require("./profileSystem");
 
@@ -145,11 +155,11 @@ function startVoiceXP(client) {
         // ✅ XP
         addXP(member, cfg.voiceXP);
 
-        // 🔥 NAJWAŻNIEJSZY FIX
-        addVoiceTime(member, 60); // <-- BYŁ BŁĄD (member.id)
-
+        // ✅ VOICE TIME
+        addVoiceTime(member, 60);
       });
     });
+
   }, 60000);
 }
 
