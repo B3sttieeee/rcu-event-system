@@ -90,28 +90,6 @@ client.once("ready", () => {
   console.log(`🔥 Zalogowano jako: ${client.user.tag}`);
   console.log(`📊 Serwery: ${client.guilds.cache.size}`);
   console.log("=================================");
-
-  // 🔥 AUTO START SYSTEMÓW (jeśli istnieją)
-  try {
-    const eventSystem = require("./utils/eventSystem");
-    eventSystem.startPanel(client);
-    eventSystem.startEventSystem(client);
-  } catch {}
-
-  try {
-    const ticketSystem = require("./utils/ticketSystem");
-    ticketSystem.createTicketPanel(client);
-  } catch {}
-
-  try {
-    const giveawaySystem = require("./utils/giveawaySystem");
-    giveawaySystem.loadGiveaways(client);
-  } catch {}
-
-  try {
-    const levelSystem = require("./utils/levelSystem");
-    levelSystem.startVoiceXP(client);
-  } catch {}
 });
 
 // =========================
