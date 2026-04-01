@@ -21,21 +21,26 @@ module.exports = {
 
     const db = loadProfile();
 
-    const user = db.users[interaction.user.id] || {
-      voice: 0,
-      daily: {
-        msgs: 0,
-        vc: 0,
-        streak: 0
-      }
-    };
+    // 🔥 KLUCZOWY FIX
+    if (!db.users[interaction.user.id]) {
+      db.users[interaction.user.id] = {
+        voice: 0,
+        daily: {
+          msgs: 0,
+          vc: 0,
+          streak: 0,
+          lastClaim: 0
+        }
+      };
+    }
+
+    const user = db.users[interaction.user.id];
 
     const streak = user.daily.streak || 0;
-
     const tier = getDailyTier(streak);
 
-    const vcMin = Math.floor((user.daily.vc || 0) / 60);
-    const msgs = user.daily.msgs || 0;
+    const vcMin = Math.floor(user.daily.vc / 60);
+    const msgs = user.daily.msgs;
 
     const vcRequired = tier.vcRequired;
     const msgRequired = tier.msgRequired;
