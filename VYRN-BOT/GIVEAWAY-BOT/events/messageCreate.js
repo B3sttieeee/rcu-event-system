@@ -9,7 +9,7 @@ const {
 } = require("../utils/levelSystem");
 
 const { getConfig } = require("../utils/configSystem");
-const { addMessage } = require("../utils/profileSystem");
+const { addMessage, isDailyReady } = require("../utils/profileSystem");
 
 const fs = require("fs");
 
@@ -151,14 +151,14 @@ module.exports = {
 
       const now = Date.now();
 
-      // 🔥 LEKKI ANTI-SPAM (2s)
+      // 🔥 ANTI-SPAM (2s)
       if (cooldown.has(message.author.id)) {
         if (now - cooldown.get(message.author.id) < 2000) return;
       }
 
       cooldown.set(message.author.id, now);
 
-      // ❌ ignoruj śmieci wiadomości
+      // ❌ ignoruj śmieci
       if (message.content.length < 3) return;
 
       const cfg = loadConfig();
@@ -170,18 +170,20 @@ module.exports = {
       );
 
       // =========================
-      // 🎯 DAILY QUEST
+      // 🎯 DAILY SYSTEM (FIXED)
       // =========================
-      const completed = await addMessage(message.member);
 
-      if (completed) {
-        message.reply("🎯 Daily completed! +50 XP").catch(() => {});
+      addMessage(message.author.id); // 🔥 FIX (było member)
+
+      // opcjonalny notify (tylko raz)
+      if (isDailyReady(message.author.id)) {
+        message.react("🎯").catch(() => {});
       }
 
       // =========================
       // 🚀 LEVEL UP
       // =========================
-      if (result.leveledUp && LEVEL_CHANNEL) {
+      if (result?.leveledUp && LEVEL_CHANNEL) {
         const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
 
         if (channel) {
