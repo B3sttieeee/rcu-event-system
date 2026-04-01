@@ -1,17 +1,20 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 
-const DB_PATH = "./data.json";
+// ===== PATH =====
+const DB_PATH = "/data/levels.json";
 
 // ===== LOAD =====
 function loadDB() {
-  if (!fs.existsSync(DB_PATH)) return { xp: {} };
+  if (!fs.existsSync(DB_PATH)) {
+    fs.writeFileSync(DB_PATH, JSON.stringify({ xp: {} }, null, 2));
+  }
   return JSON.parse(fs.readFileSync(DB_PATH));
 }
 
-// ===== XP =====
+// ===== XP (TAKA SAMA JAK W LEVEL SYSTEM) =====
 function neededXP(level) {
-  return 100 + level * 75 + level * level * 10;
+  return Math.floor(100 * Math.pow(level, 1.5));
 }
 
 // ===== MEDALE =====
@@ -31,7 +34,7 @@ module.exports = {
 
     const db = loadDB();
 
-    const sorted = Object.entries(db.xp)
+    const sorted = Object.entries(db.xp || {})
       .sort((a, b) => {
         if (b[1].level === a[1].level) {
           return b[1].xp - a[1].xp;
