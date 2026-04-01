@@ -26,13 +26,13 @@ function neededXP(level) {
 
 // ===== RANK =====
 function getRank(level) {
-  if (level >= 75) return "<:LegeRank:1488756343190847538> Legendary";
-  if (level >= 60) return "<:RubyRank:1488756400514404372> Ruby";
-  if (level >= 45) return "<:DiaxRank:1488756482924089404> Diamond";
-  if (level >= 30) return "<:PlatRank:1488756557863845958> Platinum";
-  if (level >= 15) return "<:GoldRank:1488756524854808686> Gold";
-  if (level >= 5) return "<:BronzeRank:1488756638285565962> Bronze";
-  return "<:Ironrank:1488756604277887039> Iron";
+  if (level >= 75) return "<:LegeRank:1488756343190847538>";
+  if (level >= 60) return "<:RubyRank:1488756400514404372>";
+  if (level >= 45) return "<:DiaxRank:1488756482924089404>";
+  if (level >= 30) return "<:PlatRank:1488756557863845958>";
+  if (level >= 15) return "<:GoldRank:1488756524854808686>";
+  if (level >= 5) return "<:BronzeRank:1488756638285565962>";
+  return "<:Ironrank:1488756604277887039>";
 }
 
 // ===== PROGRESS =====
@@ -44,7 +44,7 @@ function getProgress(current, needed) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("profile")
-    .setDescription("🔥 Advanced profile system"),
+    .setDescription("🔥 Advanced profile"),
 
   async execute(interaction) {
 
@@ -70,35 +70,24 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setAuthor({
-        name: `${interaction.user.username} • PROFILE`,
+        name: `${interaction.user.username}`,
         iconURL: interaction.user.displayAvatarURL()
       })
       .setThumbnail(interaction.user.displayAvatarURL({ size: 512 }))
 
       .setDescription(
-`<:STATS:1488765485129666683> **Level ${lvlData.level}** • ${rank}
+`🏆 **Level ${lvlData.level}** ${rank}
 
-<a:XP:1488763317857161377> **XP**
-\`${lvlData.xp} / ${needed}\` • **${percent}%**
+<a:XP:1488763317857161377> \`${lvlData.xp} / ${needed}\` (**${percent}%**)
+<:Next:1488760924193161337> \`${needed - lvlData.xp} XP to next level\`
 
-<:Next:1488760924193161337> **Next Level:** \`${needed - lvlData.xp} XP\`
-
-━━━━━━━━━━━━━━━━━━
-
-<a:FIRE:1488765514875404449> **Activity**
-<:STATS:1488765485129666683> Status: **${status}**
-
-<a:TimeS:1488760889560797314> Voice: \`${vcMinutes} min\`
-<:Messages:1488763434966192242> Messages: \`${user.daily.msgs} / 50\`
-<:Zadania:1488763408026435594> Daily: \`${Math.floor(user.daily.vc / 60)} / 30 min\`
-
-━━━━━━━━━━━━━━━━━━
+<a:FIRE:1488765514875404449> **${status}** • <a:TimeS:1488760889560797314> \`${vcMinutes}m\` • <:Messages:1488763434966192242> \`${user.daily.msgs}/50\` • <:Zadania:1488763408026435594> \`${Math.floor(user.daily.vc / 60)}/30\`
 
 <:PEPENOTE:1488765551038959677> *Stay active to gain more XP!*`
       )
 
       .setFooter({
-        text: "VYRN • Advanced System",
+        text: "VYRN System",
         iconURL: interaction.client.user.displayAvatarURL()
       })
       .setTimestamp();
