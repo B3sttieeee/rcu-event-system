@@ -44,6 +44,12 @@ function formatNumber(num) {
   return num.toLocaleString("en-US");
 }
 
+// ===== BAR =====
+function progressBar(percent) {
+  const filled = Math.round(percent / 10);
+  return "▰".repeat(filled) + "▱".repeat(10 - filled);
+}
+
 // ===== COMMAND =====
 module.exports = {
   data: new SlashCommandBuilder()
@@ -77,22 +83,23 @@ module.exports = {
         name: interaction.user.username,
         iconURL: interaction.user.displayAvatarURL()
       })
+
       .setDescription(
-`🏆 **Level ${lvlData.level}** • ${rank.emoji} ${rank.name}
+`${rank.emoji} **Level ${lvlData.level} • ${rank.name}**
 
-<a:XP:1488763317857161377> **${formatNumber(lvlData.xp)} / ${formatNumber(needed)} XP** (\`${percent}%\`)
-<:Next:1488760924193161337> **${formatNumber(left)} XP left**
+<a:XP:1488763317857161377> ${formatNumber(lvlData.xp)} / ${formatNumber(needed)} XP  
+${progressBar(percent)} \`${percent}%\`
 
-━━━━━━━━━━━━━━━━━━
+<:Next:1488760924193161337> ${formatNumber(left)} XP to next level
 
-<a:TimeS:1488760889560797314> Voice: **${vcMinutes} min**
-<:Messages:1488763434966192242> Messages: **${user.daily?.msgs || 0} / 50**
+<a:TimeS:1488760889560797314> Voice: **${vcMinutes} min**  
+<:Messages:1488763434966192242> Messages: **${user.daily?.msgs || 0} / 50**  
 <:Zadania:1488763408026435594> Daily VC: **${dailyVc} / 30 min**
 
-━━━━━━━━━━━━━━━━━━
-
-<:PEPENOTE:1488765551038959677> *Stay active to gain XP!*`
+<:PEPENOTE:1488765551038959677> *Stay active and keep grinding*`
       )
+
+      .setThumbnail(interaction.user.displayAvatarURL())
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
