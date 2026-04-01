@@ -14,6 +14,7 @@ if (!fs.existsSync(DATA_DIR)) {
 // ===== CACHE =====
 let dbCache = null;
 let configCache = null;
+let voiceStarted = false; // 🔥 FIX
 
 // ===== LOAD DB =====
 function loadDB() {
@@ -106,7 +107,6 @@ async function addXP(member, baseAmount, messageLength = 0) {
 
   amount = Math.floor(amount * getMultiplier(member));
 
-  // 🔥 WAŻNE: zawsze zwracaj wynik
   if (amount <= 0) {
     return {
       leveledUp: false,
@@ -151,12 +151,21 @@ async function checkRoles(member, level) {
   }
 }
 
-// ===== VOICE XP (STABLE 🔥) =====
+// ===== VOICE XP (NAPRAWIONE 🔥) =====
 function startVoiceXP(client) {
+
+  if (voiceStarted) {
+    console.log("⚠️ Voice already running");
+    return;
+  }
+
+  voiceStarted = true;
+
   const { addVoiceTime } = require("./profileSystem");
 
   setInterval(() => {
     const cfg = loadConfig();
+    const counted = new Set();
 
     client.guilds.cache.forEach(guild => {
 
@@ -164,17 +173,18 @@ function startVoiceXP(client) {
 
         if (channel.type !== ChannelType.GuildVoice) return;
 
-        const members = channel.members;
-
-        if (members.size <= 1) return;
-
-        members.forEach(member => {
+        channel.members.forEach(member => {
 
           if (member.user.bot) return;
           if (member.voice.selfMute || member.voice.selfDeaf) return;
 
+          // 🔥 brak warunku members.size → działa solo
+          if (counted.has(member.id)) return;
+          counted.add(member.id);
+
           addXP(member, cfg.voiceXP);
-          addVoiceTime(member, 60);
+          addVoiceTime(member.id, 60);
+
         });
 
       });
