@@ -23,13 +23,14 @@ function saveProfile(data) {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== GET USER =====
+// ===== USER =====
 function getUser(db, id) {
   if (!db.users[id]) {
     db.users[id] = {
       voice: 0,
       lastDaily: 0,
       streak: 0,
+      notified: false,
       daily: {
         msgs: 0,
         vc: 0
@@ -45,6 +46,7 @@ function addMessage(userId) {
   const user = getUser(db, userId);
 
   user.daily.msgs++;
+  user.notified = false;
 
   saveProfile(db);
 }
@@ -56,6 +58,7 @@ function addVoiceTime(member, seconds) {
 
   user.voice += seconds;
   user.daily.vc += seconds;
+  user.notified = false;
 
   saveProfile(db);
 }
@@ -81,10 +84,10 @@ function claimDaily(userId) {
   }
 
   if (!isDailyReady(userId)) {
-    return { error: true, msg: "❌ Complete daily tasks first!" };
+    return { error: true, msg: "❌ Complete daily first!" };
   }
 
-  // ===== STREAK SYSTEM
+  // STREAK
   if (now - user.lastDaily < oneDay * 2) {
     user.streak++;
   } else {
@@ -93,15 +96,15 @@ function claimDaily(userId) {
 
   user.lastDaily = now;
 
-  // ===== RANDOM XP BASED ON STREAK
+  // XP LOSOWY
   const base = 100;
-  const bonus = user.streak * 50;
-
+  const bonus = user.streak * 75;
   const xp = Math.floor(Math.random() * (base + bonus)) + base;
 
-  // reset daily progress
+  // RESET DAILY
   user.daily.msgs = 0;
   user.daily.vc = 0;
+  user.notified = false;
 
   saveProfile(db);
 
@@ -111,7 +114,7 @@ function claimDaily(userId) {
   };
 }
 
-// ===== AUTO RESET (MIDNIGHT)
+// ===== AUTO RESET =====
 function startDailyReset() {
   setInterval(() => {
     const now = new Date();
@@ -122,12 +125,12 @@ function startDailyReset() {
       for (const id in db.users) {
         db.users[id].daily.msgs = 0;
         db.users[id].daily.vc = 0;
+        db.users[id].notified = false;
       }
 
       saveProfile(db);
-      console.log("🌙 Daily reset executed");
+      console.log("🌙 Daily reset!");
     }
-
   }, 60000);
 }
 
