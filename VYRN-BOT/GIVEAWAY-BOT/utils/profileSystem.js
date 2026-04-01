@@ -40,6 +40,17 @@ function getUser(db, id) {
   return db.users[id];
 }
 
+// ===== TIER SYSTEM 🔥
+function getDailyTier(streak) {
+  if (streak >= 15) return { vc: 60, msgs: 40, reward: [800, 1200] };
+  if (streak >= 10) return { vc: 45, msgs: 30, reward: [500, 900] };
+  if (streak >= 5) return { vc: 30, msgs: 15, reward: [300, 600] };
+  if (streak >= 2) return { vc: 20, msgs: 5, reward: [150, 300] };
+
+  // TIER 1 – tylko VC
+  return { vc: 10, msgs: 0, reward: [80, 150] };
+}
+
 // ===== MESSAGE =====
 function addMessage(userId) {
   const db = loadProfile();
@@ -63,15 +74,22 @@ function addVoiceTime(member, seconds) {
   saveProfile(db);
 }
 
-// ===== DAILY READY =====
+// ===== CHECK READY =====
 function isDailyReady(userId) {
   const db = loadProfile();
   const user = getUser(db, userId);
 
-  return user.daily.msgs >= 50 && user.daily.vc >= 1800;
+  const tier = getDailyTier(user.streak);
+
+  const vcMinutes = Math.floor(user.daily.vc / 60);
+
+  return (
+    vcMinutes >= tier.vc &&
+    user.daily.msgs >= tier.msgs
+  );
 }
 
-// ===== CLAIM DAILY =====
+// ===== CLAIM =====
 function claimDaily(userId) {
   const db = loadProfile();
   const user = getUser(db, userId);
@@ -87,7 +105,7 @@ function claimDaily(userId) {
     return { error: true, msg: "❌ Complete daily first!" };
   }
 
-  // STREAK
+  // ===== STREAK =====
   if (now - user.lastDaily < oneDay * 2) {
     user.streak++;
   } else {
@@ -96,12 +114,13 @@ function claimDaily(userId) {
 
   user.lastDaily = now;
 
-  // XP LOSOWY
-  const base = 100;
-  const bonus = user.streak * 75;
-  const xp = Math.floor(Math.random() * (base + bonus)) + base;
+  // ===== REWARD =====
+  const tier = getDailyTier(user.streak);
+  const [min, max] = tier.reward;
 
-  // RESET DAILY
+  const xp = Math.floor(Math.random() * (max - min + 1)) + min;
+
+  // ===== RESET =====
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.notified = false;
@@ -110,11 +129,12 @@ function claimDaily(userId) {
 
   return {
     xp,
-    streak: user.streak
+    streak: user.streak,
+    tier
   };
 }
 
-// ===== AUTO RESET =====
+// ===== RESET MIDNIGHT =====
 function startDailyReset() {
   setInterval(() => {
     const now = new Date();
@@ -140,5 +160,6 @@ module.exports = {
   addMessage,
   isDailyReady,
   claimDaily,
+  getDailyTier,
   startDailyReset
 };
