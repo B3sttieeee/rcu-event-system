@@ -55,7 +55,7 @@ module.exports = {
       const isCommand = message.content.startsWith(PREFIX);
 
       // =========================
-      // 💬 KOMENDY (PREFIX)
+      // 💬 KOMENDY
       // =========================
       if (isCommand) {
         const args = message.content.slice(PREFIX.length).trim().split(/ +/);
@@ -97,11 +97,9 @@ module.exports = {
               `${bar} **${progress}%**\n` +
               `\`${data.xp} / ${needed} XP\`\n\n` +
               `⚡ Boost: ${
-                hasBoost
-                  ? `✅ Active`
-                  : `❌ No Active`
+                hasBoost ? "✅ Active" : "❌ No Active"
               }\n` +
-              `🌍 Global Multiplier: \`${cfg.globalMultiplier}x\``
+              `🌍 Multiplier: \`${cfg.globalMultiplier}x\``
             )
             .setThumbnail(message.author.displayAvatarURL())
             .setFooter({ text: "VYRN • Level System" });
@@ -148,16 +146,20 @@ module.exports = {
       }
 
       // =========================
-      // 💰 XP SYSTEM (MESSAGE XP)
+      // 💰 XP SYSTEM
       // =========================
 
       const now = Date.now();
 
+      // 🔥 LEKKI ANTI-SPAM (2s)
       if (cooldown.has(message.author.id)) {
-        if (now < cooldown.get(message.author.id)) return;
+        if (now - cooldown.get(message.author.id) < 2000) return;
       }
 
-      cooldown.set(message.author.id, now + 8000);
+      cooldown.set(message.author.id, now);
+
+      // ❌ ignoruj śmieci wiadomości
+      if (message.content.length < 3) return;
 
       const cfg = loadConfig();
 
@@ -167,16 +169,13 @@ module.exports = {
         message.content.length
       );
 
-      console.log(`[XP] ${message.author.username} +${result.gained}`);
-
       // =========================
-      // 🎯 DAILY QUEST SYSTEM (NOWE)
+      // 🎯 DAILY QUEST
       // =========================
-
       const completed = await addMessage(message.member);
 
       if (completed) {
-        message.reply("🎯 Daily quest completed! +50 XP").catch(() => {});
+        message.reply("🎯 Daily completed! +50 XP").catch(() => {});
       }
 
       // =========================
