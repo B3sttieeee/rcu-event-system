@@ -1,15 +1,16 @@
 const fs = require("fs");
 
+// ===== PATH =====
 const DATA_DIR = "/data";
 const DB_PATH = `${DATA_DIR}/levels.json`;
 const CONFIG_PATH = `${DATA_DIR}/levelConfig.json`;
 
-// ===== INIT =====
+// ===== INIT FOLDER =====
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// ===== DB =====
+// ===== LOAD DB =====
 function loadDB() {
   if (!fs.existsSync(DB_PATH)) {
     fs.writeFileSync(DB_PATH, JSON.stringify({ xp: {} }, null, 2));
@@ -32,16 +33,47 @@ function loadConfig() {
       globalMultiplier: 1
     }, null, 2));
   }
-
   return JSON.parse(fs.readFileSync(CONFIG_PATH));
 }
 
-// ===== XP =====
+function saveConfig(cfg) {
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
+}
+
+// ===== TWOJE ROLE =====
+const LEVEL_ROLES = {
+  5: "1476000458987278397",
+  15: "1476000995501670534",
+  30: "1476000459595448442",
+  45: "1476000991206707221",
+  60: "1476000991823532032",
+  75: "1476000992351879229"
+};
+
+// ===== BOOST ROLE =====
+const BOOST_ROLE = "1476000398107217980";
+const BOOST_MULTIPLIER = 1.75;
+
+// ===== XP FORMULA =====
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
 
-function addXP(member, baseAmount, messageLength = 0) {
+// ===== MULTIPLIER =====
+function getMultiplier(member) {
+  const cfg = loadConfig();
+
+  let multi = cfg.globalMultiplier;
+
+  if (member.roles.cache.has(BOOST_ROLE)) {
+    multi *= BOOST_MULTIPLIER;
+  }
+
+  return multi;
+}
+
+// ===== ADD XP =====
+async function addXP(member, baseAmount, messageLength = 0) {
   const db = loadDB();
   const cfg = loadConfig();
 
@@ -51,28 +83,53 @@ function addXP(member, baseAmount, messageLength = 0) {
 
   let amount = baseAmount;
 
+  // BONUS ZA DŁUGOŚĆ WIADOMOŚCI
   if (messageLength >= cfg.lengthThreshold) {
     amount = Math.floor(amount * (1 + cfg.lengthBonus));
   }
 
+  // MULTIPLIER
+  amount = Math.floor(amount * getMultiplier(member));
+
   db.xp[member.id].xp += amount;
+
+  let leveledUp = false;
 
   while (db.xp[member.id].xp >= neededXP(db.xp[member.id].level)) {
     db.xp[member.id].xp -= neededXP(db.xp[member.id].level);
     db.xp[member.id].level++;
+    leveledUp = true;
+  }
+
+  if (leveledUp) {
+    await checkRoles(member, db.xp[member.id].level);
   }
 
   saveDB(db);
 
   return {
+    leveledUp,
     level: db.xp[member.id].level,
     xp: db.xp[member.id].xp,
     gained: amount
   };
 }
 
+// ===== ROLE SYSTEM (FIXED) =====
+async function checkRoles(member, level) {
+  for (const lvl of Object.keys(LEVEL_ROLES).map(Number)) {
+    const roleId = LEVEL_ROLES[lvl];
+
+    if (level >= lvl && !member.roles.cache.has(roleId)) {
+      await member.roles.add(roleId).catch(() => {});
+    }
+  }
+}
+
 // ===== VOICE XP =====
 function startVoiceXP(client) {
+  const { addVoiceTime } = require("./profileSystem");
+
   setInterval(() => {
     const cfg = loadConfig();
 
@@ -81,21 +138,50 @@ function startVoiceXP(client) {
 
         if (!member.voice.channel) return;
 
-        // ❌ sam na vc = brak xp
+        // ❌ ANTI AFK
         if (member.voice.channel.members.size <= 1) return;
+        if (member.voice.selfMute || member.voice.selfDeaf) return;
 
         addXP(member, cfg.voiceXP);
+        addVoiceTime(member.id, 60);
 
-        console.log(`[VC XP] ${member.user.username} +${cfg.voiceXP}`);
       });
     });
-
   }, 60000);
+}
+
+// ===== CONFIG SETTERS =====
+function setMessageXP(val) {
+  const cfg = loadConfig();
+  cfg.messageXP = val;
+  saveConfig(cfg);
+}
+
+function setVoiceXP(val) {
+  const cfg = loadConfig();
+  cfg.voiceXP = val;
+  saveConfig(cfg);
+}
+
+function setLengthBonus(val) {
+  const cfg = loadConfig();
+  cfg.lengthBonus = val;
+  saveConfig(cfg);
+}
+
+function setGlobalMultiplier(val) {
+  const cfg = loadConfig();
+  cfg.globalMultiplier = val;
+  saveConfig(cfg);
 }
 
 // ===== EXPORT =====
 module.exports = {
   addXP,
   startVoiceXP,
-  loadConfig
+  loadConfig,
+  setMessageXP,
+  setVoiceXP,
+  setLengthBonus,
+  setGlobalMultiplier
 };
