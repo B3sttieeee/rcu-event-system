@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const fs = require("fs");
 
+// ===== PATHS
 const LEVEL_DB = "/data/levels.json";
 const PROFILE_DB = "/data/profile.json";
 
@@ -26,12 +27,12 @@ function loadProfile() {
   return JSON.parse(fs.readFileSync(PROFILE_DB));
 }
 
-// ===== XP
+// ===== XP FORMULA
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
 
-// ===== BAR
+// ===== PROGRESS BAR (PRO STYLE)
 function createBar(current, needed) {
   const percent = Math.floor((current / needed) * 100);
   const filled = Math.round(percent / 10);
@@ -39,10 +40,20 @@ function createBar(current, needed) {
   let bar = "";
 
   for (let i = 0; i < 10; i++) {
-    bar += i < filled ? "🟩" : "⬛";
+    if (i < filled) bar += "🟩";
+    else bar += "⬜";
   }
 
   return { bar, percent };
+}
+
+// ===== RANK TITLE
+function getRank(level) {
+  if (level >= 50) return "💎 Elite";
+  if (level >= 30) return "🔥 Pro";
+  if (level >= 15) return "⚡ Advanced";
+  if (level >= 5) return "🌱 Beginner";
+  return "🐣 Newbie";
 }
 
 module.exports = {
@@ -67,29 +78,52 @@ module.exports = {
 
     const vcMinutes = Math.floor(user.voice / 60);
 
+    // ===== STATUS
+    let status = "🔴 Low Progress";
+    if (percent >= 40) status = "🟡 Medium Progress";
+    if (percent >= 75) status = "🟢 High Progress";
+
+    // ===== RANK
+    const rank = getRank(lvlData.level);
+
+    // ===== NEXT LEVEL INFO
+    const remainingXP = needed - lvlData.xp;
+
+    // ===== EMBED
     const embed = new EmbedBuilder()
       .setColor("#0f172a")
       .setAuthor({
         name: `${interaction.user.username} • PROFILE`,
         iconURL: interaction.user.displayAvatarURL()
       })
-      .addFields(
-        {
-          name: "🏆 LEVEL",
-          value: `\`${lvlData.level}\``,
-          inline: true
-        },
-        {
-          name: "📊 XP",
-          value: `\`${lvlData.xp} / ${needed}\`\n${bar} ${percent}%`,
-          inline: true
-        },
-        {
-          name: "🎤 Voice Time",
-          value: `\`${vcMinutes} min\``,
-          inline: true
-        }
+      .setThumbnail(interaction.user.displayAvatarURL({ size: 512 }))
+
+      .setDescription(
+`🏆 **Level ${lvlData.level}** • ${rank}
+
+📊 **XP Progress**
+\`${lvlData.xp} / ${needed} XP\`
+${bar} **${percent}%**
+
+⬆️ **Next Level:** \`${remainingXP} XP left\`
+
+━━━━━━━━━━━━━━━━━━
+
+⚡ **Status:** ${status}
+
+🎤 **Voice Time:** \`${vcMinutes} min\`
+💬 **Messages:** \`${user.daily.msgs} / 50\`
+🎯 **Daily Voice:** \`${Math.floor(user.daily.vc / 60)} / 30 min\`
+
+━━━━━━━━━━━━━━━━━━
+
+💡 **Tip:** Stay active to level up faster!`
       )
+
+      .setFooter({
+        text: "VYRN System • Advanced Profile",
+        iconURL: interaction.client.user.displayAvatarURL()
+      })
       .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
