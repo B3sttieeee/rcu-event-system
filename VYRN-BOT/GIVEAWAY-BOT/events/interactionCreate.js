@@ -8,35 +8,16 @@ module.exports = {
   async execute(interaction, client) {
     try {
 
-      // ===== SLASH COMMANDS =====
+      // ===== SLASH COMMAND =====
       if (interaction.isChatInputCommand()) {
-
         const command = client.commands.get(interaction.commandName);
-
-        if (!command) {
-          return interaction.reply({
-            content: "❌ Komenda nie istnieje",
-            ephemeral: true
-          });
-        }
-
-        // 🔥 TYLKO TU defer
-        if (!interaction.deferred && !interaction.replied) {
-          await interaction.deferReply({ ephemeral: true });
-        }
+        if (!command) return;
 
         return await command.execute(interaction, client);
       }
 
-      // ===== EMBED SYSTEM =====
-      if (
-        interaction.customId?.startsWith("embedModal_") ||
-        interaction.customId?.startsWith("sendEmbed_") ||
-        interaction.customId?.startsWith("editEmbed_")
-      ) return;
-
       // ===== GIVEAWAY =====
-      if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
+      if (interaction.isButton() && interaction.customId.startsWith("gw_")) {
         return giveawaySystem.handleGiveaway(interaction);
       }
 
@@ -68,9 +49,15 @@ module.exports = {
 
       try {
         if (interaction.deferred || interaction.replied) {
-          await interaction.followUp({ content: "❌ Wystąpił błąd" });
+          await interaction.followUp({
+            content: "❌ Wystąpił błąd",
+            flags: 64
+          });
         } else {
-          await interaction.reply({ content: "❌ Wystąpił błąd", ephemeral: true });
+          await interaction.reply({
+            content: "❌ Wystąpił błąd",
+            flags: 64
+          });
         }
       } catch {}
     }
