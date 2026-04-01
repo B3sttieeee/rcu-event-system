@@ -17,6 +17,7 @@ const fs = require("fs");
 const DB_PATH = "/data/levels.json";
 
 const cooldown = new Map();
+const dailyNotified = new Set(); // 🔥 żeby nie spamowało
 
 // ===== LOAD DB
 function loadDB() {
@@ -96,9 +97,7 @@ module.exports = {
               `🔥 **LEVEL ${data.level}**\n\n` +
               `${bar} **${progress}%**\n` +
               `\`${data.xp} / ${needed} XP\`\n\n` +
-              `⚡ Boost: ${
-                hasBoost ? "✅ Active" : "❌ No Active"
-              }\n` +
+              `⚡ Boost: ${hasBoost ? "✅ Active" : "❌ No Active"}\n` +
               `🌍 Multiplier: \`${cfg.globalMultiplier}x\``
             )
             .setThumbnail(message.author.displayAvatarURL())
@@ -158,7 +157,7 @@ module.exports = {
 
       cooldown.set(message.author.id, now);
 
-      // ❌ ignoruj śmieci
+      // ❌ ignoruj spam
       if (message.content.length < 3) return;
 
       const cfg = loadConfig();
@@ -170,13 +169,19 @@ module.exports = {
       );
 
       // =========================
-      // 🎯 DAILY SYSTEM (FIXED)
+      // 🎯 DAILY SYSTEM (FINAL)
       // =========================
 
-      addMessage(message.author.id); // 🔥 FIX (było member)
+      addMessage(message.author.id);
 
-      // opcjonalny notify (tylko raz)
-      if (isDailyReady(message.author.id)) {
+      // 🔥 tylko raz notify
+      if (isDailyReady(message.author.id) && !dailyNotified.has(message.author.id)) {
+        dailyNotified.add(message.author.id);
+
+        message.author.send(
+          "🎯 **Daily gotowe!**\nUżyj `/daily`, aby odebrać nagrodę 🎁"
+        ).catch(() => {});
+
         message.react("🎯").catch(() => {});
       }
 
