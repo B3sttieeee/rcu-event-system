@@ -5,7 +5,7 @@ const DATA_DIR = "/data";
 const DB_PATH = `${DATA_DIR}/levels.json`;
 const CONFIG_PATH = `${DATA_DIR}/levelConfig.json`;
 
-// ===== INIT FOLDER =====
+// ===== INIT =====
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -40,7 +40,7 @@ function saveConfig(cfg) {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2));
 }
 
-// ===== TWOJE ROLE =====
+// ===== ROLE SYSTEM =====
 const LEVEL_ROLES = {
   5: "1476000458987278397",
   15: "1476000995501670534",
@@ -50,7 +50,7 @@ const LEVEL_ROLES = {
   75: "1476000992351879229"
 };
 
-// ===== BOOST ROLE =====
+// ===== BOOST =====
 const BOOST_ROLE = "1476000398107217980";
 const BOOST_MULTIPLIER = 1.75;
 
@@ -83,7 +83,7 @@ async function addXP(member, baseAmount, messageLength = 0) {
 
   let amount = baseAmount;
 
-  // BONUS ZA DŁUGOŚĆ WIADOMOŚCI
+  // BONUS LENGTH
   if (messageLength >= cfg.lengthThreshold) {
     amount = Math.floor(amount * (1 + cfg.lengthBonus));
   }
@@ -115,7 +115,7 @@ async function addXP(member, baseAmount, messageLength = 0) {
   };
 }
 
-// ===== ROLE SYSTEM (FIXED) =====
+// ===== ROLE SYSTEM FIXED =====
 async function checkRoles(member, level) {
   for (const lvl of Object.keys(LEVEL_ROLES).map(Number)) {
     const roleId = LEVEL_ROLES[lvl];
@@ -126,7 +126,7 @@ async function checkRoles(member, level) {
   }
 }
 
-// ===== VOICE XP =====
+// ===== VOICE XP (FIXED 🔥) =====
 function startVoiceXP(client) {
   const { addVoiceTime } = require("./profileSystem");
 
@@ -142,8 +142,11 @@ function startVoiceXP(client) {
         if (member.voice.channel.members.size <= 1) return;
         if (member.voice.selfMute || member.voice.selfDeaf) return;
 
+        // ✅ XP
         addXP(member, cfg.voiceXP);
-        addVoiceTime(member.id, 60);
+
+        // 🔥 NAJWAŻNIEJSZY FIX
+        addVoiceTime(member, 60); // <-- BYŁ BŁĄD (member.id)
 
       });
     });
