@@ -1,48 +1,41 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 const { resumeGiveaway } = require("../utils/giveawaySystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("gwresume")
-    .setDescription("Wznawia giveaway po restarcie")
+    .setDescription("Resume giveaway after restart")
     .addStringOption(option =>
       option.setName("message_id")
-        .setDescription("ID wiadomości giveaway")
+        .setDescription("Giveaway message ID")
         .setRequired(true)
-    ),
+    )
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
 
-    // 🔒 tylko admin
-    if (!interaction.member.permissions.has("Administrator")) {
-      return interaction.reply({
-        content: "❌ Brak permisji",
-        ephemeral: true
-      });
-    }
-
-    const messageId = interaction.options.getString("message_id");
-
     try {
+      await interaction.deferReply({ ephemeral: true });
+
+      const messageId = interaction.options.getString("message_id");
+
       const result = await resumeGiveaway(interaction.client, messageId);
 
       if (!result) {
-        return interaction.reply({
-          content: "❌ Giveaway nie znaleziony",
-          ephemeral: true
+        return interaction.editReply({
+          content: "❌ Giveaway not found or cannot resume"
         });
       }
 
-      return interaction.reply({
-        content: "✅ Giveaway wznowiony",
-        ephemeral: true
+      return interaction.editReply({
+        content: "✅ Giveaway resumed successfully"
       });
 
     } catch (err) {
-      console.log(err);
-      return interaction.reply({
-        content: "❌ Błąd przy wznawianiu",
-        ephemeral: true
+      console.log("❌ RESUME ERROR:", err);
+
+      return interaction.editReply({
+        content: "❌ Error while resuming giveaway"
       });
     }
   }
