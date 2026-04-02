@@ -75,44 +75,48 @@ function getEntries(member) {
   return entries;
 }
 
-// ===== CLEAN EMBED =====
+// ===== LUXURY EMBED =====
 function buildEmbed(data) {
   const now = Date.now();
   const left = data.end - now;
 
   return new EmbedBuilder()
-    .setColor("#0f172a")
-    .setTitle("🎉 Giveaway")
-    .setDescription(
-`> 🎁 **${data.prize}**
+    .setColor("#d4af37")
+    .setTitle(`🎉 ${data.prize}`)
+    .setDescription(`✨ **Exclusive Giveaway**`)
+    .addFields(
+      {
+        name: "🏆 Winners",
+        value: `\`${data.winners}\``,
+        inline: true
+      },
+      {
+        name: "👥 Participants",
+        value: `\`${data.users.length}\``,
+        inline: true
+      },
+      {
+        name: "⏳ Time Left",
+        value: `\`${left > 0 ? formatTime(left) : "Ended"}\``,
+        inline: true
+      },
+      {
+        name: "🎟 Entry Boost",
+        value:
+`Default: \`1x\`
 
-**🏆 Winners**
-> ${data.winners}
-
-**👥 Participants**
-> ${data.users.length}
-
-**⏳ Ends**
-> ${left > 0 ? formatTime(left) : "Ended"}
-
-━━━━━━━━━━━━━━━━
-
-🎟 **Entries**
-> Default: **1**
-> Bonus from roles
-
-<@&1476000458987278397> +1  
-<@&1476000995501670534> +3  
-<@&1476000459595448442> +5  
-<@&1476000991206707221> +7  
-<@&1476000991823532032> +10  
-<@&1476000992351879229> +15  
-
-━━━━━━━━━━━━━━━━
-
-> Click **Join** to enter`
+<@&1476000458987278397> \`+1\`  
+<@&1476000995501670534> \`+3\`  
+<@&1476000459595448442> \`+5\`  
+<@&1476000991206707221> \`+7\`  
+<@&1476000991823532032> \`+10\`  
+<@&1476000992351879229> \`+15\``,
+        inline: false
+      }
     )
-    .setFooter({ text: "VYRN • Giveaway" })
+    .setFooter({
+      text: "VYRN • Luxury Giveaway System"
+    })
     .setTimestamp()
     .setImage(data.image || null);
 }
@@ -130,8 +134,7 @@ async function createGiveaway(interaction, data) {
     channelId: interaction.channel.id,
     messageId: null,
     image: data.image || null,
-    ended: false,
-    lastWinners: []
+    ended: false
   };
 
   const row = new ActionRowBuilder().addComponents(
@@ -208,13 +211,11 @@ async function endGiveaway(message, data) {
     winners.push(winner);
   }
 
-  data.lastWinners = winners;
-
   const embed = new EmbedBuilder()
-    .setColor("#22c55e")
+    .setColor("#d4af37")
     .setTitle("🎉 Giveaway Ended")
     .setDescription(
-`> 🎁 **${data.prize}**
+`✨ **${data.prize}**
 
 🏆 Winners:
 ${winners.map(w => `<@${w}>`).join("\n")}
@@ -234,12 +235,10 @@ async function reroll(client, messageId) {
   const data = giveaways.get(messageId);
   if (!data) return "❌ Giveaway not found";
 
-  if (!data.users.length) return "❌ No participants";
+  let pool = [];
 
   const channel = await client.channels.fetch(data.channelId).catch(() => null);
   if (!channel) return "❌ Channel not found";
-
-  let pool = [];
 
   for (const userId of data.users) {
     const member = await channel.guild.members.fetch(userId).catch(() => null);
@@ -252,11 +251,11 @@ async function reroll(client, messageId) {
     }
   }
 
-  if (!pool.length) return "❌ No valid participants";
+  if (!pool.length) return "❌ No participants";
 
   const winner = pool[Math.floor(Math.random() * pool.length)];
 
-  await channel.send(`🎉 **Reroll winner:** <@${winner}>`);
+  await channel.send(`🎉 **Reroll Winner:** <@${winner}>`);
 
   return `<@${winner}>`;
 }
@@ -279,7 +278,7 @@ async function handleGiveaway(interaction) {
     const entries = getEntries(member);
 
     await interaction.reply({
-      content: `🎟 You joined!\n> Your entries: **${entries}**`,
+      content: `🎟 Joined\n✨ Entries: **${entries}**`,
       flags: 64
     });
   }
@@ -290,7 +289,7 @@ async function handleGiveaway(interaction) {
     saveDB();
 
     await interaction.reply({
-      content: "❌ You left the giveaway",
+      content: "❌ Left giveaway",
       flags: 64
     });
   }
