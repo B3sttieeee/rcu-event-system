@@ -75,7 +75,7 @@ function getEntries(member) {
   return entries;
 }
 
-// ===== EMBED =====
+// ===== CLEAN EMBED =====
 function buildEmbed(data) {
   const now = Date.now();
   const left = data.end - now;
@@ -84,33 +84,35 @@ function buildEmbed(data) {
     .setColor("#0f172a")
     .setTitle("🎉 Giveaway")
     .setDescription(
-`🎁 **${data.prize}**
+`> 🎁 **${data.prize}**
 
-━━━━━━━━━━━━━━━━━━
+**🏆 Winners**
+> ${data.winners}
 
-🏆 **Winners:** ${data.winners}
-👥 **Participants:** ${data.users.length}
+**👥 Participants**
+> ${data.users.length}
 
-⏳ **Ends in:** ${left > 0 ? `\`${formatTime(left)}\`` : "`Ended`"}
+**⏳ Ends**
+> ${left > 0 ? formatTime(left) : "Ended"}
 
-━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 
-🎟 **Entries System**
-• Default: **1 entry**
-• Roles give **bonus entries**
+🎟 **Entries**
+> Default: **1**
+> Bonus from roles
 
-<@&1476000458987278397> → +1  
-<@&1476000995501670534> → +3  
-<@&1476000459595448442> → +5  
-<@&1476000991206707221> → +7  
-<@&1476000991823532032> → +10  
-<@&1476000992351879229> → +15  
+<@&1476000458987278397> +1  
+<@&1476000995501670534> +3  
+<@&1476000459595448442> +5  
+<@&1476000991206707221> +7  
+<@&1476000991823532032> +10  
+<@&1476000992351879229> +15  
 
-━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━
 
-👉 Click **Join** to participate`
+> Click **Join** to enter`
     )
-    .setFooter({ text: "VYRN • Giveaway System" })
+    .setFooter({ text: "VYRN • Giveaway" })
     .setTimestamp()
     .setImage(data.image || null);
 }
@@ -212,7 +214,7 @@ async function endGiveaway(message, data) {
     .setColor("#22c55e")
     .setTitle("🎉 Giveaway Ended")
     .setDescription(
-`🎁 **${data.prize}**
+`> 🎁 **${data.prize}**
 
 🏆 Winners:
 ${winners.map(w => `<@${w}>`).join("\n")}
@@ -234,10 +236,10 @@ async function reroll(client, messageId) {
 
   if (!data.users.length) return "❌ No participants";
 
-  let pool = [];
-
   const channel = await client.channels.fetch(data.channelId).catch(() => null);
   if (!channel) return "❌ Channel not found";
+
+  let pool = [];
 
   for (const userId of data.users) {
     const member = await channel.guild.members.fetch(userId).catch(() => null);
@@ -277,7 +279,7 @@ async function handleGiveaway(interaction) {
     const entries = getEntries(member);
 
     await interaction.reply({
-      content: `✅ Joined!\n🎟 Your entries: **${entries}**`,
+      content: `🎟 You joined!\n> Your entries: **${entries}**`,
       flags: 64
     });
   }
@@ -288,7 +290,7 @@ async function handleGiveaway(interaction) {
     saveDB();
 
     await interaction.reply({
-      content: "❌ Left giveaway",
+      content: "❌ You left the giveaway",
       flags: 64
     });
   }
