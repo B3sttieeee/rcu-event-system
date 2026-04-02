@@ -4,11 +4,9 @@ const { REST, Routes } = require("discord.js");
 
 const { createTicketPanel } = require("../utils/ticketSystem");
 const eventSystem = require("../utils/eventSystem");
-
-// 🔥 POPRAWKA
-const { loadGiveawaysToMemory, resumeGiveaway } = require("../utils/giveawaySystem");
-
+const { loadGiveaways } = require("../utils/giveawaySystem"); // 🔥 FIX
 const levelSystem = require("../utils/levelSystem");
+const { startClanSystem } = require("../utils/clanSystem");
 
 // 🔐 SAFE IMPORT
 let startDailyReset = null;
@@ -93,6 +91,7 @@ async function initSystems(client) {
     if (eventSystem) {
       await eventSystem.startPanel?.(client);
       await eventSystem.startEventSystem?.(client);
+
       log("✨", "Event system ready");
     }
   } catch (err) {
@@ -100,22 +99,10 @@ async function initSystems(client) {
     console.log(err);
   }
 
-  // 🎁 GIVEAWAYS (🔥 NAJWAŻNIEJSZE)
+  // 🎁 GIVEAWAYS (🔥 FIX)
   try {
-    // 1️⃣ LOAD DO MAPY
-    loadGiveawaysToMemory();
-
-    // 2️⃣ AUTO RESUME WSZYSTKICH
-    const data = fs.existsSync("/data/giveaways.json")
-      ? JSON.parse(fs.readFileSync("/data/giveaways.json"))
-      : {};
-
-    for (const id in data) {
-      await resumeGiveaway(client, id);
-    }
-
-    log("♻️", `Resumed ${Object.keys(data).length} giveaways`);
-
+    await loadGiveaways(client);
+    log("🎁", "Giveaways loaded");
   } catch (err) {
     log("❌", "Giveaways failed");
     console.log(err);
@@ -130,7 +117,7 @@ async function initSystems(client) {
     console.log(err);
   }
 
-  // 🎯 DAILY RESET (🔥 POPRAWKA)
+  // 🎯 DAILY RESET
   try {
     if (startDailyReset) {
       startDailyReset();
@@ -138,6 +125,14 @@ async function initSystems(client) {
     }
   } catch (err) {
     log("❌", "Daily system failed");
+  }
+
+  // 🧠 CLAN SYSTEM (🔥 DODANE)
+  try {
+    startClanSystem(client);
+    log("🧠", "Clan system ready");
+  } catch (err) {
+    log("❌", "Clan system failed");
     console.log(err);
   }
 }
