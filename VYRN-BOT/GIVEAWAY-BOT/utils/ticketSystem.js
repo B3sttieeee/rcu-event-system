@@ -11,7 +11,8 @@ const {
 } = require("discord.js");
 
 // ===== CONFIG =====
-const ADMIN_ROLE = "1475998527191519302";
+const LEADER_ROLE = "1475570484585168957";
+const OFFICER_ROLE = "1475998527191519302";
 const PANEL_CHANNEL_ID = "1475558248487583805";
 const CATEGORY_ID = "1475985874385899530";
 
@@ -123,13 +124,10 @@ async function handle(interaction) {
       type: ChannelType.GuildText,
       parent: CATEGORY_ID || null,
 
-      // 🔥 KLUCZOWY FIX
       permissionOverwrites: [
         {
           id: interaction.guild.id,
-          deny: [
-            PermissionsBitField.Flags.ViewChannel
-          ]
+          deny: [PermissionsBitField.Flags.ViewChannel]
         },
         {
           id: interaction.user.id,
@@ -140,37 +138,25 @@ async function handle(interaction) {
           ]
         },
         {
-          id: ADMIN_ROLE,
+          id: LEADER_ROLE,
           allow: [
             PermissionsBitField.Flags.ViewChannel,
             PermissionsBitField.Flags.SendMessages,
-            PermissionsBitField.Flags.ReadMessageHistory
+            PermissionsBitField.Flags.ReadMessageHistory,
+            PermissionsBitField.Flags.ManageChannels
+          ]
+        },
+        {
+          id: OFFICER_ROLE,
+          allow: [
+            PermissionsBitField.Flags.ViewChannel,
+            PermissionsBitField.Flags.SendMessages,
+            PermissionsBitField.Flags.ReadMessageHistory,
+            PermissionsBitField.Flags.ManageChannels
           ]
         }
       ]
     });
-
-    // 🔥 FORCE PERMISSIONS (NAJWAŻNIEJSZE)
-    await channel.permissionOverwrites.set([
-      {
-        id: interaction.guild.id,
-        deny: [PermissionsBitField.Flags.ViewChannel]
-      },
-      {
-        id: interaction.user.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages
-        ]
-      },
-      {
-        id: ADMIN_ROLE,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages
-        ]
-      }
-    ]);
 
     const embed = new EmbedBuilder()
       .setColor("#22c55e")
@@ -210,13 +196,15 @@ async function handle(interaction) {
   // ===== CLOSE =====
   if (interaction.isButton() && interaction.customId === "close_ticket") {
 
-    const isAdmin =
-      interaction.member.roles.cache.has(ADMIN_ROLE) ||
-      interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
+    const member = interaction.member;
 
-    if (!isAdmin) {
+    const isAllowed =
+      member.roles.cache.has(LEADER_ROLE) ||
+      member.roles.cache.has(OFFICER_ROLE);
+
+    if (!isAllowed) {
       return interaction.reply({
-        content: "❌ Only admin can close ticket",
+        content: "❌ Only Leader / Officer can close ticket",
         ephemeral: true
       });
     }
