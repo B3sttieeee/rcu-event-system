@@ -33,7 +33,7 @@ async function createTicketPanel(client) {
 📋 **Requirements**
 • Good Team  
 • Good GamePass  
-• 🔄 1.5N Rebirth+  
+• 🔄 500 O Rebirth+  
 • 🕒 3–8h AFK  
 
 ━━━━━━━━━━━━━━━━━━
