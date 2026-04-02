@@ -22,56 +22,48 @@ async function createTicketPanel(client) {
     if (!channel) return console.log("❌ Ticket channel not found");
 
     const embed = new EmbedBuilder()
-      .setColor("#ff6600")
-      .setTitle("📌 Clan VYRN • Ticket System")
+      .setColor("#0f172a")
+      .setTitle("🎫 VYRN Clan • Recruitment")
       .setDescription(
-`📩 **Open a ticket to apply for clan**
+`📩 **Open a ticket to apply**
 
 ━━━━━━━━━━━━━━━━━━
 
 📋 **Requirements**
 • Good Team  
-• Good GamePass  
+• GamePass  
 • 🔄 1.5N Rebirth+  
 • 🕒 3–8h AFK  
 
 ━━━━━━━━━━━━━━━━━━
 
-🚀 Click button below to start`
+🚀 Click button below`
       )
-      // ✅ TWÓJ GIF (DZIAŁAJĄCY)
       .setImage("https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif")
-      .setFooter({ text: "VYRN SYSTEM • Tickets" });
+      .setFooter({ text: "VYRN • Ticket System" });
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("open_ticket")
-        .setLabel("🔥 Open Ticket")
+        .setLabel("Open Ticket")
         .setStyle(ButtonStyle.Primary)
     );
 
-    // 🔥 SPRAWDŹ CZY PANEL JUŻ JEST
     const messages = await channel.messages.fetch({ limit: 10 });
     const existing = messages.find(m => m.author.id === client.user.id);
 
     if (existing) {
-      // ✅ UPDATE zamiast ignorowania
       await existing.edit({
         embeds: [embed],
         components: [row]
       });
-
-      console.log("♻️ Ticket panel updated");
       return;
     }
 
-    // ✅ NOWY PANEL
     await channel.send({
       embeds: [embed],
       components: [row]
     });
-
-    console.log("✅ Ticket panel created");
 
   } catch (err) {
     console.log("❌ PANEL ERROR:", err);
@@ -84,21 +76,20 @@ async function handle(interaction) {
   // ===== OPEN =====
   if (interaction.isButton() && interaction.customId === "open_ticket") {
 
-    // 🔥 BLOKADA DUPLIKATU
     const existing = interaction.guild.channels.cache.find(
       c => c.topic === interaction.user.id
     );
 
     if (existing) {
       return interaction.reply({
-        content: `❌ Masz już ticket: ${existing}`,
+        content: `❌ You already have a ticket: ${existing}`,
         ephemeral: true
       });
     }
 
     const modal = new ModalBuilder()
       .setCustomId("ticket_modal")
-      .setTitle("🎫 Create Ticket");
+      .setTitle("Create Ticket");
 
     const nick = new TextInputBuilder()
       .setCustomId("nick")
@@ -131,10 +122,14 @@ async function handle(interaction) {
       topic: interaction.user.id,
       type: ChannelType.GuildText,
       parent: CATEGORY_ID || null,
+
+      // 🔥 KLUCZOWY FIX
       permissionOverwrites: [
         {
           id: interaction.guild.id,
-          deny: [PermissionsBitField.Flags.ViewChannel]
+          deny: [
+            PermissionsBitField.Flags.ViewChannel
+          ]
         },
         {
           id: interaction.user.id,
@@ -155,27 +150,48 @@ async function handle(interaction) {
       ]
     });
 
+    // 🔥 FORCE PERMISSIONS (NAJWAŻNIEJSZE)
+    await channel.permissionOverwrites.set([
+      {
+        id: interaction.guild.id,
+        deny: [PermissionsBitField.Flags.ViewChannel]
+      },
+      {
+        id: interaction.user.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages
+        ]
+      },
+      {
+        id: ADMIN_ROLE,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages
+        ]
+      }
+    ]);
+
     const embed = new EmbedBuilder()
       .setColor("#22c55e")
       .setTitle("🎫 Ticket Opened")
-      .setThumbnail(interaction.user.displayAvatarURL())
       .setDescription(
         lang === "en"
-          ? `👤 **User:** ${interaction.user}
-📝 **Nickname:** ${nick}
+          ? `👤 ${interaction.user}
+📝 Nick: **${nick}**
 
-📸 Send screenshots of stats, gamepasses and team.`
-          : `👤 **Użytkownik:** ${interaction.user}
-📝 **Nick:** ${nick}
+📸 Send your stats screenshots`
+          : `👤 ${interaction.user}
+📝 Nick: **${nick}**
 
-📸 Wyślij screeny statystyk, gamepassów i teamu.`
+📸 Wyślij screeny statystyk`
       )
-      .setFooter({ text: "VYRN Recruitment System" });
+      .setThumbnail(interaction.user.displayAvatarURL());
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId("close_ticket")
-        .setLabel("🔒 Close Ticket")
+        .setLabel("Close")
         .setStyle(ButtonStyle.Danger)
     );
 
@@ -206,13 +222,13 @@ async function handle(interaction) {
     }
 
     await interaction.reply({
-      content: "🗑️ Closing ticket...",
+      content: "Closing...",
       ephemeral: true
     });
 
     setTimeout(() => {
       interaction.channel.delete().catch(() => {});
-    }, 2000);
+    }, 1500);
   }
 }
 
