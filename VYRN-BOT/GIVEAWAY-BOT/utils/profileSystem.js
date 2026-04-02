@@ -7,7 +7,7 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// 🔥 JEDEN CACHE NA CAŁY BOT
+// CACHE
 let db = null;
 
 // =========================
@@ -21,7 +21,6 @@ function loadProfile() {
   }
 
   db = JSON.parse(fs.readFileSync(PROFILE_PATH));
-
   return db;
 }
 
@@ -33,7 +32,7 @@ function saveProfile() {
   fs.writeFileSync(PROFILE_PATH, JSON.stringify(db, null, 2));
 }
 
-// 🔥 AUTO SAVE
+// AUTO SAVE
 setInterval(() => {
   saveProfile();
 }, 5000);
@@ -98,24 +97,44 @@ function isDailyReady(userId) {
 }
 
 // =========================
-// CLAIM
+// CLAIM (FIXED 🔥)
 // =========================
-function claimDaily(userId) {
+async function claimDaily(userId, member = null) {
   const user = ensureUser(userId);
 
   if (!isDailyReady(userId)) {
     return { error: true };
   }
 
+  // ❌ zabezpieczenie przed spamem (1x dziennie)
+  const now = Date.now();
+  if (now - user.daily.lastClaim < 86400000) {
+    return { error: "cooldown" };
+  }
+
   user.daily.streak++;
 
-  const xp = Math.floor(100 + Math.random() * 200);
+  const xp = Math.floor(150 + Math.random() * 150);
 
+  // 🔥 DODAJ XP DO LEVEL SYSTEM
+  if (member) {
+    try {
+      const { addXP } = require("./levelSystem");
+      await addXP(member, xp);
+    } catch {}
+  }
+
+  // reset daily
   user.daily.msgs = 0;
   user.daily.vc = 0;
-  user.daily.lastClaim = Date.now();
+  user.daily.lastClaim = now;
 
-  return { xp, streak: user.daily.streak };
+  saveProfile();
+
+  return {
+    xp,
+    streak: user.daily.streak
+  };
 }
 
 // =========================
@@ -136,6 +155,8 @@ function startDailyReset() {
         data.users[id].daily.msgs = 0;
         data.users[id].daily.vc = 0;
       }
+
+      saveProfile();
     }
   }, 60000);
 }
