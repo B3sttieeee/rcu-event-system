@@ -17,10 +17,9 @@ function formatUser(member, label) {
   return `• ${member} — **${label}** ${isVerified ? "" : "`(Not Verified)`"}`;
 }
 
-// ===== GET USERS (FIXED 🔥)
+// ===== GET CLAN MEMBERS (FINAL FIX 🔥)
 async function getClanMembers(guild) {
 
-  // 🔥 NAJWAŻNIEJSZE - pobiera WSZYSTKICH
   await guild.members.fetch();
 
   const leaders = [];
@@ -33,9 +32,8 @@ async function getClanMembers(guild) {
     const hasLeader = member.roles.cache.has(ROLES.LEADER);
     const hasOfficer = member.roles.cache.has(ROLES.OFFICER);
     const hasMember = member.roles.cache.has(ROLES.MEMBER);
-    const hasVerified = member.roles.cache.has(ROLES.VERIFIED);
 
-    // 🥇 PRIORITY SYSTEM
+    // 🥇 PRIORITY
     if (hasLeader) {
       leaders.push(formatUser(member, "LEADER VYRN"));
     } 
@@ -45,10 +43,8 @@ async function getClanMembers(guild) {
     else if (hasMember) {
       members.push(formatUser(member, "MEMBER VYRN"));
     }
-    // 🔥 NOWE: jeśli ma VERIFY ale nie ma rangi → też do members
-    else if (hasVerified) {
-      members.push(formatUser(member, "MEMBER VYRN"));
-    }
+
+    // ❌ NIC WIĘCEJ NIE DODAJEMY
   });
 
   return { leaders, officers, members };
@@ -118,7 +114,7 @@ function startClanSystem(client) {
 
     setInterval(() => {
       updateClanEmbed(client);
-    }, 30000);
+    }, 60000); // 🔥 zmniejszone obciążenie
   });
 
   client.on("guildMemberUpdate", () => {
