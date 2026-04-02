@@ -4,13 +4,16 @@ const { REST, Routes } = require("discord.js");
 
 const { createTicketPanel } = require("../utils/ticketSystem");
 const eventSystem = require("../utils/eventSystem");
-const { loadGiveaways } = require("../utils/giveawaySystem");
+
+// 🔥 POPRAWKA
+const { loadGiveawaysToMemory, resumeGiveaway } = require("../utils/giveawaySystem");
+
 const levelSystem = require("../utils/levelSystem");
 
 // 🔐 SAFE IMPORT
-let resetDaily = null;
+let startDailyReset = null;
 try {
-  ({ resetDaily } = require("../utils/profileSystem"));
+  ({ startDailyReset } = require("../utils/profileSystem"));
 } catch {
   console.log("⚠️ Profile system not loaded");
 }
@@ -90,7 +93,6 @@ async function initSystems(client) {
     if (eventSystem) {
       await eventSystem.startPanel?.(client);
       await eventSystem.startEventSystem?.(client);
-
       log("✨", "Event system ready");
     }
   } catch (err) {
@@ -98,10 +100,22 @@ async function initSystems(client) {
     console.log(err);
   }
 
-  // 🎁 GIVEAWAYS
+  // 🎁 GIVEAWAYS (🔥 NAJWAŻNIEJSZE)
   try {
-    await loadGiveaways?.(client);
-    log("🎁", "Giveaways ready");
+    // 1️⃣ LOAD DO MAPY
+    loadGiveawaysToMemory();
+
+    // 2️⃣ AUTO RESUME WSZYSTKICH
+    const data = fs.existsSync("/data/giveaways.json")
+      ? JSON.parse(fs.readFileSync("/data/giveaways.json"))
+      : {};
+
+    for (const id in data) {
+      await resumeGiveaway(client, id);
+    }
+
+    log("♻️", `Resumed ${Object.keys(data).length} giveaways`);
+
   } catch (err) {
     log("❌", "Giveaways failed");
     console.log(err);
@@ -116,20 +130,15 @@ async function initSystems(client) {
     console.log(err);
   }
 
-  // 🎯 DAILY RESET
+  // 🎯 DAILY RESET (🔥 POPRAWKA)
   try {
-    if (resetDaily) {
-      resetDaily();
-
-      setInterval(() => {
-        resetDaily();
-        log("🔄", "Daily reset executed");
-      }, 86400000);
-
+    if (startDailyReset) {
+      startDailyReset();
       log("🎯", "Daily system ready");
     }
   } catch (err) {
     log("❌", "Daily system failed");
+    console.log(err);
   }
 }
 
@@ -148,7 +157,7 @@ module.exports = {
       // 2️⃣ REGISTER
       await registerCommands(client, commands);
 
-      // 3️⃣ SYSTEMS
+      // 3️⃣ SYSTEMY
       await initSystems(client);
 
       log("🚀", "BOT FULLY INITIALIZED");
