@@ -5,7 +5,10 @@ const path = require("path");
 
 const { startVoiceXP } = require("./utils/levelSystem");
 const { createTicketPanel } = require("./utils/ticketSystem");
-const { startDailyReset } = require("./utils/profileSystem"); // 🔥 NOWE
+const { startDailyReset } = require("./utils/profileSystem");
+
+// 🔥 DODANE
+const { startClanSystem } = require("./utils/clanSystem");
 
 // ===== CLIENT =====
 const client = new Client({
@@ -90,10 +93,13 @@ client.once("ready", async () => {
   // 🎤 VOICE XP SYSTEM
   startVoiceXP(client);
 
-  // 🌙 DAILY RESET SYSTEM (NOWE 🔥)
+  // 🌙 DAILY RESET SYSTEM
   startDailyReset();
 
-  // 🎫 PANEL TICKET (anti spam - tylko raz)
+  // 🧠 CLAN SYSTEM (NOWE 🔥🔥🔥)
+  startClanSystem(client);
+
+  // 🎫 PANEL TICKET
   setTimeout(() => {
     createTicketPanel(client);
   }, 3000);
