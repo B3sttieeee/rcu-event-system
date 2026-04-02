@@ -20,15 +20,16 @@ function buildDailyEmbed(userId) {
 
   const embed = new EmbedBuilder()
     .setColor(ready ? "#22c55e" : "#0f172a")
-    .setTitle("🎯 DAILY QUEST")
+    .setTitle("🎯 Daily Quest")
     .setDescription(
-`<:Messages:1488763434966192242> **Messages:** ${msg}/50
-<a:TimeS:1488760889560797314> **Voice:** ${vc}/30 min
+`<:Messages:1488763434966192242> **Messages:** ${msg}/50  
+<a:TimeS:1488760889560797314> **Voice:** ${vc}/30 min  
 
-🔥 Streak: **${user.streak}**
+🔥 Streak: **${user.daily.streak}**
 
 ${ready ? "✅ READY TO CLAIM" : "❌ IN PROGRESS"}`
-    );
+    )
+    .setFooter({ text: "VYRN • Daily System" });
 
   let row = null;
 
@@ -44,15 +45,19 @@ ${ready ? "✅ READY TO CLAIM" : "❌ IN PROGRESS"}`
   return { embed, row, ready };
 }
 
-// ===== DM SYSTEM =====
+// ===== DM SYSTEM (FIXED 🔥)
 async function checkDailyDM(member) {
   const db = loadProfile();
   const user = db.users[member.id];
 
   if (!user) return;
 
-  if (isDailyReady(member.id) && !user.notified) {
-    user.notified = true;
+  // 🔥 FIX — używamy daily.notified
+  if (!user.daily.notified) user.daily.notified = false;
+
+  if (isDailyReady(member.id) && !user.daily.notified) {
+
+    user.daily.notified = true;
 
     const { embed, row } = buildDailyEmbed(member.id);
 
