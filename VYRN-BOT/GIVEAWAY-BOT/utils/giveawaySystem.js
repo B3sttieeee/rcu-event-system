@@ -75,7 +75,7 @@ function getEntries(member) {
   return entries;
 }
 
-// ===== LUXURY EMBED =====
+// ===== EMBED =====
 function buildEmbed(data) {
   const now = Date.now();
   const left = data.end - now;
@@ -83,7 +83,6 @@ function buildEmbed(data) {
   return new EmbedBuilder()
     .setColor("#d4af37")
     .setTitle(`🎉 ${data.prize}`)
-    .setDescription(`✨ **Exclusive Giveaway**`)
     .addFields(
       {
         name: "🏆 Winners",
@@ -105,17 +104,17 @@ function buildEmbed(data) {
         value:
 `Default: \`1x\`
 
-<@&1476000458987278397> \`+1\`  
-<@&1476000995501670534> \`+3\`  
-<@&1476000459595448442> \`+5\`  
-<@&1476000991206707221> \`+7\`  
-<@&1476000991823532032> \`+10\`  
-<@&1476000992351879229> \`+15\``,
+<@&1476000458987278397> → **+1 bonus entries**  
+<@&1476000995501670534> → **+3 bonus entries**  
+<@&1476000459595448442> → **+5 bonus entries**  
+<@&1476000991206707221> → **+7 bonus entries**  
+<@&1476000991823532032> → **+10 bonus entries**  
+<@&1476000992351879229> → **+15 bonus entries**`,
         inline: false
       }
     )
     .setFooter({
-      text: "VYRN • Luxury Giveaway System"
+      text: "VYRN • Giveaway System"
     })
     .setTimestamp()
     .setImage(data.image || null);
@@ -215,9 +214,7 @@ async function endGiveaway(message, data) {
     .setColor("#d4af37")
     .setTitle("🎉 Giveaway Ended")
     .setDescription(
-`✨ **${data.prize}**
-
-🏆 Winners:
+`🏆 Winners:
 ${winners.map(w => `<@${w}>`).join("\n")}
 
 👥 Participants: ${data.users.length}`
@@ -235,10 +232,10 @@ async function reroll(client, messageId) {
   const data = giveaways.get(messageId);
   if (!data) return "❌ Giveaway not found";
 
-  let pool = [];
-
   const channel = await client.channels.fetch(data.channelId).catch(() => null);
   if (!channel) return "❌ Channel not found";
+
+  let pool = [];
 
   for (const userId of data.users) {
     const member = await channel.guild.members.fetch(userId).catch(() => null);
@@ -278,7 +275,7 @@ async function handleGiveaway(interaction) {
     const entries = getEntries(member);
 
     await interaction.reply({
-      content: `🎟 Joined\n✨ Entries: **${entries}**`,
+      content: `🎟 Joined\n✨ Your entries: **${entries}**`,
       flags: 64
     });
   }
