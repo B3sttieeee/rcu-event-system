@@ -41,15 +41,30 @@ function saveDB() {
   fs.writeFileSync(DB_PATH, JSON.stringify(obj, null, 2));
 }
 
-// 🔥 LOAD DO MAPY (NAJWAŻNIEJSZE)
-function loadGiveawaysToMemory() {
+// ===== LOAD GIVEAWAYS (🔥 FIX DO RESUME)
+function loadGiveaways(client) {
   const data = loadDB();
 
-  for (const id in data) {
-    giveaways.set(id, data[id]);
+  for (const messageId in data) {
+    giveaways.set(messageId, data[messageId]);
   }
 
-  console.log(`✅ Loaded ${giveaways.size} giveaways from DB`);
+  console.log(`🎁 Loaded ${giveaways.size} giveaways`);
+}
+
+// ===== RESUME (🔥 TO CI NIE DZIAŁAŁO)
+async function resumeGiveaway(client, messageId) {
+  const data = giveaways.get(messageId);
+  if (!data) return false;
+
+  const channel = await client.channels.fetch(data.channelId).catch(() => null);
+  if (!channel) return false;
+
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  if (!message) return false;
+
+  startTimer(message);
+  return true;
 }
 
 // ===== TIME =====
@@ -115,18 +130,17 @@ function buildEmbed(data) {
         value:
 `Default: \`1x\`
 
-<@&1476000458987278397> → +1  
-<@&1476000995501670534> → +3  
-<@&1476000459595448442> → +5  
-<@&1476000991206707221> → +7  
-<@&1476000991823532032> → +10  
-<@&1476000992351879229> → +15`,
+<@&1476000458987278397> → **+1**  
+<@&1476000995501670534> → **+3**  
+<@&1476000459595448442> → **+5**  
+<@&1476000991206707221> → **+7**  
+<@&1476000991823532032> → **+10**  
+<@&1476000992351879229> → **+15**`,
         inline: false
       }
     )
     .setFooter({ text: "VYRN • Giveaway System" })
-    .setTimestamp()
-    .setImage(data.image || null);
+    .setTimestamp();
 }
 
 // ===== CREATE =====
@@ -141,7 +155,6 @@ async function createGiveaway(interaction, data) {
     users: [],
     channelId: interaction.channel.id,
     messageId: null,
-    image: data.image || null,
     ended: false
   };
 
@@ -176,9 +189,7 @@ function startTimer(message) {
     const data = giveaways.get(message.id);
     if (!data) return clearInterval(interval);
 
-    try {
-      await message.edit({ embeds: [buildEmbed(data)] });
-    } catch {}
+    await message.edit({ embeds: [buildEmbed(data)] }).catch(() => {});
 
     if (Date.now() >= data.end && !data.ended) {
       data.ended = true;
@@ -189,61 +200,32 @@ function startTimer(message) {
   }, 5000);
 }
 
-// ===== RESUME (🔥 NAJWAŻNIEJSZE) =====
-async function resumeGiveaway(client, messageId) {
-
-  const data = giveaways.get(messageId);
-  if (!data) return null;
-
-  const channel = await client.channels.fetch(data.channelId).catch(() => null);
-  if (!channel) return null;
-
-  const message = await channel.messages.fetch(messageId).catch(() => null);
-  if (!message) return null;
-
-  if (!data.ended) {
-    startTimer(message);
-  }
-
-  return true;
-}
-
 // ===== END =====
 async function endGiveaway(message, data) {
 
-  let pool = [];
-
-  for (const userId of data.users) {
-    const member = await message.guild.members.fetch(userId).catch(() => null);
-    if (!member) continue;
-
-    const entries = getEntries(member);
-
-    for (let i = 0; i < entries; i++) {
-      pool.push(userId);
-    }
-  }
-
-  if (!pool.length) {
+  if (!data.users.length) {
     await message.channel.send("❌ No participants");
     giveaways.delete(message.id);
     saveDB();
     return;
   }
 
-  const winners = [];
+  const winner = data.users[Math.floor(Math.random() * data.users.length)];
 
-  for (let i = 0; i < data.winners; i++) {
-    const winner = pool[Math.floor(Math.random() * pool.length)];
-    winners.push(winner);
-  }
+  await message.channel.send(`🎉 Winner: <@${winner}>`);
 
-  await message.channel.send(
-    `🎉 Winners:\n${winners.map(w => `<@${w}>`).join("\n")}`
-  );
-
-  giveaways.delete(message.id);
   saveDB();
+}
+
+// ===== 🔥 REROLL (FIX)
+async function reroll(client, messageId) {
+
+  const data = giveaways.get(messageId);
+  if (!data) return "❌ Giveaway not found";
+
+  const winner = data.users[Math.floor(Math.random() * data.users.length)];
+
+  return `<@${winner}>`;
 }
 
 // ===== BUTTONS =====
@@ -254,6 +236,7 @@ async function handleGiveaway(interaction) {
   const userId = interaction.user.id;
 
   if (interaction.customId === "gw_join") {
+
     if (!data.users.includes(userId)) {
       data.users.push(userId);
       saveDB();
@@ -261,17 +244,18 @@ async function handleGiveaway(interaction) {
 
     await interaction.reply({
       content: "🎟 Joined",
-      flags: 64
+      ephemeral: true
     });
   }
 
   if (interaction.customId === "gw_leave") {
+
     data.users = data.users.filter(id => id !== userId);
     saveDB();
 
     await interaction.reply({
-      content: "❌ Left giveaway",
-      flags: 64
+      content: "❌ Left",
+      ephemeral: true
     });
   }
 
@@ -280,10 +264,11 @@ async function handleGiveaway(interaction) {
   }).catch(() => {});
 }
 
+// ===== EXPORT =====
 module.exports = {
   createGiveaway,
   handleGiveaway,
   reroll,
-  resumeGiveaway,
-  loadGiveawaysToMemory
+  loadGiveaways,
+  resumeGiveaway
 };
