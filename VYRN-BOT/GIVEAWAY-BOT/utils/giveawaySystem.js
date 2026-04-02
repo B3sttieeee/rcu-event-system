@@ -41,6 +41,15 @@ function saveDB() {
   fs.writeFileSync(DB_PATH, JSON.stringify(obj, null, 2));
 }
 
+// ===== LOAD TO MAP =====
+function loadGiveawaysToMap() {
+  const db = loadDB();
+
+  for (const id in db) {
+    giveaways.set(id, db[id]);
+  }
+}
+
 // ===== TIME =====
 function parseTime(time) {
   const num = parseInt(time);
@@ -77,8 +86,7 @@ function getEntries(member) {
 
 // ===== EMBED =====
 function buildEmbed(data) {
-  const now = Date.now();
-  const left = data.end - now;
+  const left = data.end - Date.now();
 
   return new EmbedBuilder()
     .setColor("#d4af37")
@@ -104,18 +112,16 @@ function buildEmbed(data) {
         value:
 `Default: \`1x\`
 
-<@&1476000458987278397> → **+1 bonus entries**  
-<@&1476000995501670534> → **+3 bonus entries**  
-<@&1476000459595448442> → **+5 bonus entries**  
-<@&1476000991206707221> → **+7 bonus entries**  
-<@&1476000991823532032> → **+10 bonus entries**  
-<@&1476000992351879229> → **+15 bonus entries**`,
+<@&1476000458987278397> → ➜ **+1**
+<@&1476000995501670534> → ➜ **+3**
+<@&1476000459595448442> → ➜ **+5**
+<@&1476000991206707221> → ➜ **+7**
+<@&1476000991823532032> → ➜ **+10**
+<@&1476000992351879229> → ➜ **+15**`,
         inline: false
       }
     )
-    .setFooter({
-      text: "VYRN • Giveaway System"
-    })
+    .setFooter({ text: "VYRN • Giveaway System" })
     .setTimestamp()
     .setImage(data.image || null);
 }
@@ -218,16 +224,53 @@ async function endGiveaway(message, data) {
 ${winners.map(w => `<@${w}>`).join("\n")}
 
 👥 Participants: ${data.users.length}`
-    )
-    .setTimestamp();
+    );
 
   await message.edit({ embeds: [embed], components: [] });
 
   saveDB();
 }
 
+// ===== RESUME =====
+async function resumeGiveaway(client, messageId) {
+
+  if (giveaways.size === 0) {
+    loadGiveawaysToMap();
+  }
+
+  const data = giveaways.get(messageId);
+  if (!data) return false;
+
+  try {
+    const channel = await client.channels.fetch(data.channelId);
+    if (!channel) return false;
+
+    const message = await channel.messages.fetch(messageId);
+    if (!message) return false;
+
+    if (data.ended) return false;
+
+    if (Date.now() >= data.end) {
+      data.ended = true;
+      await endGiveaway(message, data);
+    } else {
+      startTimer(message);
+    }
+
+    return true;
+
+  } catch (err) {
+    console.log("❌ RESUME ERROR:", err);
+    return false;
+  }
+}
+
 // ===== REROLL =====
 async function reroll(client, messageId) {
+
+  if (giveaways.size === 0) {
+    loadGiveawaysToMap();
+  }
 
   const data = giveaways.get(messageId);
   if (!data) return "❌ Giveaway not found";
@@ -275,7 +318,7 @@ async function handleGiveaway(interaction) {
     const entries = getEntries(member);
 
     await interaction.reply({
-      content: `🎟 Joined\n✨ Your entries: **${entries}**`,
+      content: `🎟 Joined\n✨ Entries: **${entries}**`,
       flags: 64
     });
   }
@@ -299,5 +342,7 @@ async function handleGiveaway(interaction) {
 module.exports = {
   createGiveaway,
   handleGiveaway,
-  reroll
+  reroll,
+  resumeGiveaway,
+  loadGiveawaysToMap
 };
