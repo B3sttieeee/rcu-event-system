@@ -1,6 +1,6 @@
 const { EmbedBuilder } = require("discord.js");
 
-// ===== CONFIG (Twoje ID)
+// ===== CONFIG
 const CHANNEL_ID = "1475992158581559528";
 
 const ROLES = {
@@ -17,8 +17,11 @@ function formatUser(member, label) {
   return `• ${member} — **${label}** ${isVerified ? "" : "`(Not Verified)`"}`;
 }
 
-// ===== GET USERS WITH HIERARCHY
-function getClanMembers(guild) {
+// ===== GET USERS (FIXED 🔥)
+async function getClanMembers(guild) {
+
+  // 🔥 NAJWAŻNIEJSZE - pobiera WSZYSTKICH
+  await guild.members.fetch();
 
   const leaders = [];
   const officers = [];
@@ -27,13 +30,23 @@ function getClanMembers(guild) {
   guild.members.cache.forEach(member => {
     if (member.user.bot) return;
 
-    if (member.roles.cache.has(ROLES.LEADER)) {
+    const hasLeader = member.roles.cache.has(ROLES.LEADER);
+    const hasOfficer = member.roles.cache.has(ROLES.OFFICER);
+    const hasMember = member.roles.cache.has(ROLES.MEMBER);
+    const hasVerified = member.roles.cache.has(ROLES.VERIFIED);
+
+    // 🥇 PRIORITY SYSTEM
+    if (hasLeader) {
       leaders.push(formatUser(member, "LEADER VYRN"));
     } 
-    else if (member.roles.cache.has(ROLES.OFFICER)) {
+    else if (hasOfficer) {
       officers.push(formatUser(member, "OFFICER VYRN"));
     } 
-    else if (member.roles.cache.has(ROLES.MEMBER)) {
+    else if (hasMember) {
+      members.push(formatUser(member, "MEMBER VYRN"));
+    }
+    // 🔥 NOWE: jeśli ma VERIFY ale nie ma rangi → też do members
+    else if (hasVerified) {
       members.push(formatUser(member, "MEMBER VYRN"));
     }
   });
@@ -42,9 +55,9 @@ function getClanMembers(guild) {
 }
 
 // ===== BUILD EMBED
-function buildEmbed(guild) {
+async function buildEmbed(guild) {
 
-  const { leaders, officers, members } = getClanMembers(guild);
+  const { leaders, officers, members } = await getClanMembers(guild);
 
   const embed = new EmbedBuilder()
     .setColor("#0f172a")
@@ -78,7 +91,7 @@ ${members.length ? members.join("\n") : "_No members_"}
   return embed;
 }
 
-// ===== UPDATE EMBED (NO SPAM)
+// ===== UPDATE EMBED
 async function updateClanEmbed(client) {
   const channel = await client.channels.fetch(CHANNEL_ID).catch(() => null);
   if (!channel) return;
@@ -88,7 +101,7 @@ async function updateClanEmbed(client) {
   const messages = await channel.messages.fetch({ limit: 10 });
   let msg = messages.find(m => m.author.id === client.user.id);
 
-  const embed = buildEmbed(guild);
+  const embed = await buildEmbed(guild);
 
   if (msg) {
     await msg.edit({ embeds: [embed] });
@@ -97,7 +110,7 @@ async function updateClanEmbed(client) {
   }
 }
 
-// ===== SYSTEM START
+// ===== SYSTEM
 function startClanSystem(client) {
 
   client.once("ready", () => {
