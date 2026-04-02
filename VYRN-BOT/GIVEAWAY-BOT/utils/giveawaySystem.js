@@ -13,6 +13,16 @@ const DB_PATH = `${DATA_DIR}/giveaways.json`;
 
 const giveaways = new Map();
 
+// ===== BONUS ROLES =====
+const BONUS_ROLES = {
+  "1476000458987278397": 1,
+  "1476000995501670534": 3,
+  "1476000459595448442": 5,
+  "1476000991206707221": 7,
+  "1476000991823532032": 10,
+  "1476000992351879229": 15
+};
+
 // ===== DB =====
 function loadDB() {
   if (!fs.existsSync(DATA_DIR)) {
@@ -52,36 +62,40 @@ function formatTime(ms) {
   return `${s}s`;
 }
 
+// ===== BONUS ENTRIES =====
+function getEntries(member) {
+  let entries = 1;
+
+  for (const roleId in BONUS_ROLES) {
+    if (member.roles.cache.has(roleId)) {
+      entries += BONUS_ROLES[roleId];
+    }
+  }
+
+  return entries;
+}
+
 // ===== EMBED =====
 function buildEmbed(data) {
   const now = Date.now();
   const left = data.end - now;
 
-  const embed = new EmbedBuilder()
-    .setColor("#f59e0b")
-    .setTitle("🎉 GIVEAWAY")
+  return new EmbedBuilder()
+    .setColor("#0f172a")
+    .setTitle("🎉 Giveaway")
     .setDescription(
 `🎁 **${data.prize}**
 
-━━━━━━━━━━━━━━━━━━
+👥 Participants: **${data.users.length}**
+🏆 Winners: **${data.winners}**
 
-👥 Uczestnicy: \`${data.users.length}\`
-🏆 Zwycięzcy: \`${data.winners}\`
+⏳ Ends in: **${left > 0 ? formatTime(left) : "Ended"}**
 
-⏳ Koniec za: \`${left > 0 ? formatTime(left) : "Zakończono"}\`
-
-━━━━━━━━━━━━━━━━━━
-
-👉 Kliknij **Join**, aby wziąć udział!`
+🔥 Bonus roles = more chances`
     )
-    .setFooter({ text: "VYRN Giveaway System" })
-    .setTimestamp();
-
-  if (data.image && data.image.startsWith("http")) {
-    embed.setImage(data.image);
-  }
-
-  return embed;
+    .setFooter({ text: "VYRN • Giveaway System" })
+    .setTimestamp()
+    .setImage(data.image || null);
 }
 
 // ===== CREATE =====
@@ -96,18 +110,19 @@ async function createGiveaway(interaction, data) {
     users: [],
     channelId: interaction.channel.id,
     messageId: null,
-    image: data.image || null
+    image: data.image || null,
+    ended: false
   };
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("gw_join")
-      .setLabel("🎉 Join")
+      .setLabel("Join")
       .setStyle(ButtonStyle.Success),
 
     new ButtonBuilder()
       .setCustomId("gw_leave")
-      .setLabel("❌ Leave")
+      .setLabel("Leave")
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -134,7 +149,8 @@ function startTimer(message, data) {
       await message.edit({ embeds: [buildEmbed(d)] });
     } catch {}
 
-    if (Date.now() >= d.end) {
+    if (Date.now() >= d.end && !d.ended) {
+      d.ended = true;
       clearInterval(interval);
       endGiveaway(message, d);
     }
@@ -144,8 +160,22 @@ function startTimer(message, data) {
 
 // ===== END =====
 async function endGiveaway(message, data) {
-  if (!data.users.length) {
-    await message.channel.send("❌ Brak uczestników");
+
+  let pool = [];
+
+  for (const userId of data.users) {
+    const member = await message.guild.members.fetch(userId).catch(() => null);
+    if (!member) continue;
+
+    const entries = getEntries(member);
+
+    for (let i = 0; i < entries; i++) {
+      pool.push(userId);
+    }
+  }
+
+  if (!pool.length) {
+    await message.channel.send("❌ No participants");
     giveaways.delete(message.id);
     saveDB();
     return;
@@ -154,67 +184,53 @@ async function endGiveaway(message, data) {
   const winners = [];
 
   for (let i = 0; i < data.winners; i++) {
-    const winner = data.users[Math.floor(Math.random() * data.users.length)];
+    const winner = pool[Math.floor(Math.random() * pool.length)];
     winners.push(winner);
   }
 
   const embed = new EmbedBuilder()
     .setColor("#22c55e")
-    .setTitle("🎉 GIVEAWAY ZAKOŃCZONY")
+    .setTitle("🎉 Giveaway Ended")
     .setDescription(
 `🎁 **${data.prize}**
 
-🏆 Wygrani:
+🏆 Winners:
 ${winners.map(w => `<@${w}>`).join("\n")}
 
-👥 Uczestnicy: ${data.users.length}`
-    );
+👥 Participants: ${data.users.length}`
+    )
+    .setTimestamp();
 
   await message.edit({ embeds: [embed], components: [] });
 
-  giveaways.delete(message.id);
+  data.lastWinners = winners;
   saveDB();
-}
-
-// ===== LOAD AFTER RESTART =====
-async function loadGiveaways(client) {
-  const db = loadDB();
-
-  for (const id in db) {
-    const data = db[id];
-
-    try {
-      const channel = await client.channels.fetch(data.channelId);
-      const message = await channel.messages.fetch(id);
-
-      giveaways.set(id, data);
-
-      if (Date.now() >= data.end) {
-        endGiveaway(message, data);
-      } else {
-        startTimer(message, data);
-      }
-
-    } catch {
-      giveaways.delete(id);
-    }
-  }
 }
 
 // ===== REROLL =====
 async function reroll(client, messageId) {
 
   const data = giveaways.get(messageId);
-  if (!data) return "❌ Giveaway nie istnieje";
+  if (!data) return "❌ Giveaway not found";
 
-  if (!data.users.length) return "❌ Brak uczestników";
+  if (!data.users.length) return "❌ No participants";
 
-  const winner = data.users[Math.floor(Math.random() * data.users.length)];
+  let pool = [];
+
+  for (const userId of data.users) {
+    const guild = client.guilds.cache.get(data.channelId ? null : null);
+    const member = await client.users.fetch(userId).catch(() => null);
+    if (!member) continue;
+
+    pool.push(userId);
+  }
+
+  const winner = pool[Math.floor(Math.random() * pool.length)];
 
   const channel = await client.channels.fetch(data.channelId).catch(() => null);
 
   if (channel) {
-    await channel.send(`🎉 Nowy zwycięzca: <@${winner}>`);
+    await channel.send(`🎉 New winner: <@${winner}>`);
   }
 
   return `<@${winner}>`;
@@ -227,44 +243,29 @@ async function handleGiveaway(interaction) {
 
   const userId = interaction.user.id;
 
-  const safeReply = async (msg) => {
-    if (interaction.replied || interaction.deferred) {
-      return interaction.followUp(msg);
-    } else {
-      return interaction.reply(msg);
-    }
-  };
-
   if (interaction.customId === "gw_join") {
-
     if (!data.users.includes(userId)) {
       data.users.push(userId);
       saveDB();
     }
 
-    await safeReply({ content: "✅ Dołączyłeś!", flags: 64 });
-
-    interaction.message.edit({
-      embeds: [buildEmbed(data)]
-    }).catch(() => {});
+    await interaction.reply({ content: "✅ Joined!", flags: 64 });
   }
 
   if (interaction.customId === "gw_leave") {
-
     data.users = data.users.filter(id => id !== userId);
     saveDB();
 
-    await safeReply({ content: "❌ Opuściłeś giveaway", flags: 64 });
-
-    interaction.message.edit({
-      embeds: [buildEmbed(data)]
-    }).catch(() => {});
+    await interaction.reply({ content: "❌ Left giveaway", flags: 64 });
   }
+
+  interaction.message.edit({
+    embeds: [buildEmbed(data)]
+  }).catch(() => {});
 }
 
 module.exports = {
   createGiveaway,
   handleGiveaway,
-  loadGiveaways,
   reroll
 };
