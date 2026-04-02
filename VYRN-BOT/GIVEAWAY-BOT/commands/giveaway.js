@@ -1,6 +1,7 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
 const { createGiveaway } = require("../utils/giveawaySystem");
 
+// ===== TIME VALIDATION =====
 function isValidTime(time) {
   return /^[0-9]+[smhd]$/.test(time);
 }
@@ -8,59 +9,69 @@ function isValidTime(time) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("giveaway")
-    .setDescription("Create giveaway")
+    .setDescription("🎉 Create professional giveaway")
 
     .addStringOption(opt =>
       opt.setName("prize")
-        .setDescription("Prize")
+        .setDescription("🎁 Prize")
         .setRequired(true)
     )
 
     .addIntegerOption(opt =>
       opt.setName("winners")
-        .setDescription("Number of winners")
+        .setDescription("🏆 Number of winners (1-20)")
+        .setMinValue(1)
+        .setMaxValue(20)
         .setRequired(true)
     )
 
     .addStringOption(opt =>
       opt.setName("time")
-        .setDescription("Time (10s, 5m, 1h, 1d)")
+        .setDescription("⏳ Duration (10s, 5m, 1h, 1d)")
         .setRequired(true)
     )
 
     .addAttachmentOption(opt =>
       opt.setName("image")
-        .setDescription("Upload image (optional)")
+        .setDescription("🖼 Giveaway image (optional)")
         .setRequired(false)
     )
 
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
-
     try {
 
-      // 🔥 defer NA START
-      await interaction.deferReply({ flags: 64 }); // zamiast ephemeral
+      await interaction.deferReply({ ephemeral: true });
 
-      const prize = interaction.options.getString("prize");
+      const prize = interaction.options.getString("prize").trim();
       const winners = interaction.options.getInteger("winners");
-      const time = interaction.options.getString("time");
+      const time = interaction.options.getString("time").toLowerCase();
       const attachment = interaction.options.getAttachment("image");
+
+      // ===== VALIDATION =====
 
       if (!isValidTime(time)) {
         return interaction.editReply({
-          content: "❌ Zły format czasu (np: 10s, 5m, 1h, 1d)"
+          content: "❌ **Invalid time format**\nUse: `10s`, `5m`, `1h`, `1d`"
         });
       }
 
-      if (winners <= 0 || winners > 20) {
+      if (prize.length < 3) {
         return interaction.editReply({
-          content: "❌ Winners musi być między 1 a 20"
+          content: "❌ Prize name is too short"
         });
       }
 
-      const image = attachment ? attachment.url : null;
+      if (prize.length > 100) {
+        return interaction.editReply({
+          content: "❌ Prize name is too long (max 100 chars)"
+        });
+      }
+
+      const image = attachment?.url || null;
+
+      // ===== CREATE =====
 
       await createGiveaway(interaction, {
         prize,
@@ -69,21 +80,21 @@ module.exports = {
         image
       });
 
-      return interaction.editReply({
-        content: "🎉 Giveaway created!"
+      await interaction.editReply({
+        content: `✅ Giveaway created!\n🎁 **${prize}**\n🏆 Winners: **${winners}**\n⏳ Time: **${time}**`
       });
 
     } catch (err) {
       console.log("❌ GIVEAWAY ERROR:", err);
 
       if (interaction.deferred || interaction.replied) {
-        return interaction.editReply({
-          content: "❌ Error creating giveaway"
+        await interaction.editReply({
+          content: "❌ Failed to create giveaway"
         });
       } else {
-        return interaction.reply({
-          content: "❌ Error creating giveaway",
-          flags: 64
+        await interaction.reply({
+          content: "❌ Failed to create giveaway",
+          ephemeral: true
         });
       }
     }
