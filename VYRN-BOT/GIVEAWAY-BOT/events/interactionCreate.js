@@ -2,6 +2,13 @@ const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 
+const {
+  loadProfile,
+  saveProfile,
+  isDailyReady,
+  claimDaily
+} = require("../utils/profileSystem");
+
 module.exports = {
   name: "interactionCreate",
 
@@ -9,7 +16,7 @@ module.exports = {
     try {
 
       // =========================
-      // 🎁 GIVEAWAY (NAJPIERW)
+      // 🎁 GIVEAWAY
       // =========================
       if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
         return handleGiveaway(interaction);
@@ -26,17 +33,37 @@ module.exports = {
       }
 
       // =========================
-      // 🎯 DAILY BUTTON (NOWE 🔥)
+      // 🎯 DAILY CLAIM (FIX 🔥)
       // =========================
       if (interaction.isButton() && interaction.customId === "daily_claim") {
+
+        const userId = interaction.user.id;
+
+        // ❌ nie gotowe
+        if (!isDailyReady(userId)) {
+          return interaction.reply({
+            content: "❌ Daily not ready yet!",
+            flags: 64
+          });
+        }
+
+        // ✅ CLAIM
+        const reward = claimDaily(userId); // MUSISZ mieć to w profileSystem
+
         return interaction.reply({
-          content: "🎯 Użyj komendy **/daily** aby odebrać nagrodę!",
+          content:
+`🎁 **Daily Claimed!**
+
+🔥 Streak: ${reward.streak}
+✨ XP: +${reward.xp}
+
+Wracaj jutro 💪`,
           flags: 64
         });
       }
 
       // =========================
-      // 🎫 TICKETS (PEŁNA OBSŁUGA)
+      // 🎫 TICKETS
       // =========================
       if (
         interaction.isButton() ||
@@ -51,10 +78,7 @@ module.exports = {
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
 
-        if (!command) {
-          console.log(`❌ Nie znaleziono komendy: ${interaction.commandName}`);
-          return;
-        }
+        if (!command) return;
 
         return await command.execute(interaction, client);
       }
@@ -65,12 +89,12 @@ module.exports = {
       try {
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp({
-            content: "❌ Wystąpił błąd",
+            content: "❌ Error",
             flags: 64
           });
         } else {
           await interaction.reply({
-            content: "❌ Wystąpił błąd",
+            content: "❌ Error",
             flags: 64
           });
         }
