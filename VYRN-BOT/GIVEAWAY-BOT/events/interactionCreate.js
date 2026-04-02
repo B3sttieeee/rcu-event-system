@@ -3,8 +3,6 @@ const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 
 const {
-  loadProfile,
-  saveProfile,
   isDailyReady,
   claimDaily
 } = require("../utils/profileSystem");
@@ -39,7 +37,7 @@ module.exports = {
 
         const userId = interaction.user.id;
 
-        // ❌ nie gotowe
+        // ❌ NIE GOTOWE
         if (!isDailyReady(userId)) {
           return interaction.reply({
             content: "❌ Daily not ready yet!",
@@ -47,17 +45,24 @@ module.exports = {
           });
         }
 
-        // ✅ CLAIM
-        const reward = claimDaily(userId); // MUSISZ mieć to w profileSystem
+        // 🎁 CLAIM (XP + STREAK)
+        const reward = await claimDaily(userId, interaction.member);
+
+        if (!reward || reward.error) {
+          return interaction.reply({
+            content: "❌ Cannot claim daily yet!",
+            flags: 64
+          });
+        }
 
         return interaction.reply({
           content:
 `🎁 **Daily Claimed!**
 
-🔥 Streak: ${reward.streak}
-✨ XP: +${reward.xp}
+✨ XP gained: **${reward.xp}**
+🔥 Streak: **${reward.streak}**
 
-Wracaj jutro 💪`,
+💪 Come back tomorrow for more!`,
           flags: 64
         });
       }
@@ -89,12 +94,12 @@ Wracaj jutro 💪`,
       try {
         if (interaction.replied || interaction.deferred) {
           await interaction.followUp({
-            content: "❌ Error",
+            content: "❌ Error occurred",
             flags: 64
           });
         } else {
           await interaction.reply({
-            content: "❌ Error",
+            content: "❌ Error occurred",
             flags: 64
           });
         }
