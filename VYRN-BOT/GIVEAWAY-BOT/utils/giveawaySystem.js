@@ -62,7 +62,7 @@ function formatTime(ms) {
   return `${s}s`;
 }
 
-// ===== BONUS ENTRIES =====
+// ===== ENTRIES =====
 function getEntries(member) {
   let entries = 1;
 
@@ -86,12 +86,29 @@ function buildEmbed(data) {
     .setDescription(
 `🎁 **${data.prize}**
 
-👥 Participants: **${data.users.length}**
-🏆 Winners: **${data.winners}**
+━━━━━━━━━━━━━━━━━━
 
-⏳ Ends in: **${left > 0 ? formatTime(left) : "Ended"}**
+🏆 **Winners:** ${data.winners}
+👥 **Participants:** ${data.users.length}
 
-🔥 Bonus roles = more chances`
+⏳ **Ends in:** ${left > 0 ? `\`${formatTime(left)}\`` : "`Ended`"}
+
+━━━━━━━━━━━━━━━━━━
+
+🎟 **Entries System**
+• Default: **1 entry**
+• Roles give **bonus entries**
+
+<@&1476000458987278397> → +1  
+<@&1476000995501670534> → +3  
+<@&1476000459595448442> → +5  
+<@&1476000991206707221> → +7  
+<@&1476000991823532032> → +10  
+<@&1476000992351879229> → +15  
+
+━━━━━━━━━━━━━━━━━━
+
+👉 Click **Join** to participate`
     )
     .setFooter({ text: "VYRN • Giveaway System" })
     .setTimestamp()
@@ -111,7 +128,8 @@ async function createGiveaway(interaction, data) {
     channelId: interaction.channel.id,
     messageId: null,
     image: data.image || null,
-    ended: false
+    ended: false,
+    lastWinners: []
   };
 
   const row = new ActionRowBuilder().addComponents(
@@ -136,23 +154,23 @@ async function createGiveaway(interaction, data) {
   giveaways.set(msg.id, giveawayData);
   saveDB();
 
-  startTimer(msg, giveawayData);
+  startTimer(msg);
 }
 
 // ===== TIMER =====
-function startTimer(message, data) {
+function startTimer(message) {
   const interval = setInterval(async () => {
-    const d = giveaways.get(message.id);
-    if (!d) return clearInterval(interval);
+    const data = giveaways.get(message.id);
+    if (!data) return clearInterval(interval);
 
     try {
-      await message.edit({ embeds: [buildEmbed(d)] });
+      await message.edit({ embeds: [buildEmbed(data)] });
     } catch {}
 
-    if (Date.now() >= d.end && !d.ended) {
-      d.ended = true;
+    if (Date.now() >= data.end && !data.ended) {
+      data.ended = true;
       clearInterval(interval);
-      endGiveaway(message, d);
+      endGiveaway(message, data);
     }
 
   }, 5000);
@@ -188,6 +206,8 @@ async function endGiveaway(message, data) {
     winners.push(winner);
   }
 
+  data.lastWinners = winners;
+
   const embed = new EmbedBuilder()
     .setColor("#22c55e")
     .setTitle("🎉 Giveaway Ended")
@@ -203,7 +223,6 @@ ${winners.map(w => `<@${w}>`).join("\n")}
 
   await message.edit({ embeds: [embed], components: [] });
 
-  data.lastWinners = winners;
   saveDB();
 }
 
@@ -217,21 +236,25 @@ async function reroll(client, messageId) {
 
   let pool = [];
 
+  const channel = await client.channels.fetch(data.channelId).catch(() => null);
+  if (!channel) return "❌ Channel not found";
+
   for (const userId of data.users) {
-    const guild = client.guilds.cache.get(data.channelId ? null : null);
-    const member = await client.users.fetch(userId).catch(() => null);
+    const member = await channel.guild.members.fetch(userId).catch(() => null);
     if (!member) continue;
 
-    pool.push(userId);
+    const entries = getEntries(member);
+
+    for (let i = 0; i < entries; i++) {
+      pool.push(userId);
+    }
   }
+
+  if (!pool.length) return "❌ No valid participants";
 
   const winner = pool[Math.floor(Math.random() * pool.length)];
 
-  const channel = await client.channels.fetch(data.channelId).catch(() => null);
-
-  if (channel) {
-    await channel.send(`🎉 New winner: <@${winner}>`);
-  }
+  await channel.send(`🎉 **Reroll winner:** <@${winner}>`);
 
   return `<@${winner}>`;
 }
@@ -244,19 +267,30 @@ async function handleGiveaway(interaction) {
   const userId = interaction.user.id;
 
   if (interaction.customId === "gw_join") {
+
     if (!data.users.includes(userId)) {
       data.users.push(userId);
       saveDB();
     }
 
-    await interaction.reply({ content: "✅ Joined!", flags: 64 });
+    const member = await interaction.guild.members.fetch(userId);
+    const entries = getEntries(member);
+
+    await interaction.reply({
+      content: `✅ Joined!\n🎟 Your entries: **${entries}**`,
+      flags: 64
+    });
   }
 
   if (interaction.customId === "gw_leave") {
+
     data.users = data.users.filter(id => id !== userId);
     saveDB();
 
-    await interaction.reply({ content: "❌ Left giveaway", flags: 64 });
+    await interaction.reply({
+      content: "❌ Left giveaway",
+      flags: 64
+    });
   }
 
   interaction.message.edit({
