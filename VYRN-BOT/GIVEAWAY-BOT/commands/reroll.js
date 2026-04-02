@@ -4,30 +4,40 @@ const { reroll } = require("../utils/giveawaySystem");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("reroll")
-    .setDescription("Reroll giveaway winner")
+    .setDescription("🎉 Reroll giveaway winner")
+
     .addStringOption(opt =>
       opt.setName("messageid")
-        .setDescription("Giveaway message ID")
+        .setDescription("ID wiadomości giveaway")
         .setRequired(true)
     )
+
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
 
   async execute(interaction) {
     try {
+
       await interaction.deferReply({ ephemeral: true });
 
-      const id = interaction.options.getString("messageid");
+      const messageId = interaction.options.getString("messageid");
 
-      const result = await reroll(interaction.client, id);
-
-      if (!result || result.includes("❌")) {
+      // 🔥 ważne: sprawdzamy czy ID wygląda legitnie
+      if (!/^\d{17,20}$/.test(messageId)) {
         return interaction.editReply({
-          content: "❌ Nie udało się wylosować zwycięzcy"
+          content: "❌ Nieprawidłowe ID wiadomości"
+        });
+      }
+
+      const result = await reroll(interaction.client, messageId);
+
+      if (!result || result.startsWith("❌")) {
+        return interaction.editReply({
+          content: result || "❌ Nie udało się zrobić rerolla"
         });
       }
 
       await interaction.editReply({
-        content: `🎉 New winner: ${result}`
+        content: `🎉 **Nowy zwycięzca:** ${result}`
       });
 
     } catch (err) {
