@@ -41,13 +41,15 @@ function saveDB() {
   fs.writeFileSync(DB_PATH, JSON.stringify(obj, null, 2));
 }
 
-// ===== LOAD TO MAP =====
-function loadGiveawaysToMap() {
-  const db = loadDB();
+// 🔥 LOAD DO MAPY (NAJWAŻNIEJSZE)
+function loadGiveawaysToMemory() {
+  const data = loadDB();
 
-  for (const id in db) {
-    giveaways.set(id, db[id]);
+  for (const id in data) {
+    giveaways.set(id, data[id]);
   }
+
+  console.log(`✅ Loaded ${giveaways.size} giveaways from DB`);
 }
 
 // ===== TIME =====
@@ -86,7 +88,8 @@ function getEntries(member) {
 
 // ===== EMBED =====
 function buildEmbed(data) {
-  const left = data.end - Date.now();
+  const now = Date.now();
+  const left = data.end - now;
 
   return new EmbedBuilder()
     .setColor("#d4af37")
@@ -112,12 +115,12 @@ function buildEmbed(data) {
         value:
 `Default: \`1x\`
 
-<@&1476000458987278397> → ➜ **+1**
-<@&1476000995501670534> → ➜ **+3**
-<@&1476000459595448442> → ➜ **+5**
-<@&1476000991206707221> → ➜ **+7**
-<@&1476000991823532032> → ➜ **+10**
-<@&1476000992351879229> → ➜ **+15**`,
+<@&1476000458987278397> → +1  
+<@&1476000995501670534> → +3  
+<@&1476000459595448442> → +5  
+<@&1476000991206707221> → +7  
+<@&1476000991823532032> → +10  
+<@&1476000992351879229> → +15`,
         inline: false
       }
     )
@@ -186,6 +189,25 @@ function startTimer(message) {
   }, 5000);
 }
 
+// ===== RESUME (🔥 NAJWAŻNIEJSZE) =====
+async function resumeGiveaway(client, messageId) {
+
+  const data = giveaways.get(messageId);
+  if (!data) return null;
+
+  const channel = await client.channels.fetch(data.channelId).catch(() => null);
+  if (!channel) return null;
+
+  const message = await channel.messages.fetch(messageId).catch(() => null);
+  if (!message) return null;
+
+  if (!data.ended) {
+    startTimer(message);
+  }
+
+  return true;
+}
+
 // ===== END =====
 async function endGiveaway(message, data) {
 
@@ -216,88 +238,12 @@ async function endGiveaway(message, data) {
     winners.push(winner);
   }
 
-  const embed = new EmbedBuilder()
-    .setColor("#d4af37")
-    .setTitle("🎉 Giveaway Ended")
-    .setDescription(
-`🏆 Winners:
-${winners.map(w => `<@${w}>`).join("\n")}
+  await message.channel.send(
+    `🎉 Winners:\n${winners.map(w => `<@${w}>`).join("\n")}`
+  );
 
-👥 Participants: ${data.users.length}`
-    );
-
-  await message.edit({ embeds: [embed], components: [] });
-
+  giveaways.delete(message.id);
   saveDB();
-}
-
-// ===== RESUME =====
-async function resumeGiveaway(client, messageId) {
-
-  if (giveaways.size === 0) {
-    loadGiveawaysToMap();
-  }
-
-  const data = giveaways.get(messageId);
-  if (!data) return false;
-
-  try {
-    const channel = await client.channels.fetch(data.channelId);
-    if (!channel) return false;
-
-    const message = await channel.messages.fetch(messageId);
-    if (!message) return false;
-
-    if (data.ended) return false;
-
-    if (Date.now() >= data.end) {
-      data.ended = true;
-      await endGiveaway(message, data);
-    } else {
-      startTimer(message);
-    }
-
-    return true;
-
-  } catch (err) {
-    console.log("❌ RESUME ERROR:", err);
-    return false;
-  }
-}
-
-// ===== REROLL =====
-async function reroll(client, messageId) {
-
-  if (giveaways.size === 0) {
-    loadGiveawaysToMap();
-  }
-
-  const data = giveaways.get(messageId);
-  if (!data) return "❌ Giveaway not found";
-
-  const channel = await client.channels.fetch(data.channelId).catch(() => null);
-  if (!channel) return "❌ Channel not found";
-
-  let pool = [];
-
-  for (const userId of data.users) {
-    const member = await channel.guild.members.fetch(userId).catch(() => null);
-    if (!member) continue;
-
-    const entries = getEntries(member);
-
-    for (let i = 0; i < entries; i++) {
-      pool.push(userId);
-    }
-  }
-
-  if (!pool.length) return "❌ No participants";
-
-  const winner = pool[Math.floor(Math.random() * pool.length)];
-
-  await channel.send(`🎉 **Reroll Winner:** <@${winner}>`);
-
-  return `<@${winner}>`;
 }
 
 // ===== BUTTONS =====
@@ -308,23 +254,18 @@ async function handleGiveaway(interaction) {
   const userId = interaction.user.id;
 
   if (interaction.customId === "gw_join") {
-
     if (!data.users.includes(userId)) {
       data.users.push(userId);
       saveDB();
     }
 
-    const member = await interaction.guild.members.fetch(userId);
-    const entries = getEntries(member);
-
     await interaction.reply({
-      content: `🎟 Joined\n✨ Entries: **${entries}**`,
+      content: "🎟 Joined",
       flags: 64
     });
   }
 
   if (interaction.customId === "gw_leave") {
-
     data.users = data.users.filter(id => id !== userId);
     saveDB();
 
@@ -344,5 +285,5 @@ module.exports = {
   handleGiveaway,
   reroll,
   resumeGiveaway,
-  loadGiveawaysToMap
+  loadGiveawaysToMemory
 };
