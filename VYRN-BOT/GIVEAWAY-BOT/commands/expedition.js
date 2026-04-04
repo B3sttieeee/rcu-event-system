@@ -1,7 +1,7 @@
 // commands/expedition.js
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, EmbedBuilder } = require("discord.js");
 
-// Temporary in-memory storage for expeditions
+// Tymczasowa pamięć ekspedycji w RAM (nie zapisuje na dysku)
 const expeditions = new Map();
 
 function startExpedition(userId, minutes) {
@@ -22,10 +22,11 @@ async function handleExpeditionSelect(interaction) {
     embeds: []
   });
 
+  // DM notification po zakończeniu ekspedycji
   setTimeout(async () => {
     try {
       const user = await interaction.client.users.fetch(userId);
-      user.send(`✅ Your **${minutes}-minute expedition** is completed! 🐾`);
+      await user.send(`✅ Your **${minutes}-minute expedition** is completed! 🐾`);
     } catch (err) {
       console.error("Failed to send DM:", err);
     }
@@ -33,6 +34,7 @@ async function handleExpeditionSelect(interaction) {
 }
 
 async function sendExpeditionPanel(interaction) {
+  // Embed i select menu w kanale, w którym wywołano komendę
   const embed = new EmbedBuilder()
     .setTitle("🐾 Pet Adventures")
     .setDescription("Select the duration of your pet's expedition:")
