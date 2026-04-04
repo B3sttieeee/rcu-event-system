@@ -2,6 +2,7 @@ const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("dis
 const fs = require("fs");
 const DB_PATH = "./expeditionDB.json";
 
+// ===== DB =====
 function loadDB() {
   if (!fs.existsSync(DB_PATH)) fs.writeFileSync(DB_PATH, JSON.stringify({ users: {} }, null, 2));
   return JSON.parse(fs.readFileSync(DB_PATH));
@@ -16,16 +17,17 @@ async function sendExpeditionPanel(interaction) {
   const embed = new EmbedBuilder()
     .setColor("#00ff99")
     .setTitle("🚀 Ekspedycja dla Twojego zwierzaka")
-    .setDescription("Wybierz czas ekspedycji dla swojego zwierzaka. Po zakończeniu otrzymasz DM!");
+    .setDescription("Wybierz czas ekspedycji dla swojego zwierzaka. Po zakończeniu otrzymasz DM!")
+    .setImage("https://i.imgur.com/3tVZK6b.png"); // przykładowy obrazek
 
   const row = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("expedition_time_select")
       .setPlaceholder("Wybierz czas ekspedycji")
       .addOptions([
-        { label: "30 minut", value: "30" },
-        { label: "1 godzina", value: "60" },
-        { label: "4 godziny", value: "240" }
+        { label: "30 minut", value: "30", description: "Krótka ekspedycja", emoji: "⏱️" },
+        { label: "1 godzina", value: "60", description: "Średnia ekspedycja", emoji: "🕐" },
+        { label: "4 godziny", value: "240", description: "Długa ekspedycja", emoji: "🕓" }
       ])
   );
 
@@ -63,18 +65,19 @@ async function startExpeditionTimer(client) {
     for (const userId in db.users) {
       const data = db.users[userId];
       if (now >= data.endTime) {
-        const user = await client.users.fetch(userId).catch(()=>null);
+        const user = await client.users.fetch(userId).catch(() => null);
         if (user) {
-          user.send("✅ Twoja ekspedycja zakończona! Wejdź do gry, aby odebrać nagrodę i rozpocząć nową!").catch(()=>{});
+          user.send("✅ Twoja ekspedycja zakończona! Wejdź do gry, aby odebrać nagrodę i rozpocząć nową!").catch(() => {});
         }
         delete db.users[userId];
       }
     }
 
     saveDB(db);
-  }, 10000); // sprawdzanie co 10s
+  }, 10000);
 }
 
+// ===== EXPORTS =====
 module.exports = {
   sendExpeditionPanel,
   handleExpeditionSelect,
