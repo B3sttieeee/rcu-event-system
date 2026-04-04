@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } = require("discord.js");
 const fs = require("fs");
 const DB_PATH = "./expeditionDB.json";
 
@@ -11,36 +11,48 @@ function saveDB(data) {
   fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
-// ===== COMMAND =====
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("expedition")
-    .setDescription("Ustaw ekspedycję dla swojego zwierzaka w Roblox")
-    .addStringOption(option =>
-      option.setName("czas")
-        .setDescription("Wybierz czas ekspedycji")
-        .setRequired(true)
-        .addChoices(
-          { name: "30 minut", value: "30" },
-          { name: "1 godzina", value: "60" },
-          { name: "4 godziny", value: "240" }
-        )
-    ),
+// ===== PANEL =====
+async function sendExpeditionPanel(interaction) {
+  const embed = new EmbedBuilder()
+    .setColor("#00ff99")
+    .setTitle("🚀 Ekspedycja dla Twojego zwierzaka")
+    .setDescription("Wybierz czas ekspedycji dla swojego zwierzaka. Po zakończeniu otrzymasz DM!");
 
-  async execute(interaction) {
-    const czas = parseInt(interaction.options.getString("czas"));
-    const userId = interaction.user.id;
-    const db = loadDB();
+  const row = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("expedition_time_select")
+      .setPlaceholder("Wybierz czas ekspedycji")
+      .addOptions([
+        { label: "30 minut", value: "30" },
+        { label: "1 godzina", value: "60" },
+        { label: "4 godziny", value: "240" }
+      ])
+  );
 
-    const now = Date.now();
-    const endTime = now + czas * 60 * 1000;
+  await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+}
 
-    db.users[userId] = { endTime };
-    saveDB(db);
+// ===== HANDLE PICKER =====
+async function handleExpeditionSelect(interaction) {
+  if (!interaction.isStringSelectMenu()) return;
+  if (interaction.customId !== "expedition_time_select") return;
 
-    interaction.reply({ content: `⏳ Ekspedycja ustawiona na ${czas} minut! Powiadomienie przyjdzie na DM po zakończeniu.`, ephemeral: true });
-  }
-};
+  const czas = parseInt(interaction.values[0]);
+  const userId = interaction.user.id;
+  const db = loadDB();
+
+  const now = Date.now();
+  const endTime = now + czas * 60 * 1000;
+
+  db.users[userId] = { endTime };
+  saveDB(db);
+
+  await interaction.update({
+    content: `⏳ Ekspedycja ustawiona na ${czas} minut! Powiadomienie przyjdzie na DM po zakończeniu.`,
+    components: [],
+    embeds: []
+  });
+}
 
 // ===== TIMER SYSTEM =====
 async function startExpeditionTimer(client) {
@@ -60,7 +72,11 @@ async function startExpeditionTimer(client) {
     }
 
     saveDB(db);
-  }, 10 * 1000); // sprawdzanie co 10s
+  }, 10000); // sprawdzanie co 10s
 }
 
-module.exports.startExpeditionTimer = startExpeditionTimer;
+module.exports = {
+  sendExpeditionPanel,
+  handleExpeditionSelect,
+  startExpeditionTimer
+};
