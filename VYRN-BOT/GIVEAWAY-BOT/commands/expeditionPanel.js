@@ -1,6 +1,4 @@
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, EmbedBuilder } = require("discord.js");
-
-// ===== DB =====
 const fs = require("fs");
 const DB_PATH = "./expeditionDB.json";
 
@@ -19,7 +17,7 @@ async function sendExpeditionPanel(interaction) {
     .setTitle("🐾 Pet Adventures")
     .setDescription("Wybierz czas ekspedycji dla swojego zwierzaka:")
     .setColor("#ffcc00")
-    .setImage("https://i.imgur.com/6pvEODD.png"); // Twój obrazek z Imgur
+    .setImage("https://i.imgur.com/6pvEODD.png");
 
   const row = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
