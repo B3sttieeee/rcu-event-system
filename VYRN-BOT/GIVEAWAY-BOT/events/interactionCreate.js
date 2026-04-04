@@ -1,18 +1,11 @@
-const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
-const { handleGiveaway } = require("../utils/giveawaySystem");
-
-const {
-  isDailyReady,
-  claimDaily
-} = require("../utils/profileSystem");
+const { handleExpeditionSelect } = require("../utils/expeditionPanel"); // <- importujemy
 
 module.exports = {
   name: "interactionCreate",
 
   async execute(interaction, client) {
     try {
-
       // =========================
       // 🎁 GIVEAWAY
       // =========================
@@ -31,13 +24,18 @@ module.exports = {
       }
 
       // =========================
+      // 🗺️ EXPEDITION PANEL
+      // =========================
+      if (interaction.isStringSelectMenu() && interaction.customId === "expedition_time_select") {
+        return handleExpeditionSelect(interaction);
+      }
+
+      // =========================
       // 🎯 DAILY CLAIM (FIX 🔥)
       // =========================
       if (interaction.isButton() && interaction.customId === "daily_claim") {
-
         const userId = interaction.user.id;
 
-        // ❌ NIE GOTOWE
         if (!isDailyReady(userId)) {
           return interaction.reply({
             content: "❌ Daily not ready yet!",
@@ -45,7 +43,6 @@ module.exports = {
           });
         }
 
-        // 🎁 CLAIM (XP + STREAK)
         const reward = await claimDaily(userId, interaction.member);
 
         if (!reward || reward.error) {
@@ -70,10 +67,7 @@ module.exports = {
       // =========================
       // 🎫 TICKETS
       // =========================
-      if (
-        interaction.isButton() ||
-        interaction.isModalSubmit()
-      ) {
+      if (interaction.isButton() || interaction.isModalSubmit()) {
         return ticketSystem.handle(interaction, client);
       }
 
@@ -82,9 +76,7 @@ module.exports = {
       // =========================
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
-
         if (!command) return;
-
         return await command.execute(interaction, client);
       }
 
