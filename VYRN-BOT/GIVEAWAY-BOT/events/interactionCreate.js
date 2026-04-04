@@ -1,6 +1,8 @@
+// events/interactionCreate.js
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
+const { handleExpeditionSelect } = require("../commands/expedition"); // <- DODANE
 
 const {
   isDailyReady,
@@ -28,6 +30,13 @@ module.exports = {
         ["refresh", "roles", "dm", "role_menu", "dm_menu"].includes(interaction.customId)
       ) {
         return handleEventInteraction(interaction);
+      }
+
+      // =========================
+      // 🗺️ EXPEDITION PANEL (SELECT MENU)
+      // =========================
+      if (interaction.isStringSelectMenu() && interaction.customId === "expedition_time_select") {
+        return handleExpeditionSelect(interaction);
       }
 
       // =========================
