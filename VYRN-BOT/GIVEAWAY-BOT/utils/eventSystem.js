@@ -10,14 +10,18 @@ const fs = require("fs");
 
 // ===== CONFIG =====
 const CHANNEL_ID = "1484937784283369502";
+
+// ROLE
 const MERCHANT_ROLE = "1476000993660502139";
+const EGG_ROLE = "1489930030166573150";
 
 // ===== IMAGES =====
 const PANEL_IMAGE = "https://imgur.com/AybkuW5.png";
-const START_IMAGE = "https://imgur.com/7GBAq8Z.png";
+const EGG_IMAGE = "https://imgur.com/xppQUWX.png";
 
 // ===== GODZINY =====
-const HOURS = [2, 5, 8, 11, 14, 17, 20, 23];
+const MERCHANT_HOURS = [2, 5, 8, 11, 14, 17, 20, 23];
+const EGG_HOURS = [0, 3, 6, 9, 12, 15, 18, 21];
 
 // ===== DB =====
 const DB_PATH = "./eventDB.json";
@@ -41,23 +45,22 @@ function getNow() {
 }
 
 // ===== NEXT =====
-function getNextMerchantHour() {
+function getNext(HOURS) {
   const now = getNow();
   const h = now.getHours();
 
   for (let x of HOURS) {
     if (x > h) return x;
   }
-
   return HOURS[0];
 }
 
 // ===== COUNTDOWN =====
-function getCountdown() {
+function getCountdown(HOURS) {
   const now = getNow();
   let target = new Date(now);
 
-  const next = getNextMerchantHour();
+  const next = getNext(HOURS);
 
   if (next <= now.getHours()) {
     target.setDate(target.getDate() + 1);
@@ -79,13 +82,13 @@ function getCountdown() {
 function panelEmbed() {
   return new EmbedBuilder()
     .setColor("#f59e0b")
-    .setTitle("🍯 MERCHANT TRACKER")
+    .setTitle("🎉 EVENT TRACKER")
     .setDescription(
-`🏆 Next Merchant
-\`${getNextMerchantHour()}:00\`
+`🍯 Honey Merchant
+\`${getNext(MERCHANT_HOURS)}:00\` • ${getCountdown(MERCHANT_HOURS)}
 
-⏳ Countdown
-\`${getCountdown()}\``
+🐣 Egg Hunt
+\`${getNext(EGG_HOURS)}:00\` • ${getCountdown(EGG_HOURS)}`
     )
     .setImage(PANEL_IMAGE);
 }
@@ -119,10 +122,8 @@ function roleMenu() {
       .setCustomId("role_menu")
       .setPlaceholder("Wybierz rolę")
       .addOptions([
-        {
-          label: "Honey Merchant",
-          value: "merchant"
-        }
+        { label: "Honey Merchant", value: "merchant" },
+        { label: "Egg Hunt", value: "egg" }
       ])
   );
 }
@@ -133,15 +134,38 @@ function dmMenu() {
       .setCustomId("dm_menu")
       .setPlaceholder("Powiadomienia DM")
       .addOptions([
-        {
-          label: "Honey Merchant",
-          value: "merchant"
-        }
+        { label: "Honey Merchant", value: "merchant" },
+        { label: "Egg Hunt", value: "egg" }
       ])
   );
 }
 
-// ===== PANEL START =====
+// ===== SEND DM =====
+async function sendDM(client, type) {
+  const db = loadDB();
+
+  for (let userId in db.dm) {
+    const user = await client.users.fetch(userId).catch(()=>null);
+    if (!user) continue;
+
+    if (!db.dm[userId].includes(type)) continue;
+
+    if (type === "merchant") {
+      user.send("🍯 Honey Merchant starting now!").catch(()=>{});
+    }
+
+    if (type === "egg") {
+      user.send(
+`🐣 EGG HUNT START!
+
+🇵🇱 Zbieraj 5 jajek na eventowej mapie!
+🇬🇧 Collect 5 eggs on the event map!`
+      ).catch(()=>{});
+    }
+  }
+}
+
+// ===== START PANEL =====
 async function startPanel(client) {
   const ch = await client.channels.fetch(CHANNEL_ID);
 
@@ -165,54 +189,65 @@ async function startEventSystem(client) {
   let lastPing = null;
   let lastStart = null;
 
-  let prePingMsg = null;
-
   setInterval(async () => {
     const now = getNow();
     const h = now.getHours();
     const m = now.getMinutes();
 
-    // ===== PING 5 MIN BEFORE =====
-    for (let x of HOURS) {
-      if (h === x - 1 && m === 55) {
+    // ===== MERCHANT =====
+    for (let x of MERCHANT_HOURS) {
 
-        const key = `${x}-ping`;
-        if (lastPing === key) return;
-        lastPing = key;
-
-        prePingMsg = await ch.send({
-          content: `<@&${MERCHANT_ROLE}> ⏳ Merchant za 5 minut!`
-        }).catch(()=>{});
+      // 5 MIN BEFORE
+      if (h === x - 1 && m === 55 && lastPing !== `m-${x}`) {
+        lastPing = `m-${x}`;
+        ch.send(`<@&${MERCHANT_ROLE}> ⏳ Merchant in 5 minutes!`);
       }
-    }
 
-    // ===== START =====
-    for (let x of HOURS) {
-      if (h === x && m === 0) {
+      // START
+      if (h === x && m === 0 && lastStart !== `m-${x}`) {
+        lastStart = `m-${x}`;
 
-        const key = `${x}-start`;
-        if (lastStart === key) return;
-        lastStart = key;
-
-        if (prePingMsg) {
-          prePingMsg.delete().catch(()=>{});
-          prePingMsg = null;
-        }
-
-        const msg = await ch.send({
+        ch.send({
           content: `<@&${MERCHANT_ROLE}>`,
           embeds: [
             new EmbedBuilder()
               .setColor("#f59e0b")
               .setTitle("🍯 HONEY MERCHANT START!")
-              .setDescription("💡 Przygotuj walutę!")
-              .setImage(START_IMAGE)
           ]
-        }).catch(()=>{});
+        });
 
-        setTimeout(() => {
-          msg?.delete().catch(()=>{});
-        }, 15 * 60 * 1000);
+        sendDM(client, "merchant");
+      }
+    }
+
+    // ===== EGG HUNT =====
+    for (let x of EGG_HOURS) {
+
+      // 5 MIN BEFORE
+      if (h === x - 1 && m === 55 && lastPing !== `e-${x}`) {
+        lastPing = `e-${x}`;
+        ch.send(`<@&${EGG_ROLE}> ⏳ Egg Hunt in 5 minutes!`);
+      }
+
+      // START
+      if (h === x && m === 0 && lastStart !== `e-${x}`) {
+        lastStart = `e-${x}`;
+
+        ch.send({
+          content: `<@&${EGG_ROLE}>`,
+          embeds: [
+            new EmbedBuilder()
+              .setColor("#ff69b4")
+              .setTitle("🐣 EGG HUNT START!")
+              .setDescription(
+`🇵🇱 Zbieraj 5 jajek na eventowej mapie!
+🇬🇧 Collect 5 eggs on the event map!`
+              )
+              .setImage(EGG_IMAGE)
+          ]
+        });
+
+        sendDM(client, "egg");
       }
     }
 
@@ -249,12 +284,17 @@ async function handleEventInteraction(interaction) {
     const member = await interaction.guild.members.fetch(interaction.user.id);
 
     await member.roles.remove(MERCHANT_ROLE).catch(()=>{});
+    await member.roles.remove(EGG_ROLE).catch(()=>{});
 
     if (interaction.values.includes("merchant")) {
-      await member.roles.add(MERCHANT_ROLE).catch(()=>{});
+      await member.roles.add(MERCHANT_ROLE);
     }
 
-    return interaction.reply({ content: "✅ Rola ustawiona", ephemeral: true });
+    if (interaction.values.includes("egg")) {
+      await member.roles.add(EGG_ROLE);
+    }
+
+    return interaction.reply({ content: "✅ Role ustawione", ephemeral: true });
   }
 
   if (interaction.isStringSelectMenu() && interaction.customId === "dm_menu") {
