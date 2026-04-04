@@ -1,6 +1,7 @@
+// commands/expedition.js
 const { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, EmbedBuilder } = require("discord.js");
 
-// Pamięć tymczasowa ekspedycji
+// Temporary in-memory storage for expeditions
 const expeditions = new Map();
 
 function startExpedition(userId, minutes) {
@@ -16,7 +17,7 @@ async function handleExpeditionSelect(interaction) {
   startExpedition(userId, minutes);
 
   await interaction.update({
-    content: `⏳ Ekspedycja ustawiona na ${minutes} minut! Powiadomienie przyjdzie na DM po zakończeniu.`,
+    content: `⏳ Expedition set for **${minutes} minutes**! You will get a DM when it's finished.`,
     components: [],
     embeds: []
   });
@@ -24,9 +25,9 @@ async function handleExpeditionSelect(interaction) {
   setTimeout(async () => {
     try {
       const user = await interaction.client.users.fetch(userId);
-      user.send(`✅ Twoja ekspedycja ${minutes} minut zakończona! 🐾`);
+      user.send(`✅ Your **${minutes}-minute expedition** is completed! 🐾`);
     } catch (err) {
-      console.error("Nie udało się wysłać DM:", err);
+      console.error("Failed to send DM:", err);
     }
   }, minutes * 60 * 1000);
 }
@@ -34,16 +35,16 @@ async function handleExpeditionSelect(interaction) {
 async function sendExpeditionPanel(interaction) {
   const embed = new EmbedBuilder()
     .setTitle("🐾 Pet Adventures")
-    .setDescription("Wybierz czas ekspedycji dla swojego zwierzaka:")
+    .setDescription("Select the duration of your pet's expedition:")
     .setColor("#ffcc00")
     .setImage("https://i.imgur.com/6pvEODD.png");
 
   const row = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("expedition_time_select")
-      .setPlaceholder("Wybierz czas ekspedycji")
+      .setPlaceholder("Choose expedition duration")
       .addOptions([
-        { label: "15 Min", value: "15" },
+        { label: "15 Minutes", value: "15" },
         { label: "1 Hour", value: "60" },
         { label: "4 Hours", value: "240" },
         { label: "12 Hours", value: "720" }
@@ -56,7 +57,7 @@ async function sendExpeditionPanel(interaction) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("expedition")
-    .setDescription("Ustaw ekspedycję dla swojego zwierzaka"),
+    .setDescription("Set an expedition for your pet"),
 
   async execute(interaction) {
     await sendExpeditionPanel(interaction);
