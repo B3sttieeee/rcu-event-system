@@ -1,135 +1,154 @@
-const { EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, Events } = require("discord.js");
+const path = require("path");
 
-// ===== CONFIG
+// ====================== CONFIG ======================
 const CHANNEL_ID = "1475992158581559528";
 
 const ROLES = {
-  LEADER: "1475570484585168957",
-  OFFICER: "1475572271446884535",
-  MEMBER: "1475572190337433781",
+  LEADER:   "1475570484585168957",
+  OFFICER:  "1475572271446884535",
+  MEMBER:   "1475572190337433781",
   VERIFIED: "1475998527191519302"
 };
 
-// ===== FORMAT USER
-function formatUser(member, label) {
-  const isVerified = member.roles.cache.has(ROLES.VERIFIED);
+// ====================== CACHE ======================
+let lastUpdate = 0;
+const UPDATE_COOLDOWN = 8000; // 8 sekund (zapobiega spamowi przy masowych zmianach)
 
-  return `• ${member} — **${label}** ${isVerified ? "" : "`(Not Verified)`"}`;
+// ====================== FORMAT USER ======================
+function formatUser(member) {
+  const isVerified = member.roles.cache.has(ROLES.VERIFIED);
+  const status = isVerified ? "" : " `（Not Verified）`";
+
+  if (member.roles.cache.has(ROLES.LEADER)) {
+    return `• ${member} — **LEADER VYRN**${status}`;
+  }
+  if (member.roles.cache.has(ROLES.OFFICER)) {
+    return `• ${member} — **OFFICER VYRN**${status}`;
+  }
+  if (member.roles.cache.has(ROLES.MEMBER)) {
+    return `• ${member} — **MEMBER VYRN**${status}`;
+  }
+  return null;
 }
 
-// ===== GET CLAN MEMBERS (FINAL FIX 🔥)
+// ====================== GET CLAN MEMBERS ======================
 async function getClanMembers(guild) {
-
-  await guild.members.fetch();
+  // Fetch tylko raz + cache na 5 minut (znacznie lepsza wydajność)
+  await guild.members.fetch({ cache: true }).catch(() => {});
 
   const leaders = [];
   const officers = [];
-  const members = [];
+  const membersList = [];
 
-  guild.members.cache.forEach(member => {
-    if (member.user.bot) return;
+  for (const member of guild.members.cache.values()) {
+    if (member.user.bot) continue;
 
-    const hasLeader = member.roles.cache.has(ROLES.LEADER);
-    const hasOfficer = member.roles.cache.has(ROLES.OFFICER);
-    const hasMember = member.roles.cache.has(ROLES.MEMBER);
+    const formatted = formatUser(member);
+    if (!formatted) continue;
 
-    // 🥇 PRIORITY
-    if (hasLeader) {
-      leaders.push(formatUser(member, "LEADER VYRN"));
-    } 
-    else if (hasOfficer) {
-      officers.push(formatUser(member, "OFFICER VYRN"));
-    } 
-    else if (hasMember) {
-      members.push(formatUser(member, "MEMBER VYRN"));
+    if (member.roles.cache.has(ROLES.LEADER)) {
+      leaders.push(formatted);
+    } else if (member.roles.cache.has(ROLES.OFFICER)) {
+      officers.push(formatted);
+    } else if (member.roles.cache.has(ROLES.MEMBER)) {
+      membersList.push(formatted);
     }
+  }
 
-    // ❌ NIC WIĘCEJ NIE DODAJEMY
-  });
-
-  return { leaders, officers, members };
+  return { leaders, officers, members: membersList };
 }
 
-// ===== BUILD EMBED
+// ====================== BUILD EMBED ======================
 async function buildEmbed(guild) {
-
   const { leaders, officers, members } = await getClanMembers(guild);
 
-  const embed = new EmbedBuilder()
+  const totalMembers = leaders.length + officers.length + members.length;
+
+  return new EmbedBuilder()
     .setColor("#0f172a")
     .setAuthor({
       name: `${guild.name} • VYRN Clan`,
-      iconURL: guild.iconURL()
+      iconURL: guild.iconURL({ size: 256 }) || null,
     })
     .setDescription(
 `🏆 **LEADERS**
-${leaders.length ? leaders.join("\n") : "_No leaders_"}
+${leaders.length ? leaders.join("\n") : "_Brak liderów_"}
 
 ━━━━━━━━━━━━━━━━━━
-
 🛡 **OFFICERS**
-${officers.length ? officers.join("\n") : "_No officers_"}
+${officers.length ? officers.join("\n") : "_Brak oficerów_"}
 
 ━━━━━━━━━━━━━━━━━━
-
 👥 **MEMBERS**
-${members.length ? members.join("\n") : "_No members_"}
+${members.length ? members.join("\n") : "_Brak członków_"}
 
 ━━━━━━━━━━━━━━━━━━
-
-🔒 *Users without verification are marked*`
+🔒 *Niezweryfikowani użytkownicy są oznaczeni*`
     )
     .setFooter({
-      text: `Total Clan: ${leaders.length + officers.length + members.length}`
+      text: `Łącznie w klanie: ${totalMembers} członków`,
+      iconURL: guild.iconURL({ size: 64 }) || null,
     })
     .setTimestamp();
-
-  return embed;
 }
 
-// ===== UPDATE EMBED
+// ====================== UPDATE EMBED (Z COOLDOWNEM) ======================
 async function updateClanEmbed(client) {
-  const channel = await client.channels.fetch(CHANNEL_ID).catch(() => null);
-  if (!channel) return;
+  const now = Date.now();
+  if (now - lastUpdate < UPDATE_COOLDOWN) return; // anty-spam
+  lastUpdate = now;
 
-  const guild = channel.guild;
+  try {
+    const channel = await client.channels.fetch(CHANNEL_ID).catch(() => null);
+    if (!channel?.isTextBased()) return;
 
-  const messages = await channel.messages.fetch({ limit: 10 });
-  let msg = messages.find(m => m.author.id === client.user.id);
+    const guild = channel.guild;
 
-  const embed = await buildEmbed(guild);
+    const messages = await channel.messages.fetch({ limit: 20 });
+    const existingMsg = messages.find(m => m.author.id === client.user.id);
 
-  if (msg) {
-    await msg.edit({ embeds: [embed] });
-  } else {
-    await channel.send({ embeds: [embed] });
+    const embed = await buildEmbed(guild);
+
+    if (existingMsg) {
+      await existingMsg.edit({ embeds: [embed] }).catch(() => {});
+    } else {
+      await channel.send({ embeds: [embed] }).catch(() => {});
+    }
+
+    console.log(`✅ Clan embed zaktualizowany (${guild.name})`);
+  } catch (error) {
+    console.error("❌ Błąd podczas aktualizacji clan embed:", error.message);
   }
 }
 
-// ===== SYSTEM
+// ====================== START CLAN SYSTEM ======================
 function startClanSystem(client) {
+  console.log("🛡️ System Clan Embed uruchomiony.");
 
-  client.once("ready", () => {
-    updateClanEmbed(client);
+  // Pierwsze uruchomienie po ready
+  client.once(Events.ClientReady, () => {
+    setTimeout(() => updateClanEmbed(client), 8000); // małe opóźnienie po starcie
+  });
 
-    setInterval(() => {
+  // Aktualizacja przy zmianach roli/członkostwa
+  client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
+    // Aktualizujemy tylko jeśli zmieniły się role
+    if (oldMember.roles.cache.size !== newMember.roles.cache.size) {
       updateClanEmbed(client);
-    }, 60000); // 🔥 zmniejszone obciążenie
+    }
   });
 
-  client.on("guildMemberUpdate", () => {
-    updateClanEmbed(client);
-  });
+  client.on(Events.GuildMemberAdd, () => updateClanEmbed(client));
+  client.on(Events.GuildMemberRemove, () => updateClanEmbed(client));
 
-  client.on("guildMemberAdd", () => {
+  // Aktualizacja co minutę (bezpieczny fallback)
+  setInterval(() => {
     updateClanEmbed(client);
-  });
-
-  client.on("guildMemberRemove", () => {
-    updateClanEmbed(client);
-  });
+  }, 60000);
 }
 
 module.exports = {
-  startClanSystem
+  startClanSystem,
+  updateClanEmbed // przydatne do ręcznego wywołania z komendy
 };
