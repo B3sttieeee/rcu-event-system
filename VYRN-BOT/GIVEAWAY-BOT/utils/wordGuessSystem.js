@@ -1,42 +1,20 @@
 const { EmbedBuilder } = require("discord.js");
-const fs = require("fs");
-const path = require("path");
-
-const DATA_DIR = "/data";
-const WORDS_PATH = path.join(DATA_DIR, "guessWords.json");
+const { tryGiveRandomBoost } = require("./boostSystem");
 
 let currentGame = null;
 
-// ====================== INIT - POLSKA LISTA SŁÓW ======================
-function loadWords() {
-  if (!fs.existsSync(WORDS_PATH)) {
-    const defaultWords = [
-      "zamek", "smok", "rycerz", "miecz", "tarcza", "ogień", "las", "góra",
-      "rzeka", "wioska", "król", "królowa", "książę", "wojownik", "bitwa",
-      "zwycięstwo", "legenda", "hero", "przygoda", "skarbiec", "złoto",
-      "magia", "czarodziej", "potwór", "loch", "klucz", "brama", "most",
-      "wieża", "forteca", "armia", "kon", "łuk", "strzała", "tarcza",
-      "ogień", "lód", "burza", "wiatr", "deszcz", "słońce", "księżyc"
-    ];
-    fs.writeFileSync(WORDS_PATH, JSON.stringify(defaultWords, null, 2));
-    console.log("[WORDGUESS] Utworzono domyślną listę polskich słów");
-    return defaultWords;
-  }
+// ====================== POLSKA LISTA SŁÓW ======================
+const WORDS = [
+  "zamek", "smok", "rycerz", "miecz", "tarcza", "ogień", "las", "góra", "rzeka",
+  "wioska", "król", "królowa", "książę", "wojownik", "bitwa", "zwycięstwo",
+  "legenda", "przygoda", "skarbiec", "złoto", "magia", "czarodziej", "potwór",
+  "loch", "klucz", "brama", "most", "wieża", "forteca", "armia", "koń", "łuk",
+  "strzała", "burza", "wiatr", "deszcz", "słońce", "księżyc", "heros", "epika"
+];
 
-  try {
-    const data = fs.readFileSync(WORDS_PATH, "utf-8");
-    return JSON.parse(data);
-  } catch (err) {
-    console.error("[WORDGUESS] Błąd odczytu guessWords.json");
-    return ["zamek", "smok", "rycerz"];
-  }
-}
-
-const wordList = loadWords();
-
-// ====================== LOSOWANIE ======================
-function generateRandomWord() {
-  const word = wordList[Math.floor(Math.random() * wordList.length)];
+// ====================== GENEROWANIE SŁOWA ======================
+function getRandomWord() {
+  const word = WORDS[Math.floor(Math.random() * WORDS.length)];
   const revealed = "⬛".repeat(word.length);
   return { word, revealed };
 }
@@ -44,10 +22,9 @@ function generateRandomWord() {
 // ====================== START GAME ======================
 async function tryStartRandomGame(channel) {
   if (currentGame) return false;
-
   if (Math.random() > 0.065) return false;   // ~6.5% szansy
 
-  const { word, revealed } = generateRandomWord();
+  const { word, revealed } = getRandomWord();
 
   currentGame = {
     channelId: channel.id,
@@ -58,14 +35,14 @@ async function tryStartRandomGame(channel) {
 
   const embed = new EmbedBuilder()
     .setColor("#ffaa00")
-    .setTitle("🎲 Zgadywanie Polskiego Słowa!")
+    .setTitle("🎲 Zgadywanie Słowa!")
     .setDescription(
 `**Słowo do zgadnięcia:**\n` +
 `> \`${revealed}\`\n\n` +
 `Wpisz poprawne słowo w czat!\n` +
 `Czas: **30 sekund**`
     )
-    .setFooter({ text: "Pierwszy kto zgadnie dostaje bonus XP!" });
+    .setFooter({ text: "Pierwszy kto zgadnie dostaje losową nagrodę!" });
 
   await channel.send({ embeds: [embed] }).catch(() => {});
 
@@ -87,27 +64,63 @@ async function checkAnswer(message) {
   if (guess === currentGame.word) {
     clearInterval(currentGame.timeout);
 
-    const bonusXP = Math.floor(180 + Math.random() * 150); // 180-329 XP
+    // LOSOWA NAGRODA
+    const isBoost = Math.random() < 0.45; // 45% szansy na boost, 55% na zwykły XP
 
-    const embed = new EmbedBuilder()
-      .setColor("#00ff88")
-      .setTitle("✅ Poprawna odpowiedź!")
-      .setDescription(
-`${message.author} zgadł słowo **${currentGame.word}**!\n` +
-`Otrzymujesz **${bonusXP} XP**! 🎉`
-      );
-
-    await message.channel.send({ embeds: [embed] }).catch(() => {});
-
-    try {
-      const { addXP } = require("./levelSystem");
-      await addXP(message.member, bonusXP);
-    } catch (e) {}
+    if (isBoost) {
+      // Nagroda: Boost XP
+      await giveBoostReward(message);
+    } else {
+      // Nagroda: Zwykły XP
+      await giveXPReward(message);
+    }
 
     currentGame = null;
     return true;
   }
   return false;
+}
+
+// ====================== NAGRODA - BOOST ======================
+async function giveBoostReward(message) {
+  const { getCurrentBoost } = require("./boostSystem");
+
+  // Dajemy losowy boost
+  const success = await tryGiveRandomBoost(message.member);
+
+  if (success) {
+    const embed = new EmbedBuilder()
+      .setColor("#00ff88")
+      .setTitle("🎉 WYGRAŁEŚ BOOST!")
+      .setDescription(`${message.author} zgadł słowo i otrzymał **losowy czasowy boost XP**!`);
+
+    await message.channel.send({ embeds: [embed] }).catch(() => {});
+  } else {
+    // fallback jeśli boost nie zadziałał
+    await giveXPReward(message);
+  }
+}
+
+// ====================== NAGRODA - ZWYKŁY XP ======================
+async function giveXPReward(message) {
+  const bonusXP = Math.floor(200 + Math.random() * 150); // 200 - 349 XP
+
+  const embed = new EmbedBuilder()
+    .setColor("#00ff88")
+    .setTitle("✅ Poprawna odpowiedź!")
+    .setDescription(
+`${message.author} zgadł słowo!\n` +
+`Otrzymujesz **${bonusXP} XP**! 🎉`
+    );
+
+  await message.channel.send({ embeds: [embed] }).catch(() => {});
+
+  try {
+    const { addXP } = require("./levelSystem");
+    await addXP(message.member, bonusXP);
+  } catch (e) {
+    console.error("Błąd dodawania XP:", e);
+  }
 }
 
 // ====================== END GAME ======================
