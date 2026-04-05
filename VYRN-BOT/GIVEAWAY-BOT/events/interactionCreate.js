@@ -1,8 +1,7 @@
-// events/interactionCreate.js
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
-const { handleExpeditionSelect } = require("../commands/expedition"); // <- DODANE
+const { handleExpeditionSelect } = require("../commands/expedition");
 
 const {
   isDailyReady,
@@ -11,10 +10,8 @@ const {
 
 module.exports = {
   name: "interactionCreate",
-
   async execute(interaction, client) {
     try {
-
       // =========================
       // 🎁 GIVEAWAY
       // =========================
@@ -33,56 +30,23 @@ module.exports = {
       }
 
       // =========================
-      // 🗺️ EXPEDITION PANEL (SELECT MENU)
+      // 🗺️ EXPEDITION SELECT MENU
       // =========================
       if (interaction.isStringSelectMenu() && interaction.customId === "expedition_time_select") {
         return handleExpeditionSelect(interaction);
       }
 
       // =========================
-      // 🎯 DAILY CLAIM (FIX 🔥)
+      // 🎯 DAILY CLAIM BUTTON
       // =========================
       if (interaction.isButton() && interaction.customId === "daily_claim") {
-
-        const userId = interaction.user.id;
-
-        // ❌ NIE GOTOWE
-        if (!isDailyReady(userId)) {
-          return interaction.reply({
-            content: "❌ Daily not ready yet!",
-            flags: 64
-          });
-        }
-
-        // 🎁 CLAIM (XP + STREAK)
-        const reward = await claimDaily(userId, interaction.member);
-
-        if (!reward || reward.error) {
-          return interaction.reply({
-            content: "❌ Cannot claim daily yet!",
-            flags: 64
-          });
-        }
-
-        return interaction.reply({
-          content:
-`🎁 **Daily Claimed!**
-
-✨ XP gained: **${reward.xp}**
-🔥 Streak: **${reward.streak}**
-
-💪 Come back tomorrow for more!`,
-          flags: 64
-        });
+        return await handleDailyClaim(interaction);
       }
 
       // =========================
-      // 🎫 TICKETS
+      // 🎫 TICKET SYSTEM
       // =========================
-      if (
-        interaction.isButton() ||
-        interaction.isModalSubmit()
-      ) {
+      if (interaction.isButton() || interaction.isModalSubmit()) {
         return ticketSystem.handle(interaction, client);
       }
 
@@ -91,7 +55,6 @@ module.exports = {
       // =========================
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
-
         if (!command) return;
 
         return await command.execute(interaction, client);
@@ -101,18 +64,64 @@ module.exports = {
       console.error("❌ INTERACTION ERROR:", err);
 
       try {
+        const errorMsg = { content: "❌ Wystąpił błąd podczas przetwarzania interakcji.", flags: 64 };
+
         if (interaction.replied || interaction.deferred) {
-          await interaction.followUp({
-            content: "❌ Error occurred",
-            flags: 64
-          });
+          await interaction.followUp(errorMsg);
         } else {
-          await interaction.reply({
-            content: "❌ Error occurred",
-            flags: 64
-          });
+          await interaction.reply(errorMsg);
         }
-      } catch {}
+      } catch (e) {}
     }
   }
 };
+
+// ====================== DAILY CLAIM HANDLER ======================
+async function handleDailyClaim(interaction) {
+  await interaction.deferUpdate(); // ważne przy przycisku
+
+  const userId = interaction.user.id;
+  const member = interaction.member;
+
+  // Sprawdź czy daily jest gotowy
+  if (!isDailyReady(userId)) {
+    return interaction.editReply({
+      content: "❌ Twój daily nie jest jeszcze gotowy!",
+      components: [],
+      embeds: []
+    });
+  }
+
+  // Claim daily
+  const result = await claimDaily(userId, member);
+
+  if (!result.success) {
+    let msg = "❌ Nie udało się odebrać daily.";
+
+    if (result.error === "cooldown") {
+      msg = "❌ Daily możesz odebrać tylko raz na 24 godziny!";
+    }
+
+    return interaction.editReply({
+      content: msg,
+      components: [],
+      embeds: []
+    });
+  }
+
+  // Sukces
+  const embed = new EmbedBuilder()
+    .setColor("#00ff88")
+    .setTitle("🎁 Daily Odebrany!")
+    .setDescription(
+`**Zdobyłeś:** \`${result.xp} XP\`\n` +
+`**Nowy streak:** 🔥 \`${result.streak}\`\n\n` +
+`Wracaj jutro po kolejny daily!`
+    )
+    .setTimestamp();
+
+  await interaction.editReply({
+    embeds: [embed],
+    components: []
+  });
+}
