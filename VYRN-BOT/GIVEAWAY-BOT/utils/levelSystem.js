@@ -2,15 +2,15 @@ const fs = require("fs");
 const path = require("path");
 const { ChannelType } = require("discord.js");
 
-// ====================== PATHS (Railway Volume) ======================
-const DATA_DIR = "/app/data";
-const DB_PATH = "/app/data/levels.json";
-const CONFIG_PATH = "/app/data/levelConfig.json";
+// ====================== TWOJA ORYGINALNA ŚCIEŻKA ======================
+const DATA_DIR = "/data";
+const DB_PATH = "/data/levels.json";
+const CONFIG_PATH = "/data/levelConfig.json";
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  console.log("📁 Utworzono folder /app/data");
+  console.log("📁 Utworzono folder /data");
 }
 
 // ====================== CACHE ======================
@@ -26,10 +26,8 @@ const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 // ====================== DATABASE ======================
 function loadDB() {
-  console.log(`[LEVEL-DB] Ładowanie: ${DB_PATH}`);
-
   if (!fs.existsSync(DB_PATH)) {
-    console.log("[LEVEL-DB] Plik nie istnieje → tworzę nowy");
+    console.log("[LEVEL] Plik levels.json nie istnieje → tworzę nowy");
     const initialData = { xp: {} };
     fs.writeFileSync(DB_PATH, JSON.stringify(initialData, null, 2));
     dbCache = initialData;
@@ -38,11 +36,10 @@ function loadDB() {
 
   if (!dbCache) {
     try {
-      const data = fs.readFileSync(DB_PATH, "utf-8");
-      dbCache = JSON.parse(data);
-      console.log(`[LEVEL-DB] Załadowano ${Object.keys(dbCache.xp || {}).length} użytkowników`);
+      dbCache = JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+      console.log(`[LEVEL] Załadowano ${Object.keys(dbCache.xp || {}).length} użytkowników z levels.json`);
     } catch (err) {
-      console.error("[LEVEL-DB] Błąd odczytu pliku, tworzę nowy:", err.message);
+      console.error("❌ Błąd odczytu levels.json — tworzę nowy");
       dbCache = { xp: {} };
       fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
     }
@@ -55,7 +52,7 @@ function saveDB() {
     try {
       fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
     } catch (err) {
-      console.error("[LEVEL-DB] Błąd zapisu:", err.message);
+      console.error("❌ Błąd zapisu levels.json:", err.message);
     }
   }
 }
@@ -73,7 +70,6 @@ function loadConfig() {
     };
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
     configCache = defaultConfig;
-    console.log("[LEVEL-CONFIG] Utworzono domyślną konfigurację");
     return configCache;
   }
 
@@ -81,26 +77,20 @@ function loadConfig() {
     try {
       configCache = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
     } catch (err) {
-      console.error("[LEVEL-CONFIG] Błąd odczytu, używam domyślnych wartości");
-      configCache = { messageXP: 3, voiceXP: 5, lengthBonus: 0.3, lengthThreshold: 30, globalMultiplier: 1, boostRole: "1476000398107217980" };
+      console.error("❌ Błąd odczytu levelConfig.json");
+      configCache = { messageXP: 3, voiceXP: 5, lengthBonus: 0.3, lengthThreshold: 30, globalMultiplier: 1 };
     }
   }
   return configCache;
 }
 
 function saveConfig() {
-  if (configCache) {
-    try {
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
-    } catch (err) {
-      console.error("[LEVEL-CONFIG] Błąd zapisu konfiguracji:", err.message);
-    }
-  }
+  if (configCache) fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
 }
 
-// ====================== LEVEL ROLES & BOOST ======================
+// ====================== LEVEL ROLES ======================
 const LEVEL_ROLES = {
-  5:  "1476000458987278397",
+  5: "1476000458987278397",
   15: "1476000995501670534",
   30: "1476000459595448442",
   45: "1476000991206707221",
@@ -111,7 +101,7 @@ const LEVEL_ROLES = {
 const BOOST_ROLE = "1476000398107217980";
 const BOOST_MULTIPLIER = 1.75;
 
-// ====================== XP FORMULA ======================
+// ====================== XP ======================
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
@@ -123,7 +113,6 @@ function getMultiplier(member) {
   return multi;
 }
 
-// ====================== ADD XP ======================
 async function addXP(member, baseAmount, messageLength = 0) {
   if (!member || member.user.bot) return { leveledUp: false, gained: 0 };
 
@@ -156,9 +145,7 @@ async function addXP(member, baseAmount, messageLength = 0) {
     leveledUp = true;
   }
 
-  if (leveledUp) {
-    await checkRoles(member, db.xp[member.id].level);
-  }
+  if (leveledUp) await checkRoles(member, db.xp[member.id].level);
 
   saveDB();
 
@@ -171,15 +158,12 @@ async function addXP(member, baseAmount, messageLength = 0) {
   };
 }
 
-// ====================== ROLE CHECK ======================
 async function checkRoles(member, currentLevel) {
   for (const [levelStr, roleId] of Object.entries(LEVEL_ROLES)) {
-    const required = Number(levelStr);
-    if (currentLevel >= required && !member.roles.cache.has(roleId)) {
+    const requiredLevel = Number(levelStr);
+    if (currentLevel >= requiredLevel && !member.roles.cache.has(roleId)) {
       await wait(600);
-      await member.roles.add(roleId).catch(err =>
-        console.error(`❌ Rola level ${required} dla ${member.user.tag}:`, err.message)
-      );
+      await member.roles.add(roleId).catch(err => console.error(`❌ Rola level ${requiredLevel}:`, err.message));
     }
   }
 }
@@ -188,7 +172,7 @@ async function checkRoles(member, currentLevel) {
 function startVoiceXP(client) {
   if (voiceSystemRunning) return;
   voiceSystemRunning = true;
-  console.log("🎤 System Voice XP uruchomiony");
+  console.log("🎤 System Voice XP uruchomiony.");
 
   const { addVoiceTime } = require("./profileSystem");
 
@@ -199,17 +183,16 @@ function startVoiceXP(client) {
     for (const guild of client.guilds.cache.values()) {
       for (const channel of guild.channels.cache.values()) {
         if (channel.type !== ChannelType.GuildVoice) continue;
-
         for (const [memberId, member] of channel.members) {
           if (member.user.bot || member.voice.selfMute || member.voice.selfDeaf || processed.has(memberId)) continue;
-
           processed.add(memberId);
+
           try {
             await addXP(member, cfg.voiceXP);
             addVoiceTime(memberId, 60);
             await wait(250);
           } catch (err) {
-            console.error(`❌ Voice XP błąd dla ${member.user.tag}:`, err);
+            console.error(`❌ Voice XP błąd:`, err);
           }
         }
       }
@@ -217,7 +200,7 @@ function startVoiceXP(client) {
   }, 60000);
 }
 
-// ====================== CONFIG SETTERS ======================
+// ====================== SETTERS ======================
 function setMessageXP(val) { const cfg = loadConfig(); cfg.messageXP = Number(val); saveConfig(); }
 function setVoiceXP(val) { const cfg = loadConfig(); cfg.voiceXP = Number(val); saveConfig(); }
 function setLengthBonus(val) { const cfg = loadConfig(); cfg.lengthBonus = Number(val); saveConfig(); }
@@ -228,7 +211,7 @@ module.exports = {
   addXP,
   startVoiceXP,
   loadConfig,
-  loadDB,        // ← KLUCZOWE dla /profile
+  loadDB,        // ← KLUCZOWE – teraz /profile działa
   saveDB,
   setMessageXP,
   setVoiceXP,
