@@ -14,7 +14,10 @@ if (!fs.existsSync(DATA_DIR)) {
 // ===== CACHE =====
 let dbCache = null;
 let configCache = null;
-let voiceStarted = false; // 🔥 FIX
+let voiceStarted = false;
+
+// ===== COOLDOWNS 🔥
+const xpCooldown = new Map();
 
 // ===== LOAD DB =====
 function loadDB() {
@@ -72,6 +75,9 @@ const LEVEL_ROLES = {
 const BOOST_ROLE = "1476000398107217980";
 const BOOST_MULTIPLIER = 1.75;
 
+// ===== UTILS =====
+const wait = ms => new Promise(res => setTimeout(res, ms));
+
 // ===== XP FORMULA =====
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
@@ -92,6 +98,14 @@ function getMultiplier(member) {
 
 // ===== ADD XP =====
 async function addXP(member, baseAmount, messageLength = 0) {
+  const now = Date.now();
+
+  // 🔥 ANTY SPAM
+  if (xpCooldown.has(member.id)) {
+    if (now - xpCooldown.get(member.id) < 3000) return;
+  }
+  xpCooldown.set(member.id, now);
+
   const db = loadDB();
   const cfg = loadConfig();
 
@@ -146,12 +160,13 @@ async function checkRoles(member, level) {
     const roleId = LEVEL_ROLES[lvl];
 
     if (level >= lvl && !member.roles.cache.has(roleId)) {
+      await wait(500); // 🔥 anty rate limit
       await member.roles.add(roleId).catch(() => {});
     }
   }
 }
 
-// ===== VOICE XP (NAPRAWIONE 🔥) =====
+// ===== VOICE XP =====
 function startVoiceXP(client) {
 
   if (voiceStarted) {
@@ -163,33 +178,31 @@ function startVoiceXP(client) {
 
   const { addVoiceTime } = require("./profileSystem");
 
-  setInterval(() => {
+  setInterval(async () => {
     const cfg = loadConfig();
     const counted = new Set();
 
-    client.guilds.cache.forEach(guild => {
+    for (const guild of client.guilds.cache.values()) {
 
-      guild.channels.cache.forEach(channel => {
+      for (const channel of guild.channels.cache.values()) {
 
-        if (channel.type !== ChannelType.GuildVoice) return;
+        if (channel.type !== ChannelType.GuildVoice) continue;
 
-        channel.members.forEach(member => {
+        for (const member of channel.members.values()) {
 
-          if (member.user.bot) return;
-          if (member.voice.selfMute || member.voice.selfDeaf) return;
+          if (member.user.bot) continue;
+          if (member.voice.selfMute || member.voice.selfDeaf) continue;
 
-          // 🔥 brak warunku members.size → działa solo
-          if (counted.has(member.id)) return;
+          if (counted.has(member.id)) continue;
           counted.add(member.id);
 
-          addXP(member, cfg.voiceXP);
+          await addXP(member, cfg.voiceXP);
           addVoiceTime(member.id, 60);
 
-        });
-
-      });
-
-    });
+          await wait(300); // 🔥 KLUCZOWE
+        }
+      }
+    }
 
   }, 60000);
 }
