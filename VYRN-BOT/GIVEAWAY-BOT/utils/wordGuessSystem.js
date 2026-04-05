@@ -21,7 +21,7 @@ function getRandomReward() {
       { val: 2.5, chance: 17 },
       { val: 3.0, chance: 10 },
       { val: 4.0, chance: 6 },
-      { val: 5.0, chance: 2 }   // tylko 2% na x5
+      { val: 5.0, chance: 2 }
     ];
 
     let total = multipliers.reduce((sum, m) => sum + m.chance, 0);
@@ -68,11 +68,16 @@ async function tryStartRandomGame(channel, forced = false) {
     )
     .setFooter({ text: "Nagroda: XP lub losowy mnożnik!" });
 
-  const msg = await channel.send({ embeds: [embed] }).catch(() => null);
-  if (msg) currentGame.message = msg;
+  try {
+    const msg = await channel.send({ embeds: [embed] });
+    currentGame.message = msg;
+  } catch (err) {
+    console.error("[WORDGUESS] Nie udało się wysłać embedu:", err);
+    currentGame = null;
+    return { success: false };
+  }
 
   let timeLeft = 30;
-
   currentGame.timeout = setInterval(async () => {
     timeLeft -= 5;
     if (timeLeft <= 0) {
@@ -80,8 +85,7 @@ async function tryStartRandomGame(channel, forced = false) {
       return;
     }
 
-    // Aktualizacja embedu z czasem
-    const updatedEmbed = EmbedBuilder.from(embed)
+    const updated = EmbedBuilder.from(embed)
       .setDescription(
 `**Słowo:**\n` +
 `\`${revealed}\`\n\n` +
@@ -89,9 +93,7 @@ async function tryStartRandomGame(channel, forced = false) {
 `⏳ Czas: **${timeLeft} sekund**`
       );
 
-    if (currentGame.message) {
-      currentGame.message.edit({ embeds: [updatedEmbed] }).catch(() => {});
-    }
+    if (currentGame.message) currentGame.message.edit({ embeds: [updated] }).catch(() => {});
   }, 5000);
 
   return { success: true };
@@ -145,6 +147,7 @@ async function checkAnswer(message) {
     }
 
     await message.channel.send({ embeds: [embed] }).catch(() => {});
+
     currentGame = null;
     return true;
   }
