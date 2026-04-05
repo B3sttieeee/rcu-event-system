@@ -4,7 +4,7 @@ const {
 } = require("discord.js");
 
 const { loadProfile } = require("../utils/profileSystem");
-const { loadConfig } = require("../utils/levelSystem");
+const { addXP, loadConfig } = require("../utils/levelSystem"); // nie potrzebujemy loadDB
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,15 +12,15 @@ module.exports = {
     .setDescription("📊 Wyświetla Twój szczegółowy profil w VYRN Clan"),
 
   async execute(interaction) {
-    await interaction.deferReply(); // lepsza UX przy wolniejszym ładowaniu
+    await interaction.deferReply();
 
     try {
       const userId = interaction.user.id;
       const member = interaction.member;
 
-      // Pobieramy dane z obu systemów
-      const profileData = getProfileData(userId);
+      // Pobieramy dane
       const levelData = getLevelData(userId);
+      const profileData = getProfileData(userId);
       const config = loadConfig();
 
       const rankInfo = getRank(levelData.level);
@@ -69,16 +69,27 @@ ${progress.bar} \`${progress.percent}%\`
 
 // ====================== POMOCNICZE FUNKCJE ======================
 
+/** Pobieranie danych poziomów */
 function getLevelData(userId) {
-  const { loadDB } = require("../utils/levelSystem"); // ładujemy tylko gdy potrzeba
-  const db = loadDB();
-  return db.xp?.[userId] || { xp: 0, level: 0 };
+  const fs = require("fs");
+  const LEVEL_DB = "./data/levels.json";
+
+  let levels = { xp: {} };
+  if (fs.existsSync(LEVEL_DB)) {
+    try {
+      levels = JSON.parse(fs.readFileSync(LEVEL_DB, "utf-8"));
+    } catch (e) {
+      console.error("Błąd odczytu levels.json", e);
+    }
+  }
+
+  return levels.xp?.[userId] || { xp: 0, level: 0 };
 }
 
+/** Pobieranie danych profilu */
 function getProfileData(userId) {
   const profile = loadProfile();
   const user = profile.users?.[userId] || {};
-
   const daily = user.daily || { msgs: 0, vc: 0, streak: 0 };
 
   return {
@@ -86,7 +97,7 @@ function getProfileData(userId) {
     dailyMsgs: daily.msgs || 0,
     dailyVCMinutes: Math.floor((daily.vc || 0) / 60),
     streak: daily.streak || 0,
-    dailyVCRequired: 30 + ((daily.streak || 0) * 5) // zgodne z Twoim systemem daily
+    dailyVCRequired: 30 + ((daily.streak || 0) * 5)
   };
 }
 
@@ -97,8 +108,8 @@ function getRank(level) {
     { min: 45, name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" },
     { min: 30, name: "Platinum",emoji: "<:PlatRank:1488756557863845958>" },
     { min: 15, name: "Gold",    emoji: "<:GoldRank:1488756524854808686>" },
-    { min: 5,  name: "Bronze",  emoji: "<:BronzeRank:1488756638285565962>" },
-    { min: 0,  name: "Iron",    emoji: "<:Ironrank:1488756604277887039>" }
+    { min:  5, name: "Bronze",  emoji: "<:BronzeRank:1488756638285565962>" },
+    { min:  0, name: "Iron",    emoji: "<:Ironrank:1488756604277887039>" }
   ];
 
   return ranks.find(r => level >= r.min) || ranks[ranks.length - 1];
