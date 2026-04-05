@@ -2,26 +2,49 @@ const { EmbedBuilder } = require("discord.js");
 
 let currentGame = null;
 
-// ====================== LISTA SŁÓW ======================
+// ====================== POLSKIE SŁOWA ======================
 const WORDS = [
   "zamek", "smok", "rycerz", "miecz", "tarcza", "ogień", "las", "góra", "rzeka",
   "wioska", "król", "królowa", "książę", "wojownik", "bitwa", "zwycięstwo",
   "legenda", "przygoda", "skarbiec", "złoto", "magia", "czarodziej", "potwór",
   "loch", "klucz", "brama", "most", "wieża", "forteca", "armia", "koń", "łuk",
   "strzała", "burza", "wiatr", "deszcz", "słońce", "księżyc", "odwaga", "honor",
-  "siła", "mądrość", "wolność", "epika", "heros", "smocze"
+  "siła", "mądrość", "wolność", "epika", "heros", "smocze", "rycerski", "błysk"
 ];
+
+// ====================== LOSOWA NAGRODA ======================
+function getRandomReward() {
+  if (Math.random() < 0.37) { // 37% na mnożnik
+    const multipliers = [
+      { val: 1.5, chance: 38 },
+      { val: 2.0, chance: 27 },
+      { val: 2.5, chance: 17 },
+      { val: 3.0, chance: 10 },
+      { val: 4.0, chance: 6 },
+      { val: 5.0, chance: 2 }   // tylko 2% na x5
+    ];
+
+    let total = multipliers.reduce((sum, m) => sum + m.chance, 0);
+    let roll = Math.random() * total;
+
+    for (const m of multipliers) {
+      roll -= m.chance;
+      if (roll <= 0) {
+        const duration = m.val >= 4.0 ? 8 : m.val >= 3.0 ? 12 : 18;
+        return { type: "multiplier", value: m.val, durationMin: duration };
+      }
+    }
+  }
+
+  const xp = Math.floor(200 + Math.random() * 150); // 200-349 XP
+  return { type: "xp", value: xp };
+}
 
 // ====================== START GRY ======================
 async function tryStartRandomGame(channel, forced = false) {
-  if (currentGame) {
-    return { success: false, reason: "game_already_running" };
-  }
+  if (currentGame) return { success: false, reason: "already_running" };
 
-  // Przy ręcznym uruchomieniu pomijamy losową szansę
-  if (!forced && Math.random() > 0.07) {
-    return { success: false, reason: "random_chance" };
-  }
+  if (!forced && Math.random() > 0.07) return { success: false, reason: "chance" };
 
   const word = WORDS[Math.floor(Math.random() * WORDS.length)];
   const revealed = "⬛".repeat(word.length);
@@ -30,35 +53,44 @@ async function tryStartRandomGame(channel, forced = false) {
     channelId: channel.id,
     word: word.toLowerCase(),
     revealed: revealed,
-    timeout: null
+    timeout: null,
+    message: null
   };
 
   const embed = new EmbedBuilder()
     .setColor("#ffaa00")
-    .setTitle("🎲 Zgadywanie Słowa!")
+    .setTitle("🎲 **ZGADYWANIE SŁOWA**")
     .setDescription(
-`**Słowo do zgadnięcia:**\n` +
-`> \`${revealed}\`\n\n` +
+`**Słowo:**\n` +
+`\`${revealed}\`\n\n` +
 `Wpisz poprawne słowo w czat!\n` +
-`Czas: **30 sekund**`
+`⏳ Czas: **30 sekund**`
     )
-    .setFooter({ text: "Nagroda: zwykły XP lub losowy mnożnik!" });
+    .setFooter({ text: "Nagroda: XP lub losowy mnożnik!" });
 
-  try {
-    await channel.send({ embeds: [embed] });
-    console.log(`[WORDGUESS] Gra rozpoczęta na kanale ${channel.name} | Słowo: ${word}`);
-  } catch (err) {
-    console.error("[WORDGUESS] Nie udało się wysłać embedu:", err);
-    currentGame = null;
-    return { success: false, reason: "send_failed" };
-  }
+  const msg = await channel.send({ embeds: [embed] }).catch(() => null);
+  if (msg) currentGame.message = msg;
 
-  // Timer
   let timeLeft = 30;
-  currentGame.timeout = setInterval(() => {
+
+  currentGame.timeout = setInterval(async () => {
     timeLeft -= 5;
     if (timeLeft <= 0) {
       endGame(channel, false);
+      return;
+    }
+
+    // Aktualizacja embedu z czasem
+    const updatedEmbed = EmbedBuilder.from(embed)
+      .setDescription(
+`**Słowo:**\n` +
+`\`${revealed}\`\n\n` +
+`Wpisz poprawne słowo w czat!\n` +
+`⏳ Czas: **${timeLeft} sekund**`
+      );
+
+    if (currentGame.message) {
+      currentGame.message.edit({ embeds: [updatedEmbed] }).catch(() => {});
     }
   }, 5000);
 
@@ -113,38 +145,10 @@ async function checkAnswer(message) {
     }
 
     await message.channel.send({ embeds: [embed] }).catch(() => {});
-
     currentGame = null;
     return true;
   }
   return false;
-}
-
-function getRandomReward() {
-  if (Math.random() < 0.35) {
-    const multipliers = [
-      { value: 1.5, chance: 40 },
-      { value: 2.0, chance: 28 },
-      { value: 2.5, chance: 15 },
-      { value: 3.0, chance: 10 },
-      { value: 4.0, chance: 5 },
-      { value: 5.0, chance: 2 }
-    ];
-
-    let total = multipliers.reduce((a, b) => a + b.chance, 0);
-    let roll = Math.random() * total;
-
-    for (const m of multipliers) {
-      roll -= m.chance;
-      if (roll <= 0) {
-        const duration = m.value >= 4.0 ? 8 : m.value >= 3.0 ? 12 : 18;
-        return { type: "multiplier", value: m.value, durationMin: duration };
-      }
-    }
-  }
-
-  const xp = Math.floor(190 + Math.random() * 160);
-  return { type: "xp", value: xp };
 }
 
 function endGame(channel, won = false) {
@@ -164,7 +168,6 @@ function endGame(channel, won = false) {
   currentGame = null;
 }
 
-// ====================== EXPORT ======================
 module.exports = {
   tryStartRandomGame,
   checkAnswer
