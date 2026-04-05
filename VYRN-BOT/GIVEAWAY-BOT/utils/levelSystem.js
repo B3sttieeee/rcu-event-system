@@ -1,8 +1,7 @@
 const fs = require("fs");
-const path = require("path");
 const { ChannelType } = require("discord.js");
 
-// ====================== TWOJA ORYGINALNA ŚCIEŻKA ======================
+// ====================== ŚCIEŻKA JAK W PROFILE ======================
 const DATA_DIR = "/data";
 const DB_PATH = "/data/levels.json";
 const CONFIG_PATH = "/data/levelConfig.json";
@@ -27,7 +26,7 @@ const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 // ====================== DATABASE ======================
 function loadDB() {
   if (!fs.existsSync(DB_PATH)) {
-    console.log("[LEVEL] Plik levels.json nie istnieje → tworzę nowy");
+    console.log("[LEVEL] levels.json nie istnieje → tworzę nowy pusty plik");
     const initialData = { xp: {} };
     fs.writeFileSync(DB_PATH, JSON.stringify(initialData, null, 2));
     dbCache = initialData;
@@ -85,12 +84,14 @@ function loadConfig() {
 }
 
 function saveConfig() {
-  if (configCache) fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
+  if (configCache) {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
+  }
 }
 
 // ====================== LEVEL ROLES ======================
 const LEVEL_ROLES = {
-  5: "1476000458987278397",
+  5:  "1476000458987278397",
   15: "1476000995501670534",
   30: "1476000459595448442",
   45: "1476000991206707221",
@@ -136,6 +137,7 @@ async function addXP(member, baseAmount, messageLength = 0) {
   if (amount <= 0) return { leveledUp: false, gained: 0 };
 
   db.xp[member.id].xp += amount;
+
   let leveledUp = false;
   const currentLevel = db.xp[member.id].level;
 
@@ -153,17 +155,16 @@ async function addXP(member, baseAmount, messageLength = 0) {
     leveledUp,
     level: db.xp[member.id].level,
     xp: db.xp[member.id].xp,
-    gained: amount,
-    oldLevel: currentLevel
+    gained: amount
   };
 }
 
 async function checkRoles(member, currentLevel) {
   for (const [levelStr, roleId] of Object.entries(LEVEL_ROLES)) {
-    const requiredLevel = Number(levelStr);
-    if (currentLevel >= requiredLevel && !member.roles.cache.has(roleId)) {
+    const required = Number(levelStr);
+    if (currentLevel >= required && !member.roles.cache.has(roleId)) {
       await wait(600);
-      await member.roles.add(roleId).catch(err => console.error(`❌ Rola level ${requiredLevel}:`, err.message));
+      await member.roles.add(roleId).catch(() => {});
     }
   }
 }
@@ -183,6 +184,7 @@ function startVoiceXP(client) {
     for (const guild of client.guilds.cache.values()) {
       for (const channel of guild.channels.cache.values()) {
         if (channel.type !== ChannelType.GuildVoice) continue;
+
         for (const [memberId, member] of channel.members) {
           if (member.user.bot || member.voice.selfMute || member.voice.selfDeaf || processed.has(memberId)) continue;
           processed.add(memberId);
@@ -191,9 +193,7 @@ function startVoiceXP(client) {
             await addXP(member, cfg.voiceXP);
             addVoiceTime(memberId, 60);
             await wait(250);
-          } catch (err) {
-            console.error(`❌ Voice XP błąd:`, err);
-          }
+          } catch (e) {}
         }
       }
     }
@@ -211,7 +211,7 @@ module.exports = {
   addXP,
   startVoiceXP,
   loadConfig,
-  loadDB,        // ← KLUCZOWE – teraz /profile działa
+  loadDB,
   saveDB,
   setMessageXP,
   setVoiceXP,
