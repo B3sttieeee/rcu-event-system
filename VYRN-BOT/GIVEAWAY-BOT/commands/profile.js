@@ -1,15 +1,11 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder
-} = require("discord.js");
-
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { loadDB, loadConfig } = require("../utils/levelSystem");
 const { loadProfile } = require("../utils/profileSystem");
-const { addXP, loadConfig } = require("../utils/levelSystem"); // nie potrzebujemy loadDB
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("profile")
-    .setDescription("📊 Wyświetla Twój szczegółowy profil w VYRN Clan"),
+    .setDescription("📊 Wyświetla Twój profil w VYRN Clan"),
 
   async execute(interaction) {
     await interaction.deferReply();
@@ -18,13 +14,26 @@ module.exports = {
       const userId = interaction.user.id;
       const member = interaction.member;
 
-      // Pobieramy dane
-      const levelData = getLevelData(userId);
-      const profileData = getProfileData(userId);
+      // Ładujemy dane na świeżo (bez cache problemów)
+      const levels = loadDB();
+      const profile = loadProfile();
       const config = loadConfig();
 
-      const rankInfo = getRank(levelData.level);
-      const progress = calculateProgress(levelData.xp, levelData.level);
+      const lvlData = levels.xp?.[userId] || { xp: 0, level: 0 };
+      const userData = profile.users?.[userId] || { 
+        voice: 0, 
+        daily: { msgs: 0, vc: 0, streak: 0 } 
+      };
+
+      const needed = neededXP(lvlData.level);
+      const percent = needed > 0 ? Math.min(100, Math.floor((lvlData.xp / needed) * 100)) : 0;
+      const left = Math.max(0, needed - lvlData.xp);
+
+      const vcMinutes = Math.floor((userData.voice || 0) / 60);
+      const dailyVcMin = Math.floor((userData.daily.vc || 0) / 60);
+      const dailyVcReq = 30 + ((userData.daily.streak || 0) * 5);
+
+      const rank = getRank(lvlData.level);
 
       const embed = new EmbedBuilder()
         .setColor("#0f172a")
@@ -34,98 +43,52 @@ module.exports = {
         })
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setDescription(
-`🏆 **${rankInfo.emoji} Level ${levelData.level} • ${rankInfo.name}**
+`🏆 **${rank.emoji} Level ${lvlData.level} • ${rank.name}**
 
-<a:XP:1488763317857161377> **XP:** \`${formatNumber(levelData.xp)} / ${formatNumber(progress.needed)}\`
-${progress.bar} \`${progress.percent}%\`
-<:Next:1488760924193161337> **Do następnego poziomu:** \`${formatNumber(progress.left)}\` XP
+<a:XP:1488763317857161377> **${lvlData.xp} / ${needed} XP**
+${createProgressBar(percent)} \`${percent}%\`
+<:Next:1488760924193161337> Do następnego poziomu: **${left} XP**
 
 ━━━━━━━━━━━━━━
-<a:TimeS:1488760889560797314> **Czas na VC:** \`${formatNumber(profileData.voiceMinutes)}\` minut
-<:Messages:1488763434966192242> **Wiadomości dzisiaj:** \`${profileData.dailyMsgs}\`
-<:Zadania:1488763408026435594> **Daily VC dzisiaj:** \`${profileData.dailyVCMinutes} / ${profileData.dailyVCRequired}\` min
+<a:TimeS:1488760889560797314> **Voice:** ${vcMinutes} minut
+<:Messages:1488763434966192242> **Wiadomości dziś:** ${userData.daily.msgs || 0}
+<:Zadania:1488763408026435594> **Daily VC:** ${dailyVcMin} / ${dailyVcReq} min
+🔥 **Streak:** ${userData.daily.streak || 0}
 
-🔥 **Streak daily:** ${profileData.streak} ${profileData.streak >= 5 ? "🔥" : ""}
-⚡ **Boost:** ${member.roles.cache.has(config.boostRole || "1476000398107217980") ? "✅ **Aktywny**" : "❌ Nieaktywny"}
-🌍 **Global Multiplier:** \`${config.globalMultiplier || 1}x\``
+⚡ **Boost:** ${member.roles.cache.has(config.boostRole || "1476000398107217980") ? "✅ Aktywny" : "❌ Nieaktywny"}
+🌍 **Multiplier:** \`${config.globalMultiplier || 1}x\``
         )
-        .setFooter({ 
-          text: "VYRN Clan • Im więcej grasz, tym szybciej rośniesz",
-          iconURL: interaction.guild.iconURL({ dynamic: true })
-        })
+        .setFooter({ text: "VYRN Clan • Keep grinding!" })
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
 
-    } catch (error) {
-      console.error("❌ Błąd w komendzie /profile:", error);
-      await interaction.editReply({
-        content: "❌ Wystąpił błąd podczas ładowania profilu. Spróbuj ponownie później.",
-        ephemeral: true
+    } catch (err) {
+      console.error("❌ Błąd w /profile:", err);
+      await interaction.editReply({ 
+        content: "❌ Wystąpił błąd przy ładowaniu profilu.", 
+        ephemeral: true 
       });
     }
   }
 };
 
 // ====================== POMOCNICZE FUNKCJE ======================
-
-/** Pobieranie danych poziomów */
-function getLevelData(userId) {
-  const fs = require("fs");
-  const LEVEL_DB = "./data/levels.json";
-
-  let levels = { xp: {} };
-  if (fs.existsSync(LEVEL_DB)) {
-    try {
-      levels = JSON.parse(fs.readFileSync(LEVEL_DB, "utf-8"));
-    } catch (e) {
-      console.error("Błąd odczytu levels.json", e);
-    }
-  }
-
-  return levels.xp?.[userId] || { xp: 0, level: 0 };
-}
-
-/** Pobieranie danych profilu */
-function getProfileData(userId) {
-  const profile = loadProfile();
-  const user = profile.users?.[userId] || {};
-  const daily = user.daily || { msgs: 0, vc: 0, streak: 0 };
-
-  return {
-    voiceMinutes: Math.floor((user.voice || 0) / 60),
-    dailyMsgs: daily.msgs || 0,
-    dailyVCMinutes: Math.floor((daily.vc || 0) / 60),
-    streak: daily.streak || 0,
-    dailyVCRequired: 30 + ((daily.streak || 0) * 5)
-  };
+function neededXP(level) {
+  return Math.floor(100 * Math.pow(level, 1.5));
 }
 
 function getRank(level) {
-  const ranks = [
-    { min: 75, name: "Legend",  emoji: "<:LegeRank:1488756343190847538>" },
-    { min: 60, name: "Ruby",    emoji: "<:RubyRank:1488756400514404372>" },
-    { min: 45, name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" },
-    { min: 30, name: "Platinum",emoji: "<:PlatRank:1488756557863845958>" },
-    { min: 15, name: "Gold",    emoji: "<:GoldRank:1488756524854808686>" },
-    { min:  5, name: "Bronze",  emoji: "<:BronzeRank:1488756638285565962>" },
-    { min:  0, name: "Iron",    emoji: "<:Ironrank:1488756604277887039>" }
-  ];
-
-  return ranks.find(r => level >= r.min) || ranks[ranks.length - 1];
+  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
+  if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
+  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
+  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
+  if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
+  if (level >= 5)  return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
+  return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
-function calculateProgress(xp, level) {
-  const needed = Math.floor(100 * Math.pow(level, 1.5));
-  const percent = needed > 0 ? Math.min(100, Math.floor((xp / needed) * 100)) : 0;
-  const left = Math.max(0, needed - xp);
-
+function createProgressBar(percent) {
   const filled = Math.round(percent / 10);
-  const bar = "▰".repeat(filled) + "▱".repeat(10 - filled);
-
-  return { needed, percent, left, bar };
-}
-
-function formatNumber(num) {
-  return num.toLocaleString("en-US");
+  return "▰".repeat(filled) + "▱".repeat(10 - filled);
 }
