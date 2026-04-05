@@ -23,6 +23,7 @@ const xpCooldown = new Map(); // memberId => timestamp
 // ====================== HELPERS ======================
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
+// ====================== DATABASE ======================
 function loadDB() {
   if (!fs.existsSync(DB_PATH)) {
     const initialData = { xp: {} };
@@ -32,17 +33,28 @@ function loadDB() {
   }
 
   if (!dbCache) {
-    dbCache = JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+    try {
+      dbCache = JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+    } catch (err) {
+      console.error("❌ Błąd odczytu levels.json — tworzę nowy plik");
+      dbCache = { xp: {} };
+      fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+    }
   }
   return dbCache;
 }
 
 function saveDB() {
   if (dbCache) {
-    fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+    try {
+      fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+    } catch (err) {
+      console.error("❌ Błąd zapisu levels.json:", err.message);
+    }
   }
 }
 
+// ====================== CONFIG ======================
 function loadConfig() {
   if (!fs.existsSync(CONFIG_PATH)) {
     const defaultConfig = {
@@ -50,7 +62,8 @@ function loadConfig() {
       voiceXP: 5,
       lengthBonus: 0.3,
       lengthThreshold: 30,
-      globalMultiplier: 1
+      globalMultiplier: 1,
+      boostRole: "1476000398107217980"   // dodane dla łatwiejszego dostępu
     };
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
     configCache = defaultConfig;
@@ -58,14 +71,23 @@ function loadConfig() {
   }
 
   if (!configCache) {
-    configCache = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+    try {
+      configCache = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
+    } catch (err) {
+      console.error("❌ Błąd odczytu levelConfig.json");
+      configCache = { messageXP: 3, voiceXP: 5, lengthBonus: 0.3, lengthThreshold: 30, globalMultiplier: 1 };
+    }
   }
   return configCache;
 }
 
 function saveConfig() {
   if (configCache) {
-    fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
+    try {
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
+    } catch (err) {
+      console.error("❌ Błąd zapisu levelConfig.json:", err.message);
+    }
   }
 }
 
@@ -95,7 +117,6 @@ function getMultiplier(member) {
   if (member.roles.cache.has(BOOST_ROLE)) {
     multi *= BOOST_MULTIPLIER;
   }
-
   return multi;
 }
 
@@ -105,7 +126,7 @@ async function addXP(member, baseAmount, messageLength = 0) {
 
   const now = Date.now();
 
-  // Anty-spam: 3 sekundy cooldown
+  // Anty-spam
   if (xpCooldown.has(member.id) && now - xpCooldown.get(member.id) < 3000) {
     return { leveledUp: false, gained: 0 };
   }
@@ -161,7 +182,7 @@ async function checkRoles(member, currentLevel) {
     const requiredLevel = Number(levelStr);
 
     if (currentLevel >= requiredLevel && !member.roles.cache.has(roleId)) {
-      await wait(600); // bezpieczny delay przeciw rate limit
+      await wait(600);
       await member.roles.add(roleId).catch(err => {
         console.error(`❌ Nie udało się dodać roli level ${requiredLevel} dla ${member.user.tag}:`, err.message);
       });
@@ -179,7 +200,6 @@ function startVoiceXP(client) {
   voiceSystemRunning = true;
   console.log("🎤 System Voice XP uruchomiony.");
 
-  // Importujemy tylko raz
   const { addVoiceTime } = require("./profileSystem");
 
   setInterval(async () => {
@@ -199,16 +219,15 @@ function startVoiceXP(client) {
 
           try {
             await addXP(member, cfg.voiceXP);
-            addVoiceTime(memberId, 60);   // +1 minuta czasu głosowego
-
-            await wait(250); // delikatny delay, nie blokujemy całego interwału
+            addVoiceTime(memberId, 60);
+            await wait(250);
           } catch (err) {
-            console.error(`❌ Błąd przy przyznawaniu Voice XP dla ${member.user.tag}:`, err);
+            console.error(`❌ Błąd Voice XP dla ${member.user.tag}:`, err);
           }
         }
       }
     }
-  }, 60000); // co minutę
+  }, 60000);
 }
 
 // ====================== CONFIG SETTERS ======================
@@ -241,6 +260,8 @@ module.exports = {
   addXP,
   startVoiceXP,
   loadConfig,
+  loadDB,           // ← DODANE – teraz /profile będzie działać
+  saveDB,           // przydatne w przyszłości
   setMessageXP,
   setVoiceXP,
   setLengthBonus,
