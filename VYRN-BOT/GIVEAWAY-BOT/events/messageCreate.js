@@ -49,7 +49,7 @@ module.exports = {
       const config = getConfig(message.guild.id);
 
       const PREFIX = config.prefix || ".";
-      const LEVEL_CHANNEL = "1475999590716018719"; // 🔥 TWÓJ KANAŁ
+      const LEVEL_CHANNEL = "1475999590716018719";
       const BOOST_ROLE = config.boostRole;
 
       const isCommand = message.content.startsWith(PREFIX);
@@ -64,7 +64,6 @@ module.exports = {
         const db = loadDB();
         const data = db.xp[message.author.id] || { xp: 0, level: 0 };
 
-        // ===== RANK
         if (cmd === "rank" || cmd === "r") {
           const needed = neededXP(data.level);
           const progress = Math.min(
@@ -96,7 +95,6 @@ module.exports = {
           return message.reply({ embeds: [embed] });
         }
 
-        // ===== ADMIN
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
 
         if (cmd === "setxp") {
@@ -159,7 +157,6 @@ module.exports = {
       // =========================
       // 🎯 DAILY
       // =========================
-
       addMessage(message.author.id);
 
       if (isDailyReady(message.author.id) && !dailyNotified.has(message.author.id)) {
@@ -173,39 +170,41 @@ module.exports = {
       }
 
       // =========================
-      // 🚀 LEVEL UP (NOWY 🔥)
+      // 🚀 LEVEL UP (ULEPSZONY 🔥)
       // =========================
-      if (result?.leveledUp) {
+      if (result && result.leveledUp) {
 
         const channel = message.guild.channels.cache.get(LEVEL_CHANNEL);
         if (!channel) return;
 
         const nextXP = neededXP(result.level);
-        const left = Math.max(0, nextXP - result.xp);
+        const progress = Math.floor((result.xp / nextXP) * 100);
 
         const embed = new EmbedBuilder()
-          .setColor("#0f172a")
+          .setColor("#b8a672") // 🔥 GOLD STYLE
           .setAuthor({
-            name: message.author.username,
+            name: "✨ LEVEL UP!",
+            iconURL: message.guild.iconURL()
+          })
+          .setTitle(`🏆 ${message.author.username} reached Level ${result.level}!`)
+          .setDescription(
+`<a:XP:1488763317857161377> **XP:** \`${result.xp} / ${nextXP}\` (${progress}%)
+⚡ **Gained:** \`+${result.gained} XP\`
+
+🔥 Keep grinding, you're getting stronger!`
+          )
+          .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
+          .setImage("https://media.discordapp.net/attachments/1475993709240778904/1486898592491896882/ezgif.com-video-to-gif-converter.gif")
+          .setFooter({
+            text: `User ID: ${message.author.id}`,
             iconURL: message.author.displayAvatarURL()
           })
-
-          .setDescription(
-`🏆 **Level ${result.level}**
-
-<:Next:1488760924193161337> Next level in **${left} XP**  
-<a:XP:1488763317857161377> ${result.xp} / ${nextXP} XP
-
-<:PEPENOTE:1488765551038959677> *Keep grinding and stay active*`
-          )
-
-          .setThumbnail(message.author.displayAvatarURL())
           .setTimestamp();
 
-        channel.send({
+        await channel.send({
           content: `🎉 ${message.author}`,
           embeds: [embed]
-        }).catch(() => {});
+        }).catch(err => console.log("❌ LEVEL SEND ERROR:", err));
       }
 
     } catch (err) {
