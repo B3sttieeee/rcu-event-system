@@ -5,17 +5,24 @@ module.exports = {
   name: "guildMemberRemove",
 
   async execute(member) {
-    const config = getConfig(member.guild.id);
-    if (!config.logChannel) return;
+    try {
+      const config = getConfig(member.guild.id);
+      if (!config?.logChannel) return;
 
-    const ch = member.guild.channels.cache.get(config.logChannel);
-    if (!ch) return;
+      const channel = member.guild.channels.cache.get(config.logChannel);
+      if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setColor("Red")
-      .setDescription(`${member.user.tag} left`)
-      .setTimestamp();
+      const embed = new EmbedBuilder()
+        .setColor("Red")
+        .setDescription(`👋 ${member.user.tag} left the server`)
+        .setTimestamp();
 
-    ch.send({ embeds: [embed] });
+      await channel.send({ embeds: [embed] }).catch(err => {
+        console.log("❌ LOG SEND ERROR:", err.message);
+      });
+
+    } catch (err) {
+      console.log("❌ LEAVE EVENT ERROR:", err);
+    }
   }
 };
