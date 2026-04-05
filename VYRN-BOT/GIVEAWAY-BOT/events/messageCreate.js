@@ -4,7 +4,7 @@ const { addMessage, isDailyReady } = require("../utils/profileSystem");
 const { getConfig } = require("../utils/configSystem");
 
 // Nowe systemy
-const { tryGiveRandomBoost, getCurrentBoost } = require("../utils/boostSystem");
+const { tryGiveRandomBoost } = require("../utils/boostSystem");
 const { tryStartRandomGame, checkAnswer } = require("../utils/wordGuessSystem");
 
 const cooldown = new Map();
@@ -40,9 +40,8 @@ module.exports = {
       }
 
       // =========================
-      // NOWE SYSTEMY: Zgadywanie + Boost
+      // SYSTEM ZGADYWANIA SŁOWA
       // =========================
-      // Najpierw sprawdzamy czy ktoś zgadł słowo
       if (await checkAnswer(message)) return;
 
       // =========================
@@ -121,7 +120,7 @@ async function showRank(message) {
 async function handleXPSystem(message) {
   const now = Date.now();
 
-  // Cooldown 2 sekundy
+  // Cooldown
   if (cooldown.has(message.author.id) && now - cooldown.get(message.author.id) < 2000) {
     return;
   }
@@ -131,10 +130,10 @@ async function handleXPSystem(message) {
 
   const cfg = loadConfig();
 
-  // Losowy Lucky Boost
+  // Losowy Lucky Boost (czasowy)
   tryGiveRandomBoost(message.member);
 
-  // Przyznaj XP
+  // Przyznaj normalny XP
   const result = await addXP(
     message.member,
     cfg.messageXP,
@@ -144,7 +143,7 @@ async function handleXPSystem(message) {
   // Daily progress
   addMessage(message.author.id);
 
-  // Powiadomienie o gotowym daily
+  // Powiadomienie daily
   if (isDailyReady(message.author.id) && !dailyNotified.has(message.author.id)) {
     dailyNotified.add(message.author.id);
     message.author.send("🎯 **Twój daily jest gotowy!**\nUżyj `/daily` aby odebrać nagrodę 🎁")
@@ -154,7 +153,6 @@ async function handleXPSystem(message) {
 
   // Szansa na rozpoczęcie gry zgadywania słowa
   if (Math.random() < 0.065) {
-    const { tryStartRandomGame } = require("../utils/wordGuessSystem");
     await tryStartRandomGame(message.channel);
   }
 
@@ -195,7 +193,7 @@ async function sendLevelUpMessage(message, result) {
   await channel.send({
     content: `🎉 ${message.author}`,
     embeds: [embed]
-  }).catch(err => console.error("❌ Nie udało się wysłać level up:", err.message));
+  }).catch(err => console.error("❌ Level up error:", err.message));
 }
 
 // ====================== ADMIN COMMANDS ======================
