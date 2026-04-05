@@ -1,51 +1,63 @@
 const fs = require("fs");
+const path = require("path");
 
-const DATA_DIR = "/data";
-const PROFILE_PATH = `${DATA_DIR}/profile.json`;
+const DATA_DIR = path.join(__dirname, "..", "data");
+const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
 
+// ====================== INICJALIZACJA ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// CACHE
-let db = null;
+// ====================== CACHE ======================
+let dbCache = null;
+let lastSave = Date.now();
 
-// =========================
-// LOAD
-// =========================
+// ====================== LOAD & SAVE ======================
 function loadProfile() {
-  if (db) return db;
+  if (dbCache) return dbCache;
 
   if (!fs.existsSync(PROFILE_PATH)) {
-    fs.writeFileSync(PROFILE_PATH, JSON.stringify({ users: {} }, null, 2));
+    const initialData = { users: {} };
+    fs.writeFileSync(PROFILE_PATH, JSON.stringify(initialData, null, 2));
+    dbCache = initialData;
+    return dbCache;
   }
 
-  db = JSON.parse(fs.readFileSync(PROFILE_PATH));
-  return db;
+  try {
+    dbCache = JSON.parse(fs.readFileSync(PROFILE_PATH, "utf-8"));
+  } catch (err) {
+    console.error("❌ Błąd odczytu profile.json — tworzę nowy plik");
+    dbCache = { users: {} };
+    fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
+  }
+
+  return dbCache;
 }
 
-// =========================
-// SAVE
-// =========================
 function saveProfile() {
-  if (!db) return;
-  fs.writeFileSync(PROFILE_PATH, JSON.stringify(db, null, 2));
+  if (!dbCache) return;
+  try {
+    fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
+    lastSave = Date.now();
+  } catch (err) {
+    console.error("❌ Błąd zapisu profile.json:", err.message);
+  }
 }
 
-// AUTO SAVE
+// Auto-save co 10 sekund (lepsze niż co 5)
 setInterval(() => {
-  saveProfile();
-}, 5000);
+  if (Date.now() - lastSave > 8000) { // tylko jeśli coś się zmieniło
+    saveProfile();
+  }
+}, 10000);
 
-// =========================
-// USER
-// =========================
+// ====================== USER MANAGEMENT ======================
 function ensureUser(userId) {
   const data = loadProfile();
-
   if (!data.users[userId]) {
     data.users[userId] = {
-      voice: 0,
+      voice: 0,                    // całkowity czas na VC (w sekundach)
       daily: {
         msgs: 0,
         vc: 0,
@@ -54,34 +66,27 @@ function ensureUser(userId) {
       }
     };
   }
-
   return data.users[userId];
 }
 
-// =========================
-// VOICE
-// =========================
+// ====================== VOICE & MESSAGE ======================
 function addVoiceTime(userId, seconds) {
+  if (!userId || seconds <= 0) return;
   const user = ensureUser(userId);
-
   user.voice += seconds;
   user.daily.vc += seconds;
 }
 
-// =========================
-// MESSAGE
-// =========================
 function addMessage(userId) {
+  if (!userId) return;
   const user = ensureUser(userId);
   user.daily.msgs++;
 }
 
-// =========================
-// DAILY
-// =========================
+// ====================== DAILY SYSTEM ======================
 function getDailyTier(streak) {
   return {
-    vcRequired: 30 + (streak * 5),
+    vcRequired: 30 + (streak * 5),           // minuty
     msgRequired: streak >= 5 ? 20 + (streak * 2) : 0
   };
 }
@@ -90,41 +95,43 @@ function isDailyReady(userId) {
   const user = ensureUser(userId);
   const tier = getDailyTier(user.daily.streak);
 
+  const vcMinutes = Math.floor(user.daily.vc / 60);
+
   return (
-    user.daily.vc >= tier.vcRequired * 60 &&
+    vcMinutes >= tier.vcRequired &&
     (tier.msgRequired === 0 || user.daily.msgs >= tier.msgRequired)
   );
 }
 
-// =========================
-// CLAIM (FIXED 🔥)
-// =========================
 async function claimDaily(userId, member = null) {
   const user = ensureUser(userId);
-
-  if (!isDailyReady(userId)) {
-    return { error: true };
-  }
-
-  // ❌ zabezpieczenie przed spamem (1x dziennie)
   const now = Date.now();
-  if (now - user.daily.lastClaim < 86400000) {
-    return { error: "cooldown" };
+
+  // Sprawdzenie czy daily jest gotowy
+  if (!isDailyReady(userId)) {
+    return { success: false, error: "not_ready" };
   }
 
-  user.daily.streak++;
+  // Ochrona przed spamem claimu (1x na 24h)
+  if (now - user.daily.lastClaim < 86400000) { // 24 godziny
+    return { success: false, error: "cooldown" };
+  }
 
-  const xp = Math.floor(150 + Math.random() * 150);
+  // Przyznaj nagrodę
+  user.daily.streak = (user.daily.streak || 0) + 1;
+  const xpReward = Math.floor(150 + Math.random() * 150); // 150–299 XP
 
-  // 🔥 DODAJ XP DO LEVEL SYSTEM
-  if (member) {
+  // Dodaj XP do systemu poziomów (jeśli member jest dostępny)
+  if (member && !member.user.bot) {
     try {
       const { addXP } = require("./levelSystem");
-      await addXP(member, xp);
-    } catch {}
+      await addXP(member, xpReward);
+    } catch (err) {
+      console.error(`❌ Nie udało się dodać XP przy claimDaily dla ${userId}:`, err.message);
+    }
   }
 
-  // reset daily
+  // Reset daily progress
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
@@ -132,41 +139,47 @@ async function claimDaily(userId, member = null) {
   saveProfile();
 
   return {
-    xp,
+    success: true,
+    xp: xpReward,
     streak: user.daily.streak
   };
 }
 
-// =========================
-// RESET
-// =========================
+// ====================== DAILY RESET ======================
 function startDailyReset() {
-  let lastDay = new Date().getDate();
+  let lastResetDay = new Date().getDate();
 
   setInterval(() => {
     const now = new Date();
 
-    if (now.getDate() !== lastDay) {
-      lastDay = now.getDate();
+    if (now.getDate() !== lastResetDay) {
+      lastResetDay = now.getDate();
 
       const data = loadProfile();
+      let resetCount = 0;
 
-      for (const id in data.users) {
-        data.users[id].daily.msgs = 0;
-        data.users[id].daily.vc = 0;
+      for (const userId in data.users) {
+        if (data.users[userId].daily) {
+          data.users[userId].daily.msgs = 0;
+          data.users[userId].daily.vc = 0;
+          resetCount++;
+        }
       }
 
       saveProfile();
+      console.log(`🌅 Daily reset wykonany dla ${resetCount} użytkowników`);
     }
-  }, 60000);
+  }, 60000); // sprawdzaj co minutę
 }
 
+// ====================== EXPORT ======================
 module.exports = {
-  loadProfile,
   addVoiceTime,
   addMessage,
   isDailyReady,
   claimDaily,
   getDailyTier,
-  startDailyReset
+  startDailyReset,
+  loadProfile,     // przydatne do komend statystyk
+  ensureUser
 };
