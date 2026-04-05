@@ -9,63 +9,58 @@ const WORDS = [
   "legenda", "przygoda", "skarbiec", "złoto", "magia", "czarodziej", "potwór",
   "loch", "klucz", "brama", "most", "wieża", "forteca", "armia", "koń", "łuk",
   "strzała", "burza", "wiatr", "deszcz", "słońce", "księżyc", "odwaga", "honor",
-  "siła", "mądrość", "wolność", "epika", "heros", "smocze", "rycerski"
+  "siła", "mądrość", "wolność", "epika", "heros"
 ];
 
 // ====================== LOSOWA NAGRODA ======================
 function getRandomReward() {
-  const chanceForMultiplier = Math.random();
-
-  if (chanceForMultiplier < 0.35) { 
-    // 35% szansy na mnożnik
+  if (Math.random() < 0.38) { // 38% szansy na mnożnik
     const multipliers = [
-      { value: 1.5, weight: 40 },
-      { value: 2.0, weight: 25 },
-      { value: 2.5, weight: 15 },
-      { value: 3.0, weight: 10 },
-      { value: 4.0, weight: 5 },
-      { value: 5.0, weight: 1 }   // bardzo rzadki
+      { value: 1.5, chance: 35 },
+      { value: 2.0, chance: 25 },
+      { value: 2.5, chance: 18 },
+      { value: 3.0, chance: 12 },
+      { value: 4.0, chance: 7 },
+      { value: 5.0, chance: 3 }   // tylko 3% na x5
     ];
 
-    let totalWeight = multipliers.reduce((sum, m) => sum + m.weight, 0);
-    let random = Math.random() * totalWeight;
+    let total = multipliers.reduce((sum, m) => sum + m.chance, 0);
+    let roll = Math.random() * total;
 
-    for (const mult of multipliers) {
-      random -= mult.weight;
-      if (random <= 0) {
-        const duration = getDurationForMultiplier(mult.value);
+    for (const m of multipliers) {
+      roll -= m.chance;
+      if (roll <= 0) {
+        const duration = m.value >= 4 ? 8 : m.value >= 3 ? 12 : 18; // minuty
         return {
           type: "multiplier",
-          value: mult.value,
-          duration: duration,
-          durationMin: Math.floor(duration / 60000)
+          value: m.value,
+          durationMin: duration
         };
       }
     }
   }
 
   // Zwykły XP
-  const xp = Math.floor(180 + Math.random() * 170); // 180 - 349 XP
+  const xp = Math.floor(190 + Math.random() * 160); // 190-349 XP
   return { type: "xp", value: xp };
 }
 
-function getDurationForMultiplier(multi) {
-  if (multi >= 4.5) return 6 * 60 * 1000;   // 6 min
-  if (multi >= 3.5) return 10 * 60 * 1000;  // 10 min
-  if (multi >= 2.5) return 15 * 60 * 1000;  // 15 min
-  return 20 * 60 * 1000;                    // 20 min
-}
-
-// ====================== GAME LOGIC ======================
+// ====================== GAME ======================
 function getRandomWord() {
   const word = WORDS[Math.floor(Math.random() * WORDS.length)];
   const revealed = "⬛".repeat(word.length);
   return { word, revealed };
 }
 
-async function tryStartRandomGame(channel) {
-  if (currentGame) return false;
-  if (Math.random() > 0.06) return false; // 6% szansy na start gry
+async function tryStartRandomGame(channel, forced = false) {
+  if (currentGame) {
+    return { success: false, reason: "game_already_running" };
+  }
+
+  // Jeśli uruchomione ręcznie (/wordguess) - pomijamy losową szansę
+  if (!forced && Math.random() > 0.065) {
+    return { success: false, reason: "random_chance_failed" };
+  }
 
   const { word, revealed } = getRandomWord();
 
@@ -82,12 +77,12 @@ async function tryStartRandomGame(channel) {
     .setDescription(
 `**Słowo do zgadnięcia:**\n` +
 `> \`${revealed}\`\n\n` +
-`Wpisz poprawne słowo!\n` +
+`Wpisz poprawne słowo w czat!\n` +
 `Czas: **30 sekund**`
     )
-    .setFooter({ text: "Nagroda: losowy XP lub mnożnik!" });
+    .setFooter({ text: "Nagroda: zwykły XP lub losowy mnożnik!" });
 
-  await channel.send({ embeds: [embed] });
+  await channel.send({ embeds: [embed] }).catch(() => {});
 
   let timeLeft = 30;
   currentGame.timeout = setInterval(() => {
@@ -95,7 +90,7 @@ async function tryStartRandomGame(channel) {
     if (timeLeft <= 0) endGame(channel, false);
   }, 5000);
 
-  return true;
+  return { success: true };
 }
 
 async function checkAnswer(message) {
@@ -107,14 +102,12 @@ async function checkAnswer(message) {
     clearInterval(currentGame.timeout);
 
     const reward = getRandomReward();
-
     let embed;
 
     if (reward.type === "multiplier") {
       // Aktywacja mnożnika
-      const endTime = Date.now() + reward.duration;
+      const endTime = Date.now() + (reward.durationMin * 60 * 1000);
 
-      // Zapisz boost (przez boostSystem)
       try {
         const boostSystem = require("./boostSystem");
         boostSystem.activeBoosts.set(message.author.id, {
@@ -133,7 +126,6 @@ async function checkAnswer(message) {
 `Otrzymujesz **${reward.value}x XP** na **${reward.durationMin} minut**! 🔥`
         );
     } else {
-      // Zwykły XP
       try {
         const { addXP } = require("./levelSystem");
         await addXP(message.member, reward.value);
@@ -158,6 +150,7 @@ async function checkAnswer(message) {
 
 function endGame(channel, won = false) {
   if (!currentGame) return;
+
   clearInterval(currentGame.timeout);
 
   if (!won) {
