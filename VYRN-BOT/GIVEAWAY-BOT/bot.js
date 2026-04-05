@@ -6,66 +6,56 @@ const path = require("path");
 const { startVoiceXP } = require("./utils/levelSystem");
 const { createTicketPanel } = require("./utils/ticketSystem");
 const { startDailyReset } = require("./utils/profileSystem");
-
-// 🔥 DODANE
 const { startClanSystem } = require("./utils/clanSystem");
 
-// ===== CLIENT =====
+// ====================== CLIENT ======================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMembers,      // Wymagany dla guildMemberAdd
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildVoiceStates
+    GatewayIntentBits.GuildVoiceStates,
   ]
 });
 
 client.commands = new Collection();
 
-// =========================
-// 📦 LOAD COMMANDS
-// =========================
+// ====================== RATE LIMIT HANDLER ======================
+client.rest.on("rateLimited", (info) => {
+  console.warn(`[RATE LIMIT] ${info.method} ${info.url} — Retry after: ${info.timeToReset}ms`);
+});
+
+// ====================== LOAD COMMANDS ======================
 const commandsPath = path.join(__dirname, "commands");
-
-if (!fs.existsSync(commandsPath)) {
-  console.log("❌ Brak folderu commands");
-} else {
-  const commandFiles = fs.readdirSync(commandsPath).filter(f => f.endsWith(".js"));
-
+if (fs.existsSync(commandsPath)) {
+  const commandFiles = fs.readdirSync(commandsPath).filter(file => file.endsWith(".js"));
   for (const file of commandFiles) {
     try {
       const command = require(path.join(commandsPath, file));
-
-      if (!command?.data?.name || typeof command.execute !== "function") {
-        console.log(`⚠️ Zła komenda: ${file}`);
-        continue;
+      if (command?.data?.name && typeof command.execute === "function") {
+        client.commands.set(command.data.name, command);
+        console.log(`✅ Załadowano komendę: ${command.data.name}`);
+      } else {
+        console.warn(`⚠️ Nieprawidłowa komenda: ${file}`);
       }
-
-      client.commands.set(command.data.name, command);
-
     } catch (err) {
-      console.log(`❌ Błąd komendy ${file}:`, err);
+      console.error(`❌ Błąd podczas ładowania komendy ${file}:`, err);
     }
   }
+} else {
+  console.warn("❌ Folder 'commands' nie istnieje!");
 }
 
-// =========================
-// ⚡ LOAD EVENTS
-// =========================
+// ====================== LOAD EVENTS ======================
 const eventsPath = path.join(__dirname, "events");
-
-if (!fs.existsSync(eventsPath)) {
-  console.log("❌ Brak folderu events");
-} else {
-  const eventFiles = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
-
+if (fs.existsSync(eventsPath)) {
+  const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
   for (const file of eventFiles) {
     try {
       const event = require(path.join(eventsPath, file));
-
       if (!event.name || typeof event.execute !== "function") {
-        console.log(`⚠️ Zły event: ${file}`);
+        console.warn(`⚠️ Nieprawidłowy event: ${file}`);
         continue;
       }
 
@@ -74,49 +64,41 @@ if (!fs.existsSync(eventsPath)) {
       } else {
         client.on(event.name, (...args) => event.execute(...args, client));
       }
-
+      console.log(`✅ Załadowano event: ${event.name}`);
     } catch (err) {
-      console.log(`❌ Błąd eventu ${file}:`, err);
+      console.error(`❌ Błąd podczas ładowania eventu ${file}:`, err);
     }
   }
+} else {
+  console.warn("❌ Folder 'events' nie istnieje!");
 }
 
-// =========================
-// 🔥 READY
-// =========================
+// ====================== READY EVENT ======================
 client.once("ready", async () => {
   console.log("=================================");
   console.log(`🔥 Zalogowano jako: ${client.user.tag}`);
   console.log(`📊 Serwery: ${client.guilds.cache.size}`);
   console.log("=================================");
 
-  // 🎤 VOICE XP SYSTEM
+  // Uruchom systemy
   startVoiceXP(client);
-
-  // 🌙 DAILY RESET SYSTEM
   startDailyReset();
-
-  // 🧠 CLAN SYSTEM (NOWE 🔥🔥🔥)
   startClanSystem(client);
 
-  // 🎫 PANEL TICKET
+  // Ticket panel z małym opóźnieniem
   setTimeout(() => {
     createTicketPanel(client);
-  }, 3000);
+  }, 5000);
 });
 
-// =========================
-// ❌ GLOBAL ERRORS
-// =========================
-process.on("unhandledRejection", err => {
+// ====================== GLOBAL ERROR HANDLING ======================
+process.on("unhandledRejection", (err) => {
   console.error("❌ Unhandled Rejection:", err);
 });
 
-process.on("uncaughtException", err => {
+process.on("uncaughtException", (err) => {
   console.error("❌ Uncaught Exception:", err);
 });
 
-// =========================
-// 🚀 LOGIN
-// =========================
+// ====================== LOGIN ======================
 client.login(process.env.TOKEN);
