@@ -16,12 +16,13 @@ function loadBoosts() {
     fs.writeFileSync(BOOST_PATH, JSON.stringify({}, null, 2));
     return;
   }
+
   try {
     const data = JSON.parse(fs.readFileSync(BOOST_PATH, "utf-8"));
     activeBoosts = new Map(Object.entries(data));
     console.log(`[BOOST] Załadowano ${activeBoosts.size} aktywnych boostów`);
   } catch (err) {
-    console.error("[BOOST] Błąd odczytu activeBoosts.json");
+    console.error("[BOOST] Błąd odczytu activeBoosts.json:", err.message);
   }
 }
 
@@ -49,16 +50,20 @@ function getCurrentBoost(userId) {
   return boost ? boost.multiplier : 1;
 }
 
+/**
+ * Szansa na lucky boost (np. 8%).
+ * Zwraca true jeśli boost został przyznany.
+ */
 async function tryGiveRandomBoost(member) {
   if (!member || member.user.bot) return false;
 
-  // Szansa 8% na lucky boost
+  // 8% szansy
   if (Math.random() > 0.08) return false;
 
   const boostsPool = [
     { multiplier: 1.5, duration: 15 * 60 * 1000, name: "1.5x XP" },
     { multiplier: 2.0, duration: 10 * 60 * 1000, name: "2x XP" },
-    { multiplier: 2.5, duration: 7 * 60 * 1000,  name: "2.5x XP" },
+    { multiplier: 2.5, duration: 7 * 60 * 1000, name: "2.5x XP" },
   ];
 
   const chosen = boostsPool[Math.floor(Math.random() * boostsPool.length)];
@@ -66,8 +71,8 @@ async function tryGiveRandomBoost(member) {
 
   activeBoosts.set(member.id, {
     multiplier: chosen.multiplier,
-    endTime: endTime,
-    name: chosen.name
+    endTime,
+    name: chosen.name,
   });
 
   saveBoosts();
@@ -77,19 +82,22 @@ async function tryGiveRandomBoost(member) {
     color: 0x00ff88,
     title: "🎉 LUCKY BOOST!",
     description: `Otrzymałeś **${chosen.name}** na **${Math.floor(chosen.duration / 60000)} minut**!`,
-    footer: { text: "Grinduj szybciej! 🔥" }
+    footer: { text: "Grinduj szybciej! 🔥" },
   };
 
   try {
-    await member.send({ embeds: [embed] }).catch(() => {});
-  } catch (e) {}
+    await member.send({ embeds: [embed] });
+  } catch (e) {
+    // Użytkownik ma zablokowane DM lub błąd — ignorujemy
+  }
 
   return true;
 }
 
-// ====================== EXPORT ======================
 module.exports = {
   getCurrentBoost,
   tryGiveRandomBoost,
-  loadBoosts
+  loadBoosts,
+  // przydatne przy debugowaniu
+  activeBoosts, // tylko do odczytu!
 };
