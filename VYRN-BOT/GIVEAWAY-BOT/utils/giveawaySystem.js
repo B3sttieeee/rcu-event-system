@@ -1,274 +1,372 @@
-const { 
+const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  PermissionsBitField
 } = require("discord.js");
-
 const fs = require("fs");
+const path = require("path");
 
-// ===== PATH =====
+// ====================== CONFIG ======================
 const DATA_DIR = "/data";
-const DB_PATH = `${DATA_DIR}/giveaways.json`;
+const DB_PATH = path.join(DATA_DIR, "giveaways.json");
 
-const giveaways = new Map();
-
-// ===== BONUS ROLES =====
 const BONUS_ROLES = {
-  "1476000458987278397": 1,
-  "1476000995501670534": 3,
-  "1476000459595448442": 5,
-  "1476000991206707221": 7,
-  "1476000991823532032": 10,
-  "1476000992351879229": 15
+  "1476000458987278397": 1,   // Level 5
+  "1476000995501670534": 3,   // Level 15
+  "1476000459595448442": 5,   // Level 30
+  "1476000991206707221": 7,   // Level 45
+  "1476000991823532032": 10,  // Level 60
+  "1476000992351879229": 15   // Level 75
 };
 
-// ===== DB =====
-function loadDB() {
+// Wymagana rola do tworzenia giveawayów (możesz zmienić)
+const REQUIRED_ROLE_TO_CREATE = "1476000458987278397"; // np. Level 5+
+
+// ====================== DATABASE ======================
+const giveaways = new Map(); // messageId => data
+
+function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
   }
+}
 
+function loadDB() {
+  ensureDataDir();
   if (!fs.existsSync(DB_PATH)) {
     fs.writeFileSync(DB_PATH, JSON.stringify({}, null, 2));
+    return {};
   }
-
-  return JSON.parse(fs.readFileSync(DB_PATH));
+  try {
+    return JSON.parse(fs.readFileSync(DB_PATH, "utf-8"));
+  } catch (err) {
+    console.error("❌ Błąd odczytu giveaways.json:", err.message);
+    return {};
+  }
 }
 
 function saveDB() {
-  const obj = Object.fromEntries(giveaways);
-  fs.writeFileSync(DB_PATH, JSON.stringify(obj, null, 2));
+  try {
+    const data = Object.fromEntries(giveaways);
+    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  } catch (err) {
+    console.error("❌ Błąd zapisu giveaways.json:", err.message);
+  }
 }
 
-// ===== LOAD GIVEAWAYS (🔥 FIX DO RESUME)
+// ====================== LOAD & RESUME ======================
 function loadGiveaways(client) {
   const data = loadDB();
+  let loaded = 0;
 
-  for (const messageId in data) {
-    giveaways.set(messageId, data[messageId]);
+  for (const [messageId, giveawayData] of Object.entries(data)) {
+    if (giveawayData.ended) continue;
+
+    giveaways.set(messageId, giveawayData);
+    resumeGiveaway(client, messageId).then(success => {
+      if (success) loaded++;
+    });
   }
 
-  console.log(`🎁 Loaded ${giveaways.size} giveaways`);
+  console.log(`🎁 Załadowano ${giveaways.size} aktywnych giveawayów`);
 }
 
-// ===== RESUME (🔥 TO CI NIE DZIAŁAŁO)
 async function resumeGiveaway(client, messageId) {
   const data = giveaways.get(messageId);
   if (!data) return false;
 
-  const channel = await client.channels.fetch(data.channelId).catch(() => null);
-  if (!channel) return false;
+  try {
+    const channel = await client.channels.fetch(data.channelId).catch(() => null);
+    if (!channel) return false;
 
-  const message = await channel.messages.fetch(messageId).catch(() => null);
-  if (!message) return false;
+    const message = await channel.messages.fetch(messageId).catch(() => null);
+    if (!message) {
+      giveaways.delete(messageId);
+      saveDB();
+      return false;
+    }
 
-  startTimer(message);
-  return true;
+    startTimer(message);
+    return true;
+  } catch (err) {
+    console.error(`❌ Błąd przy wznawianiu giveaway ${messageId}:`, err.message);
+    return false;
+  }
 }
 
-// ===== TIME =====
-function parseTime(time) {
-  const num = parseInt(time);
-  if (time.endsWith("s")) return num * 1000;
-  if (time.endsWith("m")) return num * 60000;
-  if (time.endsWith("h")) return num * 3600000;
-  if (time.endsWith("d")) return num * 86400000;
-  return null;
+// ====================== HELPERS ======================
+function parseTime(timeStr) {
+  const match = timeStr.match(/^(\d+)([smhd])$/);
+  if (!match) return null;
+
+  const num = parseInt(match[1]);
+  const unit = match[2];
+
+  switch (unit) {
+    case "s": return num * 1000;
+    case "m": return num * 60000;
+    case "h": return num * 3600000;
+    case "d": return num * 86400000;
+    default: return null;
+  }
 }
 
 function formatTime(ms) {
-  const total = Math.floor(ms / 1000);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = total % 60;
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
 
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
-// ===== ENTRIES =====
 function getEntries(member) {
-  let entries = 1;
+  let entries = 1; // bazowo 1 los
 
-  for (const roleId in BONUS_ROLES) {
+  for (const [roleId, bonus] of Object.entries(BONUS_ROLES)) {
     if (member.roles.cache.has(roleId)) {
-      entries += BONUS_ROLES[roleId];
+      entries += bonus;
     }
   }
-
   return entries;
 }
 
-// ===== EMBED =====
+// ====================== EMBED ======================
 function buildEmbed(data) {
   const now = Date.now();
-  const left = data.end - now;
+  const timeLeft = Math.max(0, data.end - now);
 
   return new EmbedBuilder()
     .setColor("#d4af37")
     .setTitle(`🎉 ${data.prize}`)
+    .setDescription(data.description || "Kliknij przycisk poniżej, aby dołączyć!")
     .addFields(
+      { name: "🏆 Zwycięzców", value: `\`${data.winners}\``, inline: true },
+      { name: "👥 Uczestników", value: `\`${data.users.length}\``, inline: true },
+      { name: "⏳ Czas do końca", value: `\`${formatTime(timeLeft)}\``, inline: true },
       {
-        name: "🏆 Winners",
-        value: `\`${data.winners}\``,
-        inline: true
-      },
-      {
-        name: "👥 Participants",
-        value: `\`${data.users.length}\``,
-        inline: true
-      },
-      {
-        name: "⏳ Time Left",
-        value: `\`${left > 0 ? formatTime(left) : "Ended"}\``,
-        inline: true
-      },
-      {
-        name: "🎟 Entry Boost",
-        value:
-`Default: \`1x\`
-
-<@&1476000458987278397> → **+1**  
-<@&1476000995501670534> → **+3**  
-<@&1476000459595448442> → **+5**  
-<@&1476000991206707221> → **+7**  
-<@&1476000991823532032> → **+10**  
-<@&1476000992351879229> → **+15**`,
+        name: "🎟 System Boostów",
+        value: Object.entries(BONUS_ROLES)
+          .map(([roleId, bonus]) => `<@&${roleId}> → **+${bonus}** losów`)
+          .join("\n") || "Brak bonusów",
         inline: false
       }
     )
-    .setFooter({ text: "VYRN • Giveaway System" })
+    .setFooter({ text: "VYRN • Giveaway System • Losowanie na podstawie boostów" })
     .setTimestamp();
 }
 
-// ===== CREATE =====
-async function createGiveaway(interaction, data) {
-  const duration = parseTime(data.time);
-  if (!duration) throw new Error("Bad time");
+// ====================== CREATE GIVEAWAY ======================
+async function createGiveaway(interaction, options) {
+  // Sprawdzenie wymaganej roli
+  if (REQUIRED_ROLE_TO_CREATE && !interaction.member.roles.cache.has(REQUIRED_ROLE_TO_CREATE)) {
+    throw new Error("Nie masz wystarczających uprawnień do tworzenia giveawayów.");
+  }
+
+  const duration = parseTime(options.time);
+  if (!duration) throw new Error("Nieprawidłowy format czasu (np. 30m, 2h, 1d)");
 
   const giveawayData = {
-    prize: data.prize,
-    winners: data.winners,
+    prize: options.prize,
+    winners: parseInt(options.winners) || 1,
     end: Date.now() + duration,
     users: [],
     channelId: interaction.channel.id,
     messageId: null,
-    ended: false
+    ended: false,
+    hostId: interaction.user.id,
+    description: options.description || null,
+    requiredRole: options.requiredRole || null // opcjonalny wymóg roli do udziału
   };
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("gw_join")
-      .setLabel("Join")
+      .setLabel("🎟 Dołącz")
       .setStyle(ButtonStyle.Success),
-
     new ButtonBuilder()
       .setCustomId("gw_leave")
-      .setLabel("Leave")
+      .setLabel("❌ Wypisz się")
       .setStyle(ButtonStyle.Secondary)
   );
 
+  const embed = buildEmbed(giveawayData);
+
   const msg = await interaction.channel.send({
-    embeds: [buildEmbed(giveawayData)],
+    embeds: [embed],
     components: [row]
   });
 
   giveawayData.messageId = msg.id;
-
   giveaways.set(msg.id, giveawayData);
   saveDB();
 
   startTimer(msg);
+
+  await interaction.reply({
+    content: `✅ Giveaway utworzony! ID: \`${msg.id}\``,
+    ephemeral: true
+  });
 }
 
-// ===== TIMER =====
+// ====================== TIMER ======================
 function startTimer(message) {
   const interval = setInterval(async () => {
     const data = giveaways.get(message.id);
-    if (!data) return clearInterval(interval);
+    if (!data || data.ended) {
+      clearInterval(interval);
+      return;
+    }
 
-    await message.edit({ embeds: [buildEmbed(data)] }).catch(() => {});
+    try {
+      await message.edit({ embeds: [buildEmbed(data)] });
+    } catch (err) {
+      if (err.code === 10008) { // wiadomość usunięta
+        giveaways.delete(message.id);
+        saveDB();
+        clearInterval(interval);
+      }
+    }
 
     if (Date.now() >= data.end && !data.ended) {
       data.ended = true;
       clearInterval(interval);
-      endGiveaway(message, data);
+      await endGiveaway(message, data);
     }
-
-  }, 5000);
+  }, 10000); // aktualizacja co 10 sekund
 }
 
-// ===== END =====
+// ====================== END GIVEAWAY ======================
 async function endGiveaway(message, data) {
-
-  if (!data.users.length) {
-    await message.channel.send("❌ No participants");
+  if (data.users.length === 0) {
+    await message.channel.send("❌ Giveaway zakończony – brak uczestników.");
     giveaways.delete(message.id);
     saveDB();
     return;
   }
 
-  const winner = data.users[Math.floor(Math.random() * data.users.length)];
+  // Losowanie zwycięzców z uwzględnieniem boostów
+  let weightedUsers = [];
 
-  await message.channel.send(`🎉 Winner: <@${winner}>`);
+  for (const userId of data.users) {
+    try {
+      const member = await message.guild.members.fetch(userId).catch(() => null);
+      if (!member) continue;
 
+      const entries = getEntries(member);
+      for (let i = 0; i < entries; i++) {
+        weightedUsers.push(userId);
+      }
+    } catch (e) {}
+  }
+
+  if (weightedUsers.length === 0) {
+    await message.channel.send("❌ Nie udało się wylosować zwycięzców.");
+    giveaways.delete(message.id);
+    saveDB();
+    return;
+  }
+
+  const winners = [];
+  const winnerCount = Math.min(data.winners, weightedUsers.length);
+
+  for (let i = 0; i < winnerCount; i++) {
+    const randomIndex = Math.floor(Math.random() * weightedUsers.length);
+    const winnerId = weightedUsers.splice(randomIndex, 1)[0];
+    if (!winners.includes(winnerId)) winners.push(winnerId);
+  }
+
+  const winnerMentions = winners.map(id => `<@${id}>`).join(", ");
+
+  const endEmbed = new EmbedBuilder()
+    .setColor("#22c55e")
+    .setTitle("🎉 Giveaway Zakończony!")
+    .setDescription(`**Nagroda:** ${data.prize}\n**Zwycięzcy:** ${winnerMentions}`)
+    .setTimestamp();
+
+  await message.channel.send({ embeds: [endEmbed] });
+  await message.edit({ components: [] }).catch(() => {});
+
+  giveaways.delete(message.id);
   saveDB();
 }
 
-// ===== 🔥 REROLL (FIX)
+// ====================== REROLL ======================
 async function reroll(client, messageId) {
-
   const data = giveaways.get(messageId);
-  if (!data) return "❌ Giveaway not found";
+  if (!data) return "❌ Giveaway nie został znaleziony.";
 
-  const winner = data.users[Math.floor(Math.random() * data.users.length)];
+  if (!data.ended) return "❌ Giveaway jeszcze się nie zakończył.";
 
-  return `<@${winner}>`;
+  // Ponowne losowanie
+  let weightedUsers = [];
+  for (const userId of data.users) {
+    const member = await client.guilds.cache.get(data.channelId.split('/')[0])?.members.fetch(userId).catch(() => null); // uproszczone
+    if (member) {
+      const entries = getEntries(member);
+      for (let i = 0; i < entries; i++) weightedUsers.push(userId);
+    }
+  }
+
+  if (weightedUsers.length === 0) return "❌ Brak ważnych uczestników do rerolla.";
+
+  const winnerId = weightedUsers[Math.floor(Math.random() * weightedUsers.length)];
+
+  return `🎉 **Reroll!** Nowy zwycięzca: <@${winnerId}>`;
 }
 
-// ===== BUTTONS =====
+// ====================== BUTTON HANDLER ======================
 async function handleGiveaway(interaction) {
   const data = giveaways.get(interaction.message.id);
-  if (!data) return;
+  if (!data || data.ended) {
+    return interaction.reply({ content: "❌ Ten giveaway jest już zakończony.", ephemeral: true });
+  }
 
   const userId = interaction.user.id;
 
   if (interaction.customId === "gw_join") {
-
-    if (!data.users.includes(userId)) {
-      data.users.push(userId);
-      saveDB();
+    if (data.users.includes(userId)) {
+      return interaction.reply({ content: "✅ Już bierzesz udział!", ephemeral: true });
     }
 
-    await interaction.reply({
-      content: "🎟 Joined",
-      ephemeral: true
-    });
+    // Opcjonalny wymóg roli
+    if (data.requiredRole && !interaction.member.roles.cache.has(data.requiredRole)) {
+      return interaction.reply({ content: "❌ Nie posiadasz wymaganej roli do udziału.", ephemeral: true });
+    }
+
+    data.users.push(userId);
+    saveDB();
+
+    await interaction.reply({ content: "🎟 Dołączyłeś do giveaway!", ephemeral: true });
   }
 
   if (interaction.customId === "gw_leave") {
+    if (!data.users.includes(userId)) {
+      return interaction.reply({ content: "❌ Nie brałeś udziału.", ephemeral: true });
+    }
 
     data.users = data.users.filter(id => id !== userId);
     saveDB();
 
-    await interaction.reply({
-      content: "❌ Left",
-      ephemeral: true
-    });
+    await interaction.reply({ content: "❌ Wypisałeś się z giveaway.", ephemeral: true });
   }
 
-  interaction.message.edit({
-    embeds: [buildEmbed(data)]
-  }).catch(() => {});
+  // Aktualizacja embedu
+  try {
+    await interaction.message.edit({ embeds: [buildEmbed(data)] });
+  } catch (err) {}
 }
 
-// ===== EXPORT =====
+// ====================== EXPORT ======================
 module.exports = {
   createGiveaway,
   handleGiveaway,
   reroll,
   loadGiveaways,
-  resumeGiveaway
+  resumeGiveaway,
+  endGiveaway // na wszelki wypadek
 };
