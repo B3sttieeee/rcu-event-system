@@ -1,18 +1,18 @@
 const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
 
-// Poprawne importy
+// ====================== IMPORTY ======================
 const { addXP, loadConfig } = require("../utils/levelSystem");
 const { addMessage, isDailyReady } = require("../utils/profileSystem");
 const { getConfig } = require("../utils/configSystem");
 const { tryGiveRandomBoost } = require("../utils/boostSystem");
 const { tryStartRandomGame, checkAnswer } = require("../utils/wordGuessSystem");
 
-const cooldown = new Map();
-const boostCooldown = new Map();
+const cooldown = new Map();           // cooldown na XP
+const boostCooldown = new Map();      // cooldown na lucky boost
 const dailyNotified = new Set();
 
 // ====================== CONFIG ======================
-const LEVEL_CHANNEL_ID = "1475999590716018719";   // ← Kanał na level upy
+const LEVEL_CHANNEL_ID = "1475999590716018719";
 
 // ====================== HELPERS ======================
 function neededXP(level) {
@@ -29,16 +29,16 @@ module.exports = {
       const config = await getConfig(message.guild.id) || {};
       const PREFIX = config.prefix || ".";
 
-      // Komendy prefixowe
+      // 1. Komendy prefixowe
       if (message.content.startsWith(PREFIX)) {
         await handleCommands(message, PREFIX);
         return;
       }
 
-      // System zgadywania słowa
+      // 2. System zgadywania słowa
       if (await checkAnswer(message)) return;
 
-      // Główny system XP
+      // 3. Główny system XP + Boost + Daily + Gra
       await handleXPSystem(message);
 
     } catch (err) {
@@ -47,12 +47,12 @@ module.exports = {
   }
 };
 
-// ====================== XP + BOOST + DAILY + GRA ======================
+// ====================== GŁÓWNY SYSTEM XP ======================
 async function handleXPSystem(message) {
   const now = Date.now();
   const userId = message.author.id;
 
-  // Cooldown na XP
+  // Cooldown na XP (2 sekundy)
   if (cooldown.has(userId) && now - cooldown.get(userId) < 2000) return;
   cooldown.set(userId, now);
 
@@ -60,7 +60,7 @@ async function handleXPSystem(message) {
 
   const cfg = loadConfig();
 
-  // Lucky Boost
+  // Lucky Boost (rzadki)
   if (!boostCooldown.has(userId) || now - boostCooldown.get(userId) > 60000) {
     const gaveBoost = await tryGiveRandomBoost(message.member);
     if (gaveBoost) {
@@ -92,17 +92,16 @@ async function handleXPSystem(message) {
     await tryStartRandomGame(message.channel);
   }
 
-  // ====================== LEVEL UP ======================
+  // Level Up
   if (result?.leveledUp) {
-    console.log(`🎉 ${message.author.tag} wbija level ${result.level}!`); // log do konsoli
-    await sendLevelUpMessage(message, result);   // zawsze wyśle na LEVEL_CHANNEL_ID
+    console.log(`🎉 ${message.author.tag} wbija level ${result.level}!`);
+    await sendLevelUpMessage(message, result);
   }
-}
+};
 
-// ====================== LEVEL UP MESSAGE (Poprawiona) ======================
+// ====================== LEVEL UP MESSAGE ======================
 async function sendLevelUpMessage(message, result) {
   const levelUpChannel = message.guild.channels.cache.get(LEVEL_CHANNEL_ID);
-
   if (!levelUpChannel?.isTextBased()) {
     console.warn(`⚠️ Kanał level up (${LEVEL_CHANNEL_ID}) nie istnieje lub nie jest tekstowy!`);
     return;
@@ -133,16 +132,16 @@ async function sendLevelUpMessage(message, result) {
 
   try {
     await levelUpChannel.send({
-      content: `🎉 ${message.author}`,   // ping użytkownika
+      content: `🎉 ${message.author}`,
       embeds: [embed]
     });
-    console.log(`✅ Wiadomość level up wysłana dla ${message.author.tag} (Level ${result.level})`);
+    console.log(`✅ Level up wysłany dla ${message.author.tag} → Level ${result.level}`);
   } catch (err) {
     console.error(`❌ Nie udało się wysłać level up dla ${message.author.tag}:`, err.message);
   }
-}
+};
 
-// ====================== POZOSTAŁE FUNKCJE (handleCommands, showRank, admin commands) ======================
+// ====================== KOMENDY PREFIXOWE ======================
 async function handleCommands(message, PREFIX) {
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const cmd = args.shift()?.toLowerCase();
@@ -163,6 +162,7 @@ async function handleCommands(message, PREFIX) {
   }
 }
 
+// ====================== RANK ======================
 async function showRank(message) {
   const { loadDB } = require("../utils/levelSystem");
   const db = loadDB();
@@ -175,7 +175,10 @@ async function showRank(message) {
 
   const embed = new EmbedBuilder()
     .setColor("#0f172a")
-    .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL({ dynamic: true }) })
+    .setAuthor({
+      name: message.author.username,
+      iconURL: message.author.displayAvatarURL({ dynamic: true })
+    })
     .setDescription(
       `🏆 **LEVEL ${userData.level}**\n\n` +
       `<a:XP:1488763317857161377> \`${userData.xp} / ${needed} XP\` **(${progress}%)**\n\n` +
@@ -189,8 +192,31 @@ async function showRank(message) {
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
-// Admin commands (bez zmian)
-async function setMessageXP(message, args) { /* ... Twoja funkcja ... */ }
-async function setVoiceXP(message, args) { /* ... */ }
-async function setLengthBonus(message, args) { /* ... */ }
-async function setGlobalMultiplier(message, args) { /* ... */ }
+// ====================== ADMIN COMMANDS ======================
+async function setMessageXP(message, args) {
+  const val = parseInt(args[0]);
+  if (isNaN(val) || val < 1) return message.reply("❌ Poprawne użycie: `.setxp <liczba>`");
+  require("../utils/levelSystem").setMessageXP(val);
+  await message.reply(`✅ Message XP ustawione na **${val}**`);
+}
+
+async function setVoiceXP(message, args) {
+  const val = parseInt(args[0]);
+  if (isNaN(val) || val < 1) return message.reply("❌ Poprawne użycie: `.setvcxp <liczba>`");
+  require("../utils/levelSystem").setVoiceXP(val);
+  await message.reply(`✅ Voice XP ustawione na **${val}**`);
+}
+
+async function setLengthBonus(message, args) {
+  const val = parseFloat(args[0]);
+  if (isNaN(val)) return message.reply("❌ Poprawne użycie: `.setlengthbonus <liczba>`");
+  require("../utils/levelSystem").setLengthBonus(val);
+  await message.reply(`✅ Length Bonus ustawiony na **${val}**`);
+}
+
+async function setGlobalMultiplier(message, args) {
+  const val = parseFloat(args[0]);
+  if (isNaN(val) || val < 0.1) return message.reply("❌ Poprawne użycie: `.multixp <liczba>`");
+  require("../utils/levelSystem").setGlobalMultiplier(val);
+  await message.reply(`🔥 Global Multiplier ustawiony na **${val}x**`);
+}
