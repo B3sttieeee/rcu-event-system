@@ -1,11 +1,12 @@
 const fs = require("fs");
+const path = require("path");
 const { ChannelType } = require("discord.js");
 const { getCurrentBoost } = require("./boostSystem");
 
 // ====================== PATHS ======================
 const DATA_DIR = "/data";
-const DB_PATH = "/data/levels.json";
-const CONFIG_PATH = "/data/levelConfig.json";
+const DB_PATH = path.join(DATA_DIR, "levels.json");
+const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -19,12 +20,12 @@ let configCache = null;
 let voiceSystemRunning = false;
 
 // ====================== COOLDOWNS ======================
-const xpCooldown = new Map(); // tylko do voice XP (message ma własny)
+const xpCooldown = new Map(); // tylko do voice XP
 
 // ====================== HELPERS ======================
 const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
-// ====================== LOAD / SAVE DB ======================
+// ====================== DATABASE ======================
 function loadDB() {
   if (!fs.existsSync(DB_PATH)) {
     const initial = { xp: {} };
@@ -69,6 +70,7 @@ function loadConfig() {
       globalMultiplier: 1,
       boostRole: "1476000398107217980"
     };
+
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
     configCache = defaultConfig;
     console.log("[LEVEL] Utworzono domyślną konfigurację levelConfig.json");
@@ -121,12 +123,12 @@ function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
 
-// ====================== GLOBAL MULTIPLIER ======================
+// ====================== MULTIPLIER ======================
 function getMultiplier(member) {
   const cfg = loadConfig();
   let multi = cfg.globalMultiplier || 1;
 
-  // Lucky Boost (czasowy)
+  // Lucky Boost (czasowy z boostSystem)
   multi *= getCurrentBoost(member.id);
 
   // Stały boost role
@@ -145,7 +147,7 @@ async function addXP(member, baseAmount = 0, messageLength = 0) {
 
   const now = Date.now();
 
-  // Anty-spam cooldown (3 sekundy)
+  // Anty-spam cooldown
   if (xpCooldown.has(member.id) && now - xpCooldown.get(member.id) < 3000) {
     return { leveledUp: false, gained: 0 };
   }
@@ -165,7 +167,7 @@ async function addXP(member, baseAmount = 0, messageLength = 0) {
     amount = Math.floor(amount * (1 + cfg.lengthBonus));
   }
 
-  // Zastosowanie wszystkich mnożników
+  // Zastosowanie mnożników
   amount = Math.floor(amount * getMultiplier(member));
 
   if (amount <= 0) return { leveledUp: false, gained: 0 };
@@ -208,7 +210,7 @@ async function checkRoles(member, currentLevel) {
       } catch (err) {
         console.error(`❌ Nie udało się dodać roli level ${requiredLevel} dla ${member.user.tag}:`, err.message);
       }
-      await wait(800); // mały delay między rolami, żeby nie rate-limit
+      await wait(800); // delay przeciw rate limit
     }
   }
 }
@@ -238,7 +240,8 @@ function startVoiceXP(client) {
 
           try {
             await addXP(member, cfg.voiceXP);
-            // addVoiceTime z profileSystem (jeśli istnieje)
+
+            // Dodaj czas głosowy do profilu (jeśli istnieje)
             const { addVoiceTime } = require("./profileSystem");
             if (typeof addVoiceTime === "function") {
               addVoiceTime(memberId, 60);
@@ -288,5 +291,5 @@ module.exports = {
   setVoiceXP,
   setLengthBonus,
   setGlobalMultiplier,
-  getMultiplier,        // przydatne do debugu
+  getMultiplier,        // przydatne do debugowania
 };
