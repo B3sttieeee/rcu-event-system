@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require("discord.js");
 
 let currentGame = null;
 
@@ -14,7 +14,7 @@ const WORDS = [
 
 // ====================== LOSOWA NAGRODA ======================
 function getRandomReward() {
-  if (Math.random() < 0.37) { // 37% na mnożnik
+  if (Math.random() < 0.37) {
     const multipliers = [
       { val: 1.5, chance: 38 },
       { val: 2.0, chance: 27 },
@@ -36,14 +36,23 @@ function getRandomReward() {
     }
   }
 
-  const xp = Math.floor(200 + Math.random() * 150); // 200-349 XP
+  const xp = Math.floor(200 + Math.random() * 150);
   return { type: "xp", value: xp };
+}
+
+// ====================== TWORZENIE PRZYCISKU ======================
+function createHintButton() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("wordguess_hint")
+      .setLabel("💡 Podpowiedź")
+      .setStyle(ButtonStyle.Primary)
+  );
 }
 
 // ====================== START GRY ======================
 async function tryStartRandomGame(channel, forced = false) {
   if (currentGame) return { success: false, reason: "already_running" };
-
   if (!forced && Math.random() > 0.07) return { success: false, reason: "chance" };
 
   const word = WORDS[Math.floor(Math.random() * WORDS.length)];
@@ -52,27 +61,30 @@ async function tryStartRandomGame(channel, forced = false) {
   currentGame = {
     channelId: channel.id,
     word: word.toLowerCase(),
-    revealed: revealed,
+    revealed: revealed.split(""),   // zmieniamy na tablicę żeby łatwiej modyfikować
     timeout: null,
-    message: null
+    message: null,
+    hintUsed: false,
   };
 
   const embed = new EmbedBuilder()
     .setColor("#ffaa00")
     .setTitle("🎲 **ZGADYWANIE SŁOWA**")
     .setDescription(
-`**Słowo:**\n` +
-`\`${revealed}\`\n\n` +
-`Wpisz poprawne słowo w czat!\n` +
-`⏳ Czas: **30 sekund**`
+      `**Słowo:**\n\`${currentGame.revealed.join("")}\`\n\n` +
+      `Wpisz poprawne słowo w czat!\n` +
+      `⏳ Czas: **30 sekund**`
     )
     .setFooter({ text: "Nagroda: XP lub losowy mnożnik!" });
 
   try {
-    const msg = await channel.send({ embeds: [embed] });
+    const msg = await channel.send({
+      embeds: [embed],
+      components: [createHintButton()]
+    });
     currentGame.message = msg;
   } catch (err) {
-    console.error("[WORDGUESS] Nie udało się wysłać embedu:", err);
+    console.error("[WORDGUESS] Nie udało się wysłać wiadomości:", err);
     currentGame = null;
     return { success: false };
   }
@@ -85,18 +97,60 @@ async function tryStartRandomGame(channel, forced = false) {
       return;
     }
 
-    const updated = EmbedBuilder.from(embed)
-      .setDescription(
-`**Słowo:**\n` +
-`\`${revealed}\`\n\n` +
-`Wpisz poprawne słowo w czat!\n` +
-`⏳ Czas: **${timeLeft} sekund**`
-      );
+    const updatedEmbed = EmbedBuilder.from(embed).setDescription(
+      `**Słowo:**\n\`${currentGame.revealed.join("")}\`\n\n` +
+      `Wpisz poprawne słowo w czat!\n` +
+      `⏳ Czas: **${timeLeft} sekund**`
+    );
 
-    if (currentGame.message) currentGame.message.edit({ embeds: [updated] }).catch(() => {});
+    if (currentGame.message) {
+      currentGame.message.edit({ embeds: [updatedEmbed] }).catch(() => {});
+    }
   }, 5000);
 
   return { success: true };
+}
+
+// ====================== PODPOWIEDŹ (BUTTON) ======================
+async function handleHint(interaction) {
+  if (!currentGame || interaction.channel.id !== currentGame.channelId) {
+    return interaction.reply({ content: "❌ Ta gra już się skończyła.", ephemeral: true });
+  }
+
+  if (currentGame.hintUsed) {
+    return interaction.reply({ content: "❌ Podpowiedź została już użyta!", ephemeral: true });
+  }
+
+  // Znajdź pozycje z ⬛
+  const hiddenIndices = currentGame.revealed
+    .map((char, i) => (char === "⬛" ? i : -1))
+    .filter(i => i !== -1);
+
+  if (hiddenIndices.length === 0) {
+    return interaction.reply({ content: "❌ Wszystkie litery są już widoczne!", ephemeral: true });
+  }
+
+  // Losuj jedną ukrytą pozycję
+  const randomIndex = hiddenIndices[Math.floor(Math.random() * hiddenIndices.length)];
+  const correctLetter = currentGame.word[randomIndex];
+
+  // Odsłoń literę
+  currentGame.revealed[randomIndex] = correctLetter.toUpperCase();
+  currentGame.hintUsed = true;
+
+  // Aktualizuj embed
+  const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0]).setDescription(
+    `**Słowo:**\n\`${currentGame.revealed.join("")}\`\n\n` +
+    `Wpisz poprawne słowo w czat!\n` +
+    `⏳ Czas: **30 sekund**`
+  );
+
+  await interaction.message.edit({ embeds: [updatedEmbed] });
+
+  await interaction.reply({
+    content: "💡 **Podpowiedź użyta!** Jedna litera została odsłonięta.",
+    ephemeral: true
+  });
 }
 
 // ====================== SPRAWDZANIE ODPOWIEDZI ======================
@@ -109,17 +163,17 @@ async function checkAnswer(message) {
     clearInterval(currentGame.timeout);
 
     const reward = getRandomReward();
-
     let embed;
+
     if (reward.type === "multiplier") {
-      const endTime = Date.now() + (reward.durationMin * 60 * 1000);
+      const endTime = Date.now() + reward.durationMin * 60 * 1000;
 
       try {
         const boostSystem = require("./boostSystem");
         boostSystem.activeBoosts.set(message.author.id, {
           multiplier: reward.value,
-          endTime: endTime,
-          name: `${reward.value}x XP`
+          endTime,
+          name: `${reward.value}x XP`,
         });
         boostSystem.saveBoosts();
       } catch (e) {}
@@ -128,8 +182,8 @@ async function checkAnswer(message) {
         .setColor("#00ff88")
         .setTitle("🎉 WYGRAŁEŚ MNOŻNIK!")
         .setDescription(
-`${message.author} zgadł słowo **${currentGame.word}**!\n\n` +
-`Otrzymujesz **${reward.value}x XP** na **${reward.durationMin} minut**! 🔥`
+          `${message.author} zgadł słowo **${currentGame.word}**!\n\n` +
+          `Otrzymujesz **${reward.value}x XP** na **${reward.durationMin} minut**! 🔥`
         );
     } else {
       try {
@@ -141,22 +195,21 @@ async function checkAnswer(message) {
         .setColor("#00ff88")
         .setTitle("✅ Poprawna odpowiedź!")
         .setDescription(
-`${message.author} zgadł słowo **${currentGame.word}**!\n` +
-`Otrzymujesz **${reward.value} XP**!`
+          `${message.author} zgadł słowo **${currentGame.word}**!\n` +
+          `Otrzymujesz **${reward.value} XP**!`
         );
     }
 
     await message.channel.send({ embeds: [embed] }).catch(() => {});
-
     currentGame = null;
     return true;
   }
+
   return false;
 }
 
 function endGame(channel, won = false) {
   if (!currentGame) return;
-
   clearInterval(currentGame.timeout);
 
   if (!won) {
@@ -171,7 +224,10 @@ function endGame(channel, won = false) {
   currentGame = null;
 }
 
+// ====================== EXPORT ======================
 module.exports = {
   tryStartRandomGame,
-  checkAnswer
+  checkAnswer,
+  handleHint,        // ← nowy eksport!
+  endGame,
 };
