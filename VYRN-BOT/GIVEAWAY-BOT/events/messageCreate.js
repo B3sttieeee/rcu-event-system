@@ -1,5 +1,5 @@
 const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
-const { addXP, loadConfig } = require("../utils/levelSystem");
+const { addXP } = require("../utils/levelSystem");
 const { addMessage, isDailyReady } = require("../utils/profileSystem");
 const { getConfig } = require("../utils/configSystem");
 
@@ -7,7 +7,8 @@ const { getConfig } = require("../utils/configSystem");
 const { tryGiveRandomBoost } = require("../utils/boostSystem");
 const { tryStartRandomGame, checkAnswer } = require("../utils/wordGuessSystem");
 
-const cooldown = new Map();
+const cooldown = new Map();           // cooldown na przyznawanie XP
+const boostCooldown = new Map();      // cooldown na lucky boost
 const dailyNotified = new Set();
 
 // ====================== CONFIG ======================
@@ -21,7 +22,6 @@ function neededXP(level) {
 // ====================== EVENT ======================
 module.exports = {
   name: Events.MessageCreate,
-
   async execute(message) {
     if (!message.guild || message.author.bot) return;
 
@@ -29,12 +29,10 @@ module.exports = {
       const config = await getConfig(message.guild.id) || {};
       const PREFIX = config.prefix || ".";
 
-      const isCommand = message.content.startsWith(PREFIX);
-
       // =========================
       // 💬 KOMENDY PREFIXOWE
       // =========================
-      if (isCommand) {
+      if (message.content.startsWith(PREFIX)) {
         await handleCommands(message, PREFIX);
         return;
       }
@@ -45,7 +43,7 @@ module.exports = {
       if (await checkAnswer(message)) return;
 
       // =========================
-      // 💰 SYSTEM XP + DAILY + LOSOWE BOOSTY
+      // 💰 SYSTEM XP + DAILY + LOSOWE BOOSTY + GRA
       // =========================
       await handleXPSystem(message);
 
@@ -55,7 +53,7 @@ module.exports = {
   }
 };
 
-// ====================== OBSŁUGA KOMEND ======================
+// ====================== OBSŁUGA KOMEND PREFIXOWYCH ======================
 async function handleCommands(message, PREFIX) {
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const cmd = args.shift()?.toLowerCase();
@@ -90,10 +88,9 @@ async function showRank(message) {
   const { loadDB } = require("../utils/levelSystem");
   const db = loadDB();
   const userData = db.xp?.[message.author.id] || { xp: 0, level: 0 };
-
   const needed = neededXP(userData.level);
   const progress = needed > 0 ? Math.min(100, Math.floor((userData.xp / needed) * 100)) : 0;
-
+  
   const cfg = loadConfig();
   const hasBoost = message.member.roles.cache.has(cfg.boostRole || "1476000398107217980");
 
@@ -116,47 +113,57 @@ async function showRank(message) {
   await message.reply({ embeds: [embed] }).catch(() => {});
 }
 
-// ====================== XP SYSTEM ======================
+// ====================== XP + BOOST + DAILY + GRA ======================
 async function handleXPSystem(message) {
   const now = Date.now();
+  const userId = message.author.id;
 
-  // Cooldown 2 sekundy
-  if (cooldown.has(message.author.id) && now - cooldown.get(message.author.id) < 2000) {
+  // Cooldown na XP (2 sekundy między wiadomościami)
+  if (cooldown.has(userId) && now - cooldown.get(userId) < 2000) {
     return;
   }
-  cooldown.set(message.author.id, now);
+  cooldown.set(userId, now);
 
   if (message.content.length < 3) return;
 
   const cfg = loadConfig();
 
-  // Losowy Lucky Boost (czasowy)
-  tryGiveRandomBoost(message.member);
+  // ====================== LUCKY BOOST ======================
+  // Znacznie rzadsze sprawdzanie + cooldown 60 sekund
+  if (!boostCooldown.has(userId) || now - boostCooldown.get(userId) > 60000) {
+    const gaveBoost = await tryGiveRandomBoost(message.member);
+    
+    if (gaveBoost) {
+      boostCooldown.set(userId, now);        // reset tylko gdy boost padł
+    } else if (Math.random() < 0.20) {       // 20% szansy na reset cooldownu nawet bez boosta
+      boostCooldown.set(userId, now);
+    }
+  }
 
-  // Przyznaj normalny XP
+  // ====================== NORMALNY XP ======================
   const result = await addXP(
     message.member,
     cfg.messageXP,
     message.content.length
   );
 
-  // Daily progress
-  addMessage(message.author.id);
+  // ====================== DAILY PROGRESS ======================
+  addMessage(userId);
 
-  // Powiadomienie o gotowym daily
-  if (isDailyReady(message.author.id) && !dailyNotified.has(message.author.id)) {
-    dailyNotified.add(message.author.id);
+  if (isDailyReady(userId) && !dailyNotified.has(userId)) {
+    dailyNotified.add(userId);
     message.author.send("🎯 **Twój daily jest gotowy!**\nUżyj `/daily` aby odebrać nagrodę 🎁")
       .catch(() => {});
     message.react("🎯").catch(() => {});
   }
 
-  // Szansa na rozpoczęcie gry zgadywania słowa
+  // ====================== GRA ZGADYWANIA SŁOWA ======================
+  // Szansa na uruchomienie gry ~6.5%
   if (Math.random() < 0.065) {
     await tryStartRandomGame(message.channel);
   }
 
-  // Level Up Announcement
+  // ====================== LEVEL UP ANNOUNCEMENT ======================
   if (result?.leveledUp) {
     await sendLevelUpMessage(message, result);
   }
