@@ -35,10 +35,13 @@ async function createTicketPanel(client) {
         `📩 **Wybierz rodzaj zgłoszenia**\n` +
         `━━━━━━━━━━━━━━━━━━\n\n` +
         `**🔥 VYRN — Główny Klan**\n` +
-        `• **3N+** lub **15M+ Jajek**\n` +
+        `**Wymagania:**\n` +
+        `• **3MN+ Rebirthy**\n` +
+        `• **15M+ Jajek**\n` +
         `• Dobry Team\n` +
         `• Dobre Game Passy (szczególnie pod jajka)\n\n` +
         `**🛡️ V2RN — Akademia**\n` +
+        `**Wymagania:**\n` +
         `• **150 O+**\n` +
         `• Dobry Team\n\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
@@ -117,7 +120,6 @@ async function handleOpenTicket(interaction, type) {
   const isV2RN = type === "v2rn";
   const prefix = isV2RN ? CONFIG.V2RN_PREFIX : CONFIG.TICKET_PREFIX;
 
-  // Sprawdzenie czy użytkownik już ma ticket tego typu
   const existingTicket = interaction.guild.channels.cache.find(
     ch => ch.topic === interaction.user.id && ch.name.startsWith(prefix)
   );
@@ -208,12 +210,12 @@ async function handleModalSubmit(interaction) {
       isPolish
         ? `👤 **Użytkownik:** ${interaction.user}\n📝 **Nick:** ${nick}\n\n` +
           (isV2RN 
-            ? `**Wymagania do akademii V2RN:**\n• Minimum **150 O+**\n• Dobry Team`
-            : `**Wymagania do głównego klanu VYRN:**\n• Minimum **3N+** lub **15M+ Jajek**\n• Dobry Team\n• Dobre Game Passy (szczególnie pod jajka)`)
+            ? `**Wymagania do V2RN Academy:**\n• Minimum **150 O+**\n• Dobry Team`
+            : `**Wymagania do głównego klanu VYRN:**\n• Minimum **3MN+ Rebirthy**\n• Minimum **15M+ Jajek**\n• Dobry Team\n• Dobre Game Passy (szczególnie pod jajka)`)
         : `👤 **User:** ${interaction.user}\n📝 **Nickname:** ${nick}\n\n` +
           (isV2RN 
             ? `**Requirements for V2RN Academy:**\n• Minimum **150 O+**\n• Good Team`
-            : `**Requirements for VYRN Main Clan:**\n• Minimum **3N+** or **15M+ Eggs**\n• Good Team\n• Good Game Passes (especially egg related)`)
+            : `**Requirements for VYRN Main Clan:**\n• Minimum **3MN+ Rebirths**\n• Minimum **15M+ Eggs**\n• Good Team\n• Good Game Passes (especially egg related)`)
     )
     .setFooter({ text: isV2RN ? "VYRN • V2RN Academy" : "VYRN • Main Clan Recruitment" })
     .setTimestamp();
