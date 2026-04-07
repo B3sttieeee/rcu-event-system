@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { getCoins } = require("../../../utils/economySystem");   // ← POPRAWIONA ŚCIEŻKA
+const { getCoins } = require("../../utils/economySystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
