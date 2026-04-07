@@ -1,11 +1,11 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { SHOP_BOOSTS } = require("../../../utils/boostSystem");   // ← POPRAWIONE
-const { getCoins } = require("../../../utils/economySystem");     // ← POPRAWIONE
+const { SHOP_BOOSTS } = require("../../utils/boostSystem");
+const { getCoins } = require("../../utils/economySystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("shop")
-    .setDescription("🛒 Sklep z boostami doświadczenia"),
+    .setDescription("🛒 Sklep z boostami XP"),
 
   async execute(interaction) {
     try {
@@ -14,12 +14,11 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor(0x00ff88)
         .setTitle("🛒 Sklep z Boostami XP")
-        .setDescription(`**Twoje monety:** ${coins.toLocaleString("pl-PL")} 🪙\n\nUżyj komendy \`/buy <id>\` aby zakupić boost.`)
+        .setDescription(`**Twoje monety:** ${coins.toLocaleString("pl-PL")} 🪙\n\nUżyj \`/buy <id>\` aby kupić boost.`)
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setFooter({ text: "VYRN • Economy & Boost System" })
         .setTimestamp();
 
-      // Dodajemy boosty w ładniejszy sposób
       SHOP_BOOSTS.forEach(boost => {
         const durationMinutes = Math.floor(boost.duration / 60000);
 
@@ -32,7 +31,6 @@ module.exports = {
       });
 
       await interaction.reply({ embeds: [embed] });
-
     } catch (err) {
       console.error("❌ Błąd w /shop:", err);
       await interaction.reply({
