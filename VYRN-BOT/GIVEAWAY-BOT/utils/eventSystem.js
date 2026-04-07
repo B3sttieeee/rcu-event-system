@@ -14,24 +14,20 @@ const CONFIG = {
   MERCHANT_ROLE: "1476000993660502139",
   EGG_ROLE: "1489930030166573150",
 
-  // Obrazy
   PANEL_IMAGE: "https://imgur.com/AybkuW5.png",
   START_MERCHANT_IMAGE: "https://imgur.com/7GBAq8Z.png",
   EGG_IMAGE: "https://imgur.com/xppQUWX.png",
 
-  // Godziny eventów
   MERCHANT_HOURS: [2, 5, 8, 11, 14, 17, 20, 23],
   EGG_HOURS: [0, 3, 6, 9, 12, 15, 18, 21],
 
-  // Ustawienia
   REFRESH_INTERVAL: 10000,
   START_MESSAGE_DELETE_AFTER: 15 * 60 * 1000,   // 15 minut
-  PRE_PING_MINUTES: 5
 };
 
+// ====================== DATABASE ======================
 const DB_PATH = path.join(__dirname, "..", "eventDB.json");
 
-// ====================== DATABASE ======================
 function loadDB() {
   if (!fs.existsSync(DB_PATH)) {
     const defaultData = { dm: {} };
@@ -65,7 +61,7 @@ function getNextEvent(hours) {
   for (const hour of hours) {
     if (hour > currentHour) return hour;
   }
-  return hours[0]; // następny dzień
+  return hours[0];
 }
 
 function getCountdown(hours) {
@@ -76,8 +72,8 @@ function getCountdown(hours) {
   if (nextHour <= now.getHours()) {
     target.setDate(target.getDate() + 1);
   }
-
   target.setHours(nextHour, 0, 0, 0);
+
   const diff = target - now;
   const totalSeconds = Math.floor(diff / 1000);
   const h = Math.floor(totalSeconds / 3600);
@@ -126,18 +122,9 @@ function createEggStartEmbed() {
 // ====================== BUTTONS & MENUS ======================
 function getControlButtons() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("refresh")
-      .setLabel("🔄 Odśwież")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("roles")
-      .setLabel("🎭 Role")
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId("dm")
-      .setLabel("📩 Powiadomienia DM")
-      .setStyle(ButtonStyle.Primary)
+    new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Odśwież").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("roles").setLabel("🎭 Role").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("dm").setLabel("📩 Powiadomienia DM").setStyle(ButtonStyle.Primary)
   );
 }
 
@@ -185,22 +172,14 @@ async function sendDMNotifications(client, type) {
 async function startPanel(client) {
   try {
     const channel = await client.channels.fetch(CONFIG.CHANNEL_ID);
-    if (!channel?.isTextBased()) {
-      console.error("❌ Kanał event panel nie istnieje lub nie jest tekstowy!");
-      return;
-    }
+    if (!channel?.isTextBased()) return console.error("❌ Kanał event panel nie istnieje!");
 
     const embed = createPanelEmbed();
-    const components = [getControlButtons()];
-
-    const message = await channel.send({ embeds: [embed], components });
+    const message = await channel.send({ embeds: [embed], components: [getControlButtons()] });
 
     setInterval(async () => {
       try {
-        await message.edit({
-          embeds: [createPanelEmbed()],
-          components
-        });
+        await message.edit({ embeds: [createPanelEmbed()], components: [getControlButtons()] });
       } catch (err) {
         if (err.code !== 10008) console.error("Panel refresh error:", err.message);
       }
@@ -208,16 +187,16 @@ async function startPanel(client) {
 
     console.log("✅ Event Panel uruchomiony pomyślnie");
   } catch (err) {
-    console.error("❌ Błąd uruchamiania panelu eventowego:", err);
+    console.error("❌ Błąd uruchamiania panelu:", err);
   }
 }
 
-// ====================== MAIN EVENT SYSTEM ======================
+// ====================== MAIN EVENT SYSTEM (NAPRAWIONY) ======================
 function startEventSystem(client) {
   console.log("🚀 Event System uruchomiony – monitorowanie godzin...");
 
-  // Przechowujemy ID wiadomości z pre-pingiem, żeby móc je usunąć
-  const prePingMessages = new Map(); // key: "m-14" lub "e-12" → message object
+  // Przechowujemy wiadomości z pre-pingiem (klucz: "merchant-14", "egg-12")
+  const prePingMessages = new Map();
 
   setInterval(async () => {
     const now = getNow();
@@ -226,26 +205,26 @@ function startEventSystem(client) {
 
     // ====================== HONEY MERCHANT ======================
     for (const eventHour of CONFIG.MERCHANT_HOURS) {
-      const prePingKey = `m-${eventHour}`;
+      const preKey = `merchant-${eventHour}`;
 
       // 5 minut przed
       if (hour === eventHour - 1 && minute === 55) {
-        if (!prePingMessages.has(prePingKey)) {
+        if (!prePingMessages.has(preKey)) {
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
           if (channel) {
             const pingMsg = await channel.send(`<@&${CONFIG.MERCHANT_ROLE}> ⏳ **Honey Merchant** za 5 minut!`).catch(() => null);
-            if (pingMsg) prePingMessages.set(prePingKey, pingMsg);
+            if (pingMsg) prePingMessages.set(preKey, pingMsg);
           }
         }
       }
 
       // Start eventu
       if (hour === eventHour && minute === 0) {
-        // Usuń pre-ping jeśli istnieje
-        const preMsg = prePingMessages.get(prePingKey);
+        // Usuń pre-ping
+        const preMsg = prePingMessages.get(preKey);
         if (preMsg) {
           preMsg.delete().catch(() => {});
-          prePingMessages.delete(prePingKey);
+          prePingMessages.delete(preKey);
         }
 
         const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
@@ -257,11 +236,8 @@ function startEventSystem(client) {
 
           sendDMNotifications(client, "merchant");
 
-          // Usuń wiadomość startową po 15 minutach
           if (startMsg) {
-            setTimeout(() => {
-              startMsg.delete().catch(() => {});
-            }, CONFIG.START_MESSAGE_DELETE_AFTER);
+            setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
           }
         }
       }
@@ -269,26 +245,23 @@ function startEventSystem(client) {
 
     // ====================== EGG HUNT ======================
     for (const eventHour of CONFIG.EGG_HOURS) {
-      const prePingKey = `e-${eventHour}`;
+      const preKey = `egg-${eventHour}`;
 
-      // 5 minut przed
       if (hour === eventHour - 1 && minute === 55) {
-        if (!prePingMessages.has(prePingKey)) {
+        if (!prePingMessages.has(preKey)) {
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
           if (channel) {
             const pingMsg = await channel.send(`<@&${CONFIG.EGG_ROLE}> ⏳ **Egg Hunt** za 5 minut!`).catch(() => null);
-            if (pingMsg) prePingMessages.set(prePingKey, pingMsg);
+            if (pingMsg) prePingMessages.set(preKey, pingMsg);
           }
         }
       }
 
-      // Start eventu
       if (hour === eventHour && minute === 0) {
-        // Usuń pre-ping jeśli istnieje
-        const preMsg = prePingMessages.get(prePingKey);
+        const preMsg = prePingMessages.get(preKey);
         if (preMsg) {
           preMsg.delete().catch(() => {});
-          prePingMessages.delete(prePingKey);
+          prePingMessages.delete(preKey);
         }
 
         const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
@@ -301,9 +274,7 @@ function startEventSystem(client) {
           sendDMNotifications(client, "egg");
 
           if (startMsg) {
-            setTimeout(() => {
-              startMsg.delete().catch(() => {});
-            }, CONFIG.START_MESSAGE_DELETE_AFTER);
+            setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
           }
         }
       }
@@ -341,28 +312,17 @@ async function handleEventInteraction(interaction) {
       const member = await interaction.guild.members.fetch(interaction.user.id);
       await member.roles.remove([CONFIG.MERCHANT_ROLE, CONFIG.EGG_ROLE]).catch(() => {});
 
-      if (interaction.values.includes("merchant")) {
-        await member.roles.add(CONFIG.MERCHANT_ROLE).catch(() => {});
-      }
-      if (interaction.values.includes("egg")) {
-        await member.roles.add(CONFIG.EGG_ROLE).catch(() => {});
-      }
+      if (interaction.values.includes("merchant")) await member.roles.add(CONFIG.MERCHANT_ROLE).catch(() => {});
+      if (interaction.values.includes("egg")) await member.roles.add(CONFIG.EGG_ROLE).catch(() => {});
 
-      return await interaction.reply({
-        content: "✅ **Role eventowe zostały zaktualizowane!**",
-        ephemeral: true
-      });
+      return await interaction.reply({ content: "✅ Role eventowe zaktualizowane!", ephemeral: true });
     }
 
     if (interaction.isStringSelectMenu() && interaction.customId === "dm_menu") {
       const db = loadDB();
       db.dm[interaction.user.id] = interaction.values;
       saveDB(db);
-
-      return await interaction.reply({
-        content: "✅ **Ustawienia powiadomień DM zostały zapisane!**",
-        ephemeral: true
-      });
+      return await interaction.reply({ content: "✅ Powiadomienia DM zapisane!", ephemeral: true });
     }
   } catch (err) {
     console.error("❌ Błąd w handleEventInteraction:", err);
