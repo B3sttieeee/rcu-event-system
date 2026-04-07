@@ -14,14 +14,17 @@ if (!fs.existsSync(DATA_DIR)) {
 function loadCoins() {
   if (!fs.existsSync(COINS_PATH)) {
     fs.writeFileSync(COINS_PATH, JSON.stringify({}, null, 2));
+    console.log("[ECONOMY] Utworzono nowy userCoins.json");
     return;
   }
+
   try {
     const data = JSON.parse(fs.readFileSync(COINS_PATH, "utf-8"));
     userCoins = new Map(Object.entries(data).map(([id, coins]) => [id, Number(coins)]));
     console.log(`[ECONOMY] Załadowano monety dla ${userCoins.size} użytkowników`);
   } catch (err) {
     console.error("[ECONOMY] Błąd odczytu userCoins.json:", err.message);
+    userCoins = new Map();
   }
 }
 
@@ -50,6 +53,7 @@ function addCoins(userId, amount) {
 function spendCoins(userId, amount) {
   const current = getCoins(userId);
   if (current < amount) return false;
+
   userCoins.set(userId, current - amount);
   saveCoins();
   return true;
