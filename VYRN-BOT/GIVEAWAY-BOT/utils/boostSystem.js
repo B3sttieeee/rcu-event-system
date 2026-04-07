@@ -16,7 +16,6 @@ function loadBoosts() {
     fs.writeFileSync(BOOST_PATH, JSON.stringify({}, null, 2));
     return;
   }
-
   try {
     const data = JSON.parse(fs.readFileSync(BOOST_PATH, "utf-8"));
     activeBoosts = new Map(Object.entries(data));
@@ -50,14 +49,11 @@ function getCurrentBoost(userId) {
   return boost ? boost.multiplier : 1;
 }
 
-/**
- * Szansa na lucky boost (np. 8%).
- * Zwraca true jeśli boost został przyznany.
- */
+// ====================== LUCKY BOOST ======================
 async function tryGiveRandomBoost(member) {
   if (!member || member.user.bot) return false;
 
-  // 8% szansy
+  // 8% szansy na lucky boost
   if (Math.random() > 0.08) return false;
 
   const boostsPool = [
@@ -77,7 +73,6 @@ async function tryGiveRandomBoost(member) {
 
   saveBoosts();
 
-  // Powiadomienie na PV
   const embed = {
     color: 0x00ff88,
     title: "🎉 LUCKY BOOST!",
@@ -87,17 +82,59 @@ async function tryGiveRandomBoost(member) {
 
   try {
     await member.send({ embeds: [embed] });
-  } catch (e) {
-    // Użytkownik ma zablokowane DM lub błąd — ignorujemy
-  }
+  } catch (e) {}
 
   return true;
 }
 
+// ====================== SKLEP Z BOOSTAMI ======================
+const SHOP_BOOSTS = [
+  { id: 1, name: "1.5x XP", multiplier: 1.5, duration: 25 * 60 * 1000, price: 180 },
+  { id: 2, name: "2.0x XP", multiplier: 2.0, duration: 18 * 60 * 1000, price: 350 },
+  { id: 3, name: "2.5x XP", multiplier: 2.5, duration: 12 * 60 * 1000, price: 550 },
+  { id: 4, name: "3.0x XP", multiplier: 3.0, duration: 8 * 60 * 1000,  price: 950 },
+];
+
+async function buyBoost(member, boostId) {
+  const boost = SHOP_BOOSTS.find(b => b.id === boostId);
+  if (!boost) return { success: false, message: "❌ Nie znaleziono takiego boostu!" };
+
+  const economy = require("./economySystem");
+  if (!economy.spendCoins(member.id, boost.price)) {
+    return { 
+      success: false, 
+      message: `❌ Nie masz wystarczająco monet! Potrzebujesz **${boost.price}** 🪙` 
+    };
+  }
+
+  const endTime = Date.now() + boost.duration;
+  activeBoosts.set(member.id, {
+    multiplier: boost.multiplier,
+    endTime,
+    name: boost.name,
+  });
+
+  saveBoosts();
+
+  const embed = {
+    color: 0x00ff88,
+    title: "🎉 Kupiono Boost!",
+    description: `**${boost.name}** na **${Math.floor(boost.duration / 60000)} minut**!\n\nZużyto: **${boost.price}** 🪙`,
+    footer: { text: "Grinduj jeszcze szybciej! 🔥" },
+  };
+
+  try {
+    await member.send({ embeds: [embed] });
+  } catch (e) {}
+
+  return { success: true, boost };
+}
+
 module.exports = {
+  loadBoosts,
   getCurrentBoost,
   tryGiveRandomBoost,
-  loadBoosts,
-  // przydatne przy debugowaniu
-  activeBoosts, // tylko do odczytu!
+  buyBoost,
+  SHOP_BOOSTS,
+  activeBoosts, // tylko do debugu
 };
