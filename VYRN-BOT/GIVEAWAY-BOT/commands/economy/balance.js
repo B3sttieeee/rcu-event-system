@@ -4,7 +4,7 @@ const { getCoins } = require("../../utils/economySystem");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("balance")
-    .setDescription("💰 Pokazuje ile masz monet"),
+    .setDescription("💰 Sprawdź stan swojego konta"),
 
   async execute(interaction) {
     try {
@@ -12,9 +12,14 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0x00ff88)
-        .setTitle("💰 Twoje Monety")
-        .setDescription(`**${coins.toLocaleString("pl-PL")}** 🪙`)
+        .setTitle("💰 Stan Konta")
+        .setDescription(`**${coins.toLocaleString("pl-PL")}** monet 🪙`)
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .addFields({
+          name: "━━━━━━━━━━━━━━━━━━━━",
+          value: "Użyj `/shop`, aby zobaczyć dostępne boosty",
+          inline: false
+        })
         .setFooter({ text: "VYRN • Economy System" })
         .setTimestamp();
 
@@ -22,7 +27,7 @@ module.exports = {
     } catch (err) {
       console.error("❌ Błąd w /balance:", err);
       await interaction.reply({
-        content: "❌ Wystąpił błąd podczas sprawdzania stanu konta.",
+        content: "❌ Wystąpił błąd podczas sprawdzania salda.",
         ephemeral: true
       });
     }
