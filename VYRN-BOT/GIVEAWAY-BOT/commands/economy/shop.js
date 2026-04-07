@@ -16,7 +16,7 @@ module.exports = {
         .setTitle("🛒 Sklep z Boostami XP")
         .setDescription(
           `**Twoje saldo:** ${coins.toLocaleString("pl-PL")} <:CASHH:1491180511308157041>\n\n` +
-          `Wybierz boost wpisując komendę \`/buy <id>\``
+          `Wybierz boost wpisując \`/buy <id>\``
         )
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setFooter({ 
@@ -25,15 +25,19 @@ module.exports = {
         })
         .setTimestamp();
 
-      // Boosty w czytelnych rzędach
       SHOP_BOOSTS.forEach(boost => {
         const minutes = Math.floor(boost.duration / 60000);
 
+        let emoji = "⚡";
+        if (boost.multiplier >= 3.0) emoji = "🔥";
+        else if (boost.multiplier >= 2.5) emoji = "💎";
+        else if (boost.multiplier >= 2.0) emoji = "✨";
+
         embed.addFields({
-          name: `${boost.id}. ${boost.name}`,
+          name: `${emoji} ${boost.id}. ${boost.name}`,
           value: `**${boost.multiplier}x XP** • ${minutes} minut\n` +
                  `Cena: **${boost.price}** <:CASHH:1491180511308157041>`,
-          inline: false   // ← zmienione na false, żeby było czytelniej
+          inline: false
         });
       });
 
