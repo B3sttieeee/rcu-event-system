@@ -1,6 +1,7 @@
 const fs = require("fs");
+const path = require("path");
 
-const PROFILE_PATH = "/data/profile.json";
+const PROFILE_PATH = path.join("/data", "profile.json");
 
 // ====================== INIT ======================
 if (!fs.existsSync("/data")) {
@@ -16,7 +17,7 @@ function loadProfile() {
   if (dbCache) return dbCache;
 
   if (!fs.existsSync(PROFILE_PATH)) {
-    console.log("[PROFILE] profile.json nie istnieje → tworzę nowy pusty plik");
+    console.log("[PROFILE] profile.json nie istnieje → tworzę nowy plik");
     const initial = { users: {} };
     fs.writeFileSync(PROFILE_PATH, JSON.stringify(initial, null, 2));
     dbCache = initial;
@@ -54,7 +55,8 @@ function ensureUser(userId) {
         msgs: 0,
         vc: 0,
         streak: 0,
-        lastClaim: 0
+        lastClaim: 0,
+        notified: false   // ← dodane dla DM systemu
       }
     };
   }
@@ -108,6 +110,7 @@ async function claimDaily(userId, member = null) {
   user.daily.streak = (user.daily.streak || 0) + 1;
   const xp = Math.floor(150 + Math.random() * 150);
 
+  // Dodawanie XP przez levelSystem
   if (member && !member.user.bot) {
     try {
       const { addXP } = require("./levelSystem");
@@ -117,13 +120,19 @@ async function claimDaily(userId, member = null) {
     }
   }
 
+  // Reset dziennych zadań
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
+  user.daily.notified = false;   // resetujemy powiadomienie na kolejny dzień
 
   saveProfile();
 
-  return { success: true, xp, streak: user.daily.streak };
+  return { 
+    success: true, 
+    xp, 
+    streak: user.daily.streak 
+  };
 }
 
 function startDailyReset() {
@@ -133,24 +142,29 @@ function startDailyReset() {
     const now = new Date();
     if (now.getDate() !== lastDay) {
       lastDay = now.getDate();
+
       const data = loadProfile();
       let count = 0;
+
       for (const id in data.users) {
         if (data.users[id].daily) {
           data.users[id].daily.msgs = 0;
           data.users[id].daily.vc = 0;
+          data.users[id].daily.notified = false;   // ważne!
           count++;
         }
       }
+
       saveProfile();
       console.log(`🌅 Daily reset wykonany dla ${count} użytkowników`);
     }
-  }, 60000);
+  }, 60000); // co minutę sprawdzamy
 }
 
 // ====================== EXPORT ======================
 module.exports = {
   loadProfile,
+  saveProfile,
   addVoiceTime,
   addMessage,
   isDailyReady,
