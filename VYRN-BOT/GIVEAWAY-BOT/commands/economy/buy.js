@@ -35,9 +35,21 @@ module.exports = {
         .setTitle("✅ Boost zakupiony pomyślnie!")
         .setDescription(`**${result.boost.name}**`)
         .addFields(
-          { name: "Multiplikator", value: `**${result.boost.multiplier}x XP**`, inline: true },
-          { name: "Czas trwania", value: `**${minutes} minut**`, inline: true },
-          { name: "Zużyto", value: `**${result.boost.price}** 🪙`, inline: true }
+          { 
+            name: "Multiplikator", 
+            value: `**${result.boost.multiplier}x XP**`, 
+            inline: true 
+          },
+          { 
+            name: "Czas trwania", 
+            value: `**${minutes} minut**`, 
+            inline: true 
+          },
+          { 
+            name: "Zużyto", 
+            value: `**${result.boost.price}** <:CASHH:1491180511308157041>`, 
+            inline: true 
+          }
         )
         .setFooter({ text: "Grinduj szybciej! 🔥" })
         .setTimestamp();
