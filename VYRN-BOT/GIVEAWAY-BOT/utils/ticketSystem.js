@@ -17,7 +17,7 @@ const CONFIG = {
   TICKET_CATEGORY_ID: "1475985874385899530",
   VERIFY_ROLE: "1475998527191519302",        // rola która NIE widzi ticketów
   TICKET_PREFIX: "ticket-",
-  V2RN_PREFIX: "v2rn-"                       // prefix dla ticketów akademii
+  V2RN_PREFIX: "v2rn-"
 };
 
 // ====================== CREATE TICKET PANEL ======================
@@ -32,16 +32,17 @@ async function createTicketPanel(client) {
       .setColor("#ff6600")
       .setTitle("📌 Clan VYRN • Ticket System")
       .setDescription(
-        `📩 **Wybierz rodzaj ticketa**\n` +
+        `📩 **Wybierz rodzaj zgłoszenia**\n` +
+        `━━━━━━━━━━━━━━━━━━\n\n` +
+        `**🔥 VYRN — Główny Klan**\n` +
+        `• **3N+** lub **15M+ Jajek**\n` +
+        `• Dobry Team\n` +
+        `• Dobre Game Passy (szczególnie pod jajka)\n\n` +
+        `**🛡️ V2RN — Akademia**\n` +
+        `• **150 O+**\n` +
+        `• Dobry Team\n\n` +
         `━━━━━━━━━━━━━━━━━━\n` +
-        `🔥 **VYRN** — Główny klan\n` +
-        `• Good Team\n` +
-        `• Good GamePass\n` +
-        `• 🔄 500 O Rebirth+\n` +
-        `• 🕒 3–8h AFK\n\n` +
-        `🛡️ **V2RN** — Akademia / Rekrutacja\n` +
-        `• Chcesz dołączyć do akademii V2RN\n` +
-        `• Testy / pytania rekrutacyjne`
+        `Kliknij odpowiedni przycisk poniżej, aby utworzyć ticket.`
       )
       .setImage("https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif")
       .setFooter({ text: "VYRN • Recruitment System" })
@@ -84,22 +85,18 @@ async function createTicketPanel(client) {
 // ====================== MAIN HANDLER ======================
 async function handle(interaction, client) {
   try {
-    // VYRN Main Ticket
     if (interaction.isButton() && interaction.customId === "open_ticket_vyrn") {
       return await handleOpenTicket(interaction, "vyrn");
     }
 
-    // V2RN Academy Ticket
     if (interaction.isButton() && interaction.customId === "open_ticket_v2rn") {
       return await handleOpenTicket(interaction, "v2rn");
     }
 
-    // Modal Submit (wspólny dla obu)
     if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket_modal_")) {
       return await handleModalSubmit(interaction);
     }
 
-    // Close Ticket
     if (interaction.isButton() && interaction.customId === "close_ticket") {
       return await handleCloseTicket(interaction);
     }
@@ -115,13 +112,12 @@ async function handle(interaction, client) {
   }
 }
 
-// ====================== OPEN TICKET (wspólna funkcja) ======================
+// ====================== OPEN TICKET ======================
 async function handleOpenTicket(interaction, type) {
   const isV2RN = type === "v2rn";
   const prefix = isV2RN ? CONFIG.V2RN_PREFIX : CONFIG.TICKET_PREFIX;
-  const ticketName = isV2RN ? "v2rn" : "ticket";
 
-  // Sprawdź czy użytkownik już ma otwarty ticket tego typu
+  // Sprawdzenie czy użytkownik już ma ticket tego typu
   const existingTicket = interaction.guild.channels.cache.find(
     ch => ch.topic === interaction.user.id && ch.name.startsWith(prefix)
   );
@@ -135,7 +131,7 @@ async function handleOpenTicket(interaction, type) {
 
   const modal = new ModalBuilder()
     .setCustomId(`ticket_modal_${type}`)
-    .setTitle(isV2RN ? "🛡️ V2RN Academy Application" : "🎫 VYRN Main Clan Application");
+    .setTitle(isV2RN ? "🛡️ V2RN Academy Application" : "🔥 VYRN Main Clan Application");
 
   const nickInput = new TextInputBuilder()
     .setCustomId("nick")
@@ -206,14 +202,20 @@ async function handleModalSubmit(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor("#22c55e")
-    .setTitle(isV2RN ? "🛡️ V2RN Academy Ticket" : "🎫 VYRN Main Clan Ticket")
+    .setTitle(isV2RN ? "🛡️ V2RN Academy Ticket" : "🔥 VYRN Main Clan Ticket")
     .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
     .setDescription(
       isPolish
-        ? `👤 **Użytkownik:** ${interaction.user}\n📝 **Nick:** ${nick}\n\n📸 Proszę wyślij screeny statystyk, gamepassów oraz teamu.`
-        : `👤 **User:** ${interaction.user}\n📝 **Nickname:** ${nick}\n\n📸 Please send screenshots of your stats, gamepasses and team.`
+        ? `👤 **Użytkownik:** ${interaction.user}\n📝 **Nick:** ${nick}\n\n` +
+          (isV2RN 
+            ? `**Wymagania do akademii V2RN:**\n• Minimum **150 O+**\n• Dobry Team`
+            : `**Wymagania do głównego klanu VYRN:**\n• Minimum **3N+** lub **15M+ Jajek**\n• Dobry Team\n• Dobre Game Passy (szczególnie pod jajka)`)
+        : `👤 **User:** ${interaction.user}\n📝 **Nickname:** ${nick}\n\n` +
+          (isV2RN 
+            ? `**Requirements for V2RN Academy:**\n• Minimum **150 O+**\n• Good Team`
+            : `**Requirements for VYRN Main Clan:**\n• Minimum **3N+** or **15M+ Eggs**\n• Good Team\n• Good Game Passes (especially egg related)`)
     )
-    .setFooter({ text: isV2RN ? "VYRN • V2RN Academy" : "VYRN • Recruitment" })
+    .setFooter({ text: isV2RN ? "VYRN • V2RN Academy" : "VYRN • Main Clan Recruitment" })
     .setTimestamp();
 
   const closeRow = new ActionRowBuilder().addComponents(
