@@ -5,12 +5,13 @@ const { addXP, loadConfig } = require("../utils/levelSystem");
 const { addMessage, isDailyReady } = require("../utils/profileSystem");
 const { getConfig } = require("../utils/configSystem");
 const { tryGiveRandomBoost } = require("../utils/boostSystem");
-const { addCoins } = require("../utils/economySystem");   // ← NOWE
+const { addCoins } = require("../utils/economySystem");
+const { checkDailyDM } = require("../utils/dailySystem");   // ← NOWE
 
-const cooldown = new Map();        // cooldown na XP
-const messageCoinCooldown = new Map(); // cooldown na monety za wiadomość
-const boostCooldown = new Map();   // cooldown na lucky boost
-const dailyNotified = new Set();
+// ====================== COOLDOWNS ======================
+const xpCooldown = new Map();           // cooldown na XP
+const messageCoinCooldown = new Map();  // cooldown na monety za wiadomość
+const boostCooldown = new Map();        // cooldown na lucky boost
 
 // ====================== CONFIG ======================
 const LEVEL_CHANNEL_ID = "1475999590716018719";
@@ -36,7 +37,7 @@ module.exports = {
         return;
       }
 
-      // 2. Główny system XP + Monety + Boost + Daily
+      // 2. Główny system (XP + Monety + Boost + Daily)
       await handleXPSystem(message);
 
     } catch (err) {
@@ -51,8 +52,8 @@ async function handleXPSystem(message) {
   const userId = message.author.id;
 
   // Cooldown na XP (2 sekundy)
-  if (cooldown.has(userId) && now - cooldown.get(userId) < 2000) return;
-  cooldown.set(userId, now);
+  if (xpCooldown.has(userId) && now - xpCooldown.get(userId) < 2000) return;
+  xpCooldown.set(userId, now);
 
   if (message.content.length < 3) return;
 
@@ -81,16 +82,12 @@ async function handleXPSystem(message) {
     message.content.length
   );
 
-  // === DAILY NOTIFICATION ===
+  // === DAILY SYSTEM ===
   addMessage(userId);
-  if (isDailyReady(userId) && !dailyNotified.has(userId)) {
-    dailyNotified.add(userId);
-    try {
-      await message.author.send("🎯 **Twój daily jest gotowy!**\nUżyj `/daily` aby odebrać nagrodę 🎁");
-    } catch (e) {
-      // Ignorujemy jeśli DM zablokowane
-    }
-    message.react("🎯").catch(() => {});
+
+  // Nowe powiadomienie DM przez dailySystem (bez reakcji!)
+  if (isDailyReady(userId)) {
+    await checkDailyDM(message.member);
   }
 
   // === LEVEL UP ===
@@ -98,7 +95,7 @@ async function handleXPSystem(message) {
     console.log(`🎉 ${message.author.tag} wbija level ${result.level}!`);
     await sendLevelUpMessage(message, result);
 
-    // === NOWE: Powiadomienie o level upie + monety za wbicie poziomu ===
+    // Nagroda za level up + DM
     try {
       const levelUpEmbed = new EmbedBuilder()
         .setColor("#b8a672")
