@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { buyBoost } = require("../../utils/boostSystem");
+const { buyBoost } = require("../../../utils/boostSystem");   // ← POPRAWIONA ŚCIEŻKA
 
 module.exports = {
   data: new SlashCommandBuilder()
