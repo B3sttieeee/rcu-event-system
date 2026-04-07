@@ -1,6 +1,6 @@
 const { EmbedBuilder, Events } = require("discord.js");
 
-// ====================== SYSTEMY ======================
+// ====================== IMPORTY SYSTEMÓW ======================
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
@@ -16,12 +16,12 @@ module.exports = {
     try {
       console.log(`[INTERACTION] ${interactionType} | User: ${interaction.user.tag} (${interaction.user.id}) | CustomID: ${interaction.customId || "N/A"}`);
 
-      // ====================== 1. GIVEAWAY SYSTEM ======================
+      // 1. GIVEAWAY SYSTEM
       if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
 
-      // ====================== 2. EVENT SYSTEM ======================
+      // 2. EVENT SYSTEM
       if (
         (interaction.isButton() || interaction.isStringSelectMenu()) &&
         ["refresh", "roles", "dm", "role_menu", "dm_menu"].includes(interaction.customId)
@@ -29,17 +29,17 @@ module.exports = {
         return await handleEventInteraction(interaction);
       }
 
-      // ====================== 3. EXPEDITION SELECT MENU ======================
+      // 3. EXPEDITION SELECT MENU
       if (interaction.isStringSelectMenu() && interaction.customId === "expedition_time_select") {
         return await handleExpeditionSelect(interaction);
       }
 
-      // ====================== 4. DAILY CLAIM BUTTON ======================
+      // 4. DAILY CLAIM BUTTON
       if (interaction.isButton() && interaction.customId === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
 
-      // ====================== 5. TICKET SYSTEM (VYRN + V2RN) ======================
+      // 5. TICKET SYSTEM
       if (interaction.isButton() || interaction.isModalSubmit()) {
         const ticketCustomIds = [
           "open_ticket_vyrn",
@@ -54,23 +54,21 @@ module.exports = {
         }
       }
 
-      // ====================== 6. SLASH COMMANDS ======================
+      // 6. SLASH COMMANDS
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
-
         if (!command) {
           return interaction.reply({
             content: "❌ Nie znaleziono takiej komendy.",
             ephemeral: true
           });
         }
-
         return await command.execute(interaction, client);
       }
 
-      // Jeśli interakcja nie została obsłużona
+      // Nieobsłużona interakcja
       if (!interaction.replied && !interaction.deferred) {
-        console.warn(`[INTERACTION] Nieobsłużona interakcja: ${interactionType} | CustomID: ${interaction.customId}`);
+        console.warn(`[INTERACTION] Nieobsłużona interakcja: ${interactionType} | CustomID: ${interaction.customId || "N/A"}`);
       }
 
     } catch (err) {
@@ -102,9 +100,9 @@ module.exports = {
 // ====================== HELPER - TYP INTERAKCJI ======================
 function getInteractionType(interaction) {
   if (interaction.isChatInputCommand()) return "SLASH_COMMAND";
-  if (interaction.isButton()) return `BUTTON (${interaction.customId})`;
-  if (interaction.isModalSubmit()) return `MODAL (${interaction.customId})`;
-  if (interaction.isStringSelectMenu()) return `SELECT_MENU (${interaction.customId})`;
+  if (interaction.isButton()) return `BUTTON (${interaction.customId || "N/A"})`;
+  if (interaction.isModalSubmit()) return `MODAL (${interaction.customId || "N/A"})`;
+  if (interaction.isStringSelectMenu()) return `SELECT_MENU (${interaction.customId || "N/A"})`;
   if (interaction.isUserSelectMenu()) return "USER_SELECT_MENU";
   if (interaction.isRoleSelectMenu()) return "ROLE_SELECT_MENU";
   if (interaction.isChannelSelectMenu()) return "CHANNEL_SELECT_MENU";
@@ -143,7 +141,7 @@ async function handleDailyClaim(interaction) {
 
     // Sukces
     const successEmbed = new EmbedBuilder()
-      .setColor("#00ff88")
+      .setColor("#22c55e")
       .setTitle("🎁 Daily Odebrany!")
       .setDescription(
         `**Zdobyłeś:** \`${result.xp} XP\`\n` +
@@ -157,23 +155,17 @@ async function handleDailyClaim(interaction) {
       components: []
     });
 
-    console.log(`[DAILY] Użytkownik ${interaction.user.tag} odebrał daily (${result.xp} XP, streak: ${result.streak})`);
+    console.log(`[DAILY] ${interaction.user.tag} odebrał daily (${result.xp} XP, streak: ${result.streak})`);
 
   } catch (err) {
     console.error("❌ Błąd w handleDailyClaim:", err);
 
     try {
+      const errorMsg = "❌ Wystąpił błąd podczas odbierania daily.";
       if (!interaction.replied && !interaction.deferred) {
-        await interaction.reply({
-          content: "❌ Wystąpił błąd podczas odbierania daily.",
-          ephemeral: true
-        });
+        await interaction.reply({ content: errorMsg, ephemeral: true });
       } else {
-        await interaction.editReply({
-          content: "❌ Wystąpił błąd podczas odbierania daily.",
-          components: [],
-          embeds: []
-        });
+        await interaction.editReply({ content: errorMsg, components: [], embeds: [] });
       }
     } catch (e) {}
   }
