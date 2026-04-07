@@ -12,10 +12,10 @@ module.exports = {
 
       const embed = new EmbedBuilder()
         .setColor(0x00ff88)
-        .setTitle("💰 Stan Konta")
-        .setDescription(
-          `**${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`
-        )
+        .setAuthor({
+          name: `Stan Konta • ${coins.toLocaleString("pl-PL")} <:CASHH:1491180511308157041>`,
+          iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+        })
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .addFields(
           {
@@ -25,17 +25,17 @@ module.exports = {
           },
           {
             name: "📝 Wiadomości",
-            value: "• **3** <:CASHH:1491180511308157041> co 12 sekund",
+            value: "**3** <:CASHH:1491180511308157041> co 12s",
             inline: true
           },
           {
             name: "🎤 Voice Chat",
-            value: "• **8** <:CASHH:1491180511308157041> za minutę",
+            value: "**8** <:CASHH:1491180511308157041> / min",
             inline: true
           },
           {
             name: "🏆 Poziomy",
-            value: "• **+50** <:CASHH:1491180511308157041> za wbity poziom",
+            value: "**+50** <:CASHH:1491180511308157041>",
             inline: true
           }
         )
