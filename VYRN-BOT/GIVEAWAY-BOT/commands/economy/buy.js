@@ -4,7 +4,7 @@ const { buyBoost } = require("../../utils/boostSystem");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("buy")
-    .setDescription("Kup boost XP z sklepu")
+    .setDescription("Kup boost XP")
     .addIntegerOption(option =>
       option
         .setName("id")
@@ -23,18 +23,21 @@ module.exports = {
 
       if (!result.success) {
         return interaction.editReply({
-          content: result.message || "❌ Nie udało się kupić boostu.",
+          content: result.message || "❌ Nie udało się zakupić boostu.",
           ephemeral: true
         });
       }
 
+      const minutes = Math.floor(result.boost.duration / 60000);
+
       const embed = new EmbedBuilder()
         .setColor(0x00ff88)
         .setTitle("✅ Boost zakupiony pomyślnie!")
-        .setDescription(
-          `**${result.boost.name}**\n` +
-          `Czas trwania: **${Math.floor(result.boost.duration / 60000)} minut**\n` +
-          `Multiplikator: **${result.boost.multiplier}x XP**`
+        .setDescription(`**${result.boost.name}**`)
+        .addFields(
+          { name: "Multiplikator", value: `**${result.boost.multiplier}x XP**`, inline: true },
+          { name: "Czas trwania", value: `**${minutes} minut**`, inline: true },
+          { name: "Zużyto", value: `**${result.boost.price}** 🪙`, inline: true }
         )
         .setFooter({ text: "Grinduj szybciej! 🔥" })
         .setTimestamp();
