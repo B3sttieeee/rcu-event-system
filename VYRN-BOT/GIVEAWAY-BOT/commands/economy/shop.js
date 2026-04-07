@@ -16,7 +16,7 @@ module.exports = {
         .setTitle("🛒 Sklep z Boostami XP")
         .setDescription(
           `**Twoje saldo:** ${coins.toLocaleString("pl-PL")} <:CASHH:1491180511308157041>\n\n` +
-          `Wybierz boost wpisując \`/buy <id>\``
+          `Wybierz boost wpisując komendę \`/buy <id>\``
         )
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setFooter({ 
@@ -25,7 +25,6 @@ module.exports = {
         })
         .setTimestamp();
 
-      // Profesjonalne dodawanie boostów
       SHOP_BOOSTS.forEach(boost => {
         const minutes = Math.floor(boost.duration / 60000);
 
@@ -38,7 +37,6 @@ module.exports = {
       });
 
       await interaction.reply({ embeds: [embed] });
-
     } catch (err) {
       console.error("❌ Błąd w /shop:", err);
       await interaction.reply({
