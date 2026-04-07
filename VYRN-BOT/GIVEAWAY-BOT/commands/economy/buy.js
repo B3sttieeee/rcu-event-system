@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { buyBoost } = require("../../../utils/boostSystem");   // ← POPRAWIONA ŚCIEŻKA
+const { buyBoost } = require("../../utils/boostSystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -8,7 +8,7 @@ module.exports = {
     .addIntegerOption(option =>
       option
         .setName("id")
-        .setDescription("ID boostu z komendy /shop (1-4)")
+        .setDescription("ID boostu z /shop (1-4)")
         .setRequired(true)
         .setMinValue(1)
         .setMaxValue(4)
