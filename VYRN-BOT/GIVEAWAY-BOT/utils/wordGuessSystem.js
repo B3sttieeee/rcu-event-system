@@ -35,7 +35,6 @@ function getRandomReward() {
       }
     }
   }
-
   const xp = Math.floor(200 + Math.random() * 150);
   return { type: "xp", value: xp };
 }
@@ -53,7 +52,11 @@ function createHintButton() {
 // ====================== START GRY ======================
 async function tryStartRandomGame(channel, forced = false) {
   if (currentGame) return { success: false, reason: "already_running" };
-  if (!forced && Math.random() > 0.07) return { success: false, reason: "chance" };
+
+  // Tylko 7% szansy na start (jeśli nie jest wymuszony)
+  if (!forced && Math.random() > 0.07) {
+    return { success: false, reason: "chance" };
+  }
 
   const word = WORDS[Math.floor(Math.random() * WORDS.length)];
   const revealed = "⬛".repeat(word.length);
@@ -61,7 +64,7 @@ async function tryStartRandomGame(channel, forced = false) {
   currentGame = {
     channelId: channel.id,
     word: word.toLowerCase(),
-    revealed: revealed.split(""),   // zmieniamy na tablicę żeby łatwiej modyfikować
+    revealed: revealed.split(""),
     timeout: null,
     message: null,
     hintUsed: false,
@@ -111,7 +114,7 @@ async function tryStartRandomGame(channel, forced = false) {
   return { success: true };
 }
 
-// ====================== PODPOWIEDŹ (BUTTON) ======================
+// ====================== PODPOWIEDŹ ======================
 async function handleHint(interaction) {
   if (!currentGame || interaction.channel.id !== currentGame.channelId) {
     return interaction.reply({ content: "❌ Ta gra już się skończyła.", ephemeral: true });
@@ -121,7 +124,6 @@ async function handleHint(interaction) {
     return interaction.reply({ content: "❌ Podpowiedź została już użyta!", ephemeral: true });
   }
 
-  // Znajdź pozycje z ⬛
   const hiddenIndices = currentGame.revealed
     .map((char, i) => (char === "⬛" ? i : -1))
     .filter(i => i !== -1);
@@ -130,15 +132,12 @@ async function handleHint(interaction) {
     return interaction.reply({ content: "❌ Wszystkie litery są już widoczne!", ephemeral: true });
   }
 
-  // Losuj jedną ukrytą pozycję
   const randomIndex = hiddenIndices[Math.floor(Math.random() * hiddenIndices.length)];
   const correctLetter = currentGame.word[randomIndex];
 
-  // Odsłoń literę
   currentGame.revealed[randomIndex] = correctLetter.toUpperCase();
   currentGame.hintUsed = true;
 
-  // Aktualizuj embed
   const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0]).setDescription(
     `**Słowo:**\n\`${currentGame.revealed.join("")}\`\n\n` +
     `Wpisz poprawne słowo w czat!\n` +
@@ -210,6 +209,7 @@ async function checkAnswer(message) {
 
 function endGame(channel, won = false) {
   if (!currentGame) return;
+
   clearInterval(currentGame.timeout);
 
   if (!won) {
@@ -228,6 +228,6 @@ function endGame(channel, won = false) {
 module.exports = {
   tryStartRandomGame,
   checkAnswer,
-  handleHint,        // ← nowy eksport!
+  handleHint,
   endGame,
 };
