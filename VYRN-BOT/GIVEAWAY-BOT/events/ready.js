@@ -44,7 +44,7 @@ async function initSystems(client) {
     console.error(err);
   }
 
-  // 💰 ECONOMY + BOOST
+  // 💰 ECONOMY + BOOST SYSTEM
   try {
     const { loadCoins } = require("../utils/economySystem");
     const { loadBoosts } = require("../utils/boostSystem");
