@@ -37,7 +37,7 @@ function loadCommands() {
     const stat = fs.statSync(itemPath);
 
     if (stat.isDirectory()) {
-      // Podfolder (np. levels/, economy/, giveaway/)
+      // Podfolder (levels/, economy/, giveaway/ itp.)
       const commandFiles = fs.readdirSync(itemPath).filter(file => file.endsWith(".js"));
 
       for (const file of commandFiles) {
@@ -131,15 +131,11 @@ client.once("ready", async () => {
 
     // Daily System
     const { startDailyReset } = require("./utils/profileSystem");
-    if (typeof startDailyReset === "function") {
-      startDailyReset();
-    }
+    if (typeof startDailyReset === "function") startDailyReset();
 
     // Clan System
     const { startClanSystem } = require("./utils/clanSystem");
-    if (typeof startClanSystem === "function") {
-      startClanSystem(client);
-    }
+    if (typeof startClanSystem === "function") startClanSystem(client);
 
     // Economy + Boost System
     const { loadCoins } = require("./utils/economySystem");
@@ -151,7 +147,7 @@ client.once("ready", async () => {
     console.log("💰 Economy system załadowany");
     console.log("🚀 Boost system załadowany");
 
-    // Ticket Panel (z opóźnieniem)
+    // Ticket Panel z opóźnieniem
     setTimeout(async () => {
       try {
         const { createTicketPanel } = require("./utils/ticketSystem");
@@ -181,7 +177,7 @@ process.on("uncaughtException", (err) => {
 // ====================== LOGIN ======================
 client.login(process.env.TOKEN)
   .then(() => {
-    console.log("🔑 Token zaakceptowany – logowanie w toku...");
+    console.log("🔑 Token zaakceptowany – bot się uruchamia...");
   })
   .catch(err => {
     console.error("❌ Nie udało się zalogować bota:", err.message);
