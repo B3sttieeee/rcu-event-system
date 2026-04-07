@@ -14,27 +14,35 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor(0x00ff88)
         .setTitle("🛒 Sklep z Boostami XP")
-        .setDescription(`**Twoje monety:** ${coins.toLocaleString("pl-PL")} 🪙\n\nWybierz boost używając \`/buy <id>\``)
+        .setDescription(
+          `**Twoje saldo:** ${coins.toLocaleString("pl-PL")} <:CASHH:1491180511308157041>\n\n` +
+          `Wybierz boost wpisując \`/buy <id>\``
+        )
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-        .setFooter({ text: "VYRN • Economy & Boost System" })
+        .setFooter({ 
+          text: "VYRN • Economy & Boost System",
+          iconURL: interaction.guild.iconURL({ dynamic: true })
+        })
         .setTimestamp();
 
+      // Profesjonalne dodawanie boostów
       SHOP_BOOSTS.forEach(boost => {
         const minutes = Math.floor(boost.duration / 60000);
 
         embed.addFields({
           name: `${boost.id}. ${boost.name}`,
           value: `**${boost.multiplier}x XP** • ${minutes} minut\n` +
-                 `**Cena:** ${boost.price} 🪙`,
+                 `Cena: **${boost.price}** <:CASHH:1491180511308157041>`,
           inline: true
         });
       });
 
       await interaction.reply({ embeds: [embed] });
+
     } catch (err) {
       console.error("❌ Błąd w /shop:", err);
       await interaction.reply({
-        content: "❌ Wystąpił błąd podczas ładowania sklepu.",
+        content: "❌ Wystąpił błąd podczas otwierania sklepu.",
         ephemeral: true
       });
     }
