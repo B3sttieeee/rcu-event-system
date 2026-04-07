@@ -5,10 +5,11 @@ const { addXP, loadConfig } = require("../utils/levelSystem");
 const { addMessage, isDailyReady } = require("../utils/profileSystem");
 const { getConfig } = require("../utils/configSystem");
 const { tryGiveRandomBoost } = require("../utils/boostSystem");
-const { tryStartRandomGame, checkAnswer } = require("../utils/wordGuessSystem");
+const { addCoins } = require("../utils/economySystem");   // ← NOWE
 
-const cooldown = new Map();           // cooldown na XP
-const boostCooldown = new Map();      // cooldown na lucky boost
+const cooldown = new Map();        // cooldown na XP
+const messageCoinCooldown = new Map(); // cooldown na monety za wiadomość
+const boostCooldown = new Map();   // cooldown na lucky boost
 const dailyNotified = new Set();
 
 // ====================== CONFIG ======================
@@ -35,10 +36,7 @@ module.exports = {
         return;
       }
 
-      // 2. System zgadywania słowa
-      if (await checkAnswer(message)) return;
-
-      // 3. Główny system XP + Boost + Daily + Gra
+      // 2. Główny system XP + Monety + Boost + Daily
       await handleXPSystem(message);
 
     } catch (err) {
@@ -47,7 +45,7 @@ module.exports = {
   }
 };
 
-// ====================== GŁÓWNY SYSTEM XP ======================
+// ====================== GŁÓWNY SYSTEM ======================
 async function handleXPSystem(message) {
   const now = Date.now();
   const userId = message.author.id;
@@ -60,7 +58,13 @@ async function handleXPSystem(message) {
 
   const cfg = loadConfig();
 
-  // Lucky Boost (rzadki)
+  // === MONETY ZA WIADOMOŚĆ (3 monety co 12 sekund) ===
+  if (!messageCoinCooldown.has(userId) || now - messageCoinCooldown.get(userId) > 12000) {
+    addCoins(userId, 3);
+    messageCoinCooldown.set(userId, now);
+  }
+
+  // === LUCKY BOOST ===
   if (!boostCooldown.has(userId) || now - boostCooldown.get(userId) > 60000) {
     const gaveBoost = await tryGiveRandomBoost(message.member);
     if (gaveBoost) {
@@ -70,40 +74,52 @@ async function handleXPSystem(message) {
     }
   }
 
-  // Dodawanie XP
+  // === DODAWANIE XP ===
   const result = await addXP(
     message.member,
     cfg.messageXP,
     message.content.length
   );
 
-  // Daily
+  // === DAILY NOTIFICATION ===
   addMessage(userId);
-
   if (isDailyReady(userId) && !dailyNotified.has(userId)) {
     dailyNotified.add(userId);
-    message.author.send("🎯 **Twój daily jest gotowy!**\nUżyj `/daily` aby odebrać nagrodę 🎁")
-      .catch(() => {});
+    try {
+      await message.author.send("🎯 **Twój daily jest gotowy!**\nUżyj `/daily` aby odebrać nagrodę 🎁");
+    } catch (e) {
+      // Ignorujemy jeśli DM zablokowane
+    }
     message.react("🎯").catch(() => {});
   }
 
-  // Gra zgadywania słowa
-  if (Math.random() < 0.065) {
-    await tryStartRandomGame(message.channel);
-  }
-
-  // Level Up
+  // === LEVEL UP ===
   if (result?.leveledUp) {
     console.log(`🎉 ${message.author.tag} wbija level ${result.level}!`);
     await sendLevelUpMessage(message, result);
+
+    // === NOWE: Powiadomienie o level upie + monety za wbicie poziomu ===
+    try {
+      const levelUpEmbed = new EmbedBuilder()
+        .setColor("#b8a672")
+        .setTitle(`🎉 Gratulacje! Osiągnąłeś poziom ${result.level}!`)
+        .setDescription(`**+50 🪙** zostało dodane do Twojego konta!\n\nKontynuuj grind, żeby zdobywać jeszcze lepsze boosty!`)
+        .setFooter({ text: "VYRN • Level System" })
+        .setTimestamp();
+
+      await message.author.send({ embeds: [levelUpEmbed] });
+      addCoins(userId, 50); // Nagroda za wbicie poziomu
+    } catch (e) {
+      console.log(`[LEVEL UP] Nie udało się wysłać DM do ${message.author.tag}`);
+    }
   }
 };
 
-// ====================== LEVEL UP MESSAGE ======================
+// ====================== LEVEL UP MESSAGE (na kanale) ======================
 async function sendLevelUpMessage(message, result) {
   const levelUpChannel = message.guild.channels.cache.get(LEVEL_CHANNEL_ID);
   if (!levelUpChannel?.isTextBased()) {
-    console.warn(`⚠️ Kanał level up (${LEVEL_CHANNEL_ID}) nie istnieje lub nie jest tekstowy!`);
+    console.warn(`⚠️ Kanał level up (${LEVEL_CHANNEL_ID}) nie istnieje!`);
     return;
   }
 
@@ -135,7 +151,6 @@ async function sendLevelUpMessage(message, result) {
       content: `🎉 ${message.author}`,
       embeds: [embed]
     });
-    console.log(`✅ Level up wysłany dla ${message.author.tag} → Level ${result.level}`);
   } catch (err) {
     console.error(`❌ Nie udało się wysłać level up dla ${message.author.tag}:`, err.message);
   }
@@ -155,10 +170,10 @@ async function handleCommands(message, PREFIX) {
   if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
 
   switch (cmd) {
-    case "setxp":      await setMessageXP(message, args); break;
-    case "setvcxp":    await setVoiceXP(message, args); break;
+    case "setxp": await setMessageXP(message, args); break;
+    case "setvcxp": await setVoiceXP(message, args); break;
     case "setlengthbonus": await setLengthBonus(message, args); break;
-    case "multixp":    await setGlobalMultiplier(message, args); break;
+    case "multixp": await setGlobalMultiplier(message, args); break;
   }
 }
 
@@ -169,7 +184,6 @@ async function showRank(message) {
   const userData = db.xp?.[message.author.id] || { xp: 0, level: 0 };
   const needed = neededXP(userData.level);
   const progress = needed > 0 ? Math.min(100, Math.floor((userData.xp / needed) * 100)) : 0;
-
   const cfg = loadConfig();
   const hasBoost = message.member.roles.cache.has(cfg.boostRole || "1476000398107217980");
 
