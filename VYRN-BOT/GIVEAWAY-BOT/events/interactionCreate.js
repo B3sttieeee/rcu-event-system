@@ -1,4 +1,4 @@
-const { EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, Events } = require("discord.js");
 
 // ====================== SYSTEMY ======================
 const ticketSystem = require("../utils/ticketSystem");
@@ -8,7 +8,7 @@ const { handleExpeditionSelect } = require("../commands/expedition");
 const { isDailyReady, claimDaily } = require("../utils/profileSystem");
 
 module.exports = {
-  name: "interactionCreate",
+  name: Events.InteractionCreate,
   async execute(interaction, client) {
     const startTime = Date.now();
     const interactionType = getInteractionType(interaction);
@@ -39,10 +39,15 @@ module.exports = {
         return await handleDailyClaim(interaction);
       }
 
-      // ====================== 5. TICKET SYSTEM ======================
-      // Obsługuje: open_ticket, close_ticket, ticket_modal
+      // ====================== 5. TICKET SYSTEM (VYRN + V2RN) ======================
       if (interaction.isButton() || interaction.isModalSubmit()) {
-        const ticketCustomIds = ["open_ticket", "close_ticket", "ticket_modal"];
+        const ticketCustomIds = [
+          "open_ticket_vyrn",
+          "open_ticket_v2rn",
+          "close_ticket",
+          "ticket_modal_vyrn",
+          "ticket_modal_v2rn"
+        ];
 
         if (ticketCustomIds.includes(interaction.customId)) {
           return await ticketSystem.handle(interaction, client);
@@ -60,11 +65,10 @@ module.exports = {
           });
         }
 
-        // Opcjonalnie: sprawdzenie cooldownów komend (można rozbudować później)
         return await command.execute(interaction, client);
       }
 
-      // Jeśli interakcja nie została obsłużona przez żaden system
+      // Jeśli interakcja nie została obsłużona
       if (!interaction.replied && !interaction.deferred) {
         console.warn(`[INTERACTION] Nieobsłużona interakcja: ${interactionType} | CustomID: ${interaction.customId}`);
       }
@@ -115,7 +119,6 @@ async function handleDailyClaim(interaction) {
     const userId = interaction.user.id;
     const member = interaction.member;
 
-    // Sprawdzenie gotowości daily
     if (!isDailyReady(userId)) {
       return await interaction.editReply({
         content: "❌ Twój daily nie jest jeszcze gotowy! Spróbuj ponownie jutro.",
@@ -124,7 +127,6 @@ async function handleDailyClaim(interaction) {
       });
     }
 
-    // Claim daily
     const result = await claimDaily(userId, member);
 
     if (!result.success) {
