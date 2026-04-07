@@ -20,10 +20,7 @@ let configCache = null;
 let voiceSystemRunning = false;
 
 // ====================== COOLDOWNS ======================
-const xpCooldown = new Map(); // tylko do voice XP
-
-// ====================== HELPERS ======================
-const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+const xpCooldown = new Map();
 
 // ====================== DATABASE ======================
 function loadDB() {
@@ -70,7 +67,6 @@ function loadConfig() {
       globalMultiplier: 1,
       boostRole: "1476000398107217980"
     };
-
     fs.writeFileSync(CONFIG_PATH, JSON.stringify(defaultConfig, null, 2));
     configCache = defaultConfig;
     console.log("[LEVEL] Utworzono domyślną konfigurację levelConfig.json");
@@ -81,7 +77,7 @@ function loadConfig() {
     try {
       configCache = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
     } catch (err) {
-      console.error("[LEVEL] Błąd odczytu levelConfig.json, używam domyślnych wartości");
+      console.error("[LEVEL] Błąd odczytu levelConfig.json, używam domyślnych");
       configCache = {
         messageXP: 3,
         voiceXP: 5,
@@ -118,20 +114,20 @@ const LEVEL_ROLES = {
 const BOOST_ROLE = "1476000398107217980";
 const BOOST_MULTIPLIER = 1.75;
 
-// ====================== XP FORMULA ======================
+// ====================== HELPERS ======================
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level, 1.5));
 }
 
-// ====================== MULTIPLIER ======================
 function getMultiplier(member) {
   const cfg = loadConfig();
   let multi = cfg.globalMultiplier || 1;
 
-  // Lucky Boost (czasowy z boostSystem)
+  // Lucky Boost + stały boost role
   multi *= getCurrentBoost(member.id);
 
-  // Stały boost role
   if (member.roles.cache.has(BOOST_ROLE)) {
     multi *= BOOST_MULTIPLIER;
   }
@@ -146,8 +142,6 @@ async function addXP(member, baseAmount = 0, messageLength = 0) {
   }
 
   const now = Date.now();
-
-  // Anty-spam cooldown
   if (xpCooldown.has(member.id) && now - xpCooldown.get(member.id) < 3000) {
     return { leveledUp: false, gained: 0 };
   }
@@ -167,7 +161,7 @@ async function addXP(member, baseAmount = 0, messageLength = 0) {
     amount = Math.floor(amount * (1 + cfg.lengthBonus));
   }
 
-  // Zastosowanie mnożników
+  // Zastosowanie wszystkich mnożników
   amount = Math.floor(amount * getMultiplier(member));
 
   if (amount <= 0) return { leveledUp: false, gained: 0 };
@@ -202,7 +196,6 @@ async function addXP(member, baseAmount = 0, messageLength = 0) {
 async function checkRoles(member, currentLevel) {
   for (const [levelStr, roleId] of Object.entries(LEVEL_ROLES)) {
     const requiredLevel = Number(levelStr);
-
     if (currentLevel >= requiredLevel && !member.roles.cache.has(roleId)) {
       try {
         await member.roles.add(roleId);
@@ -210,7 +203,7 @@ async function checkRoles(member, currentLevel) {
       } catch (err) {
         console.error(`❌ Nie udało się dodać roli level ${requiredLevel} dla ${member.user.tag}:`, err.message);
       }
-      await wait(800); // delay przeciw rate limit
+      await wait(800);
     }
   }
 }
@@ -219,7 +212,6 @@ async function checkRoles(member, currentLevel) {
 function startVoiceXP(client) {
   if (voiceSystemRunning) return;
   voiceSystemRunning = true;
-
   console.log("🎤 System Voice XP uruchomiony.");
 
   setInterval(async () => {
@@ -241,10 +233,10 @@ function startVoiceXP(client) {
           try {
             await addXP(member, cfg.voiceXP);
 
-            // Dodaj czas głosowy do profilu (jeśli istnieje)
+            // Dodawanie czasu do profileSystem
             const { addVoiceTime } = require("./profileSystem");
             if (typeof addVoiceTime === "function") {
-              addVoiceTime(memberId, 60);
+              addVoiceTime(memberId, 60); // +1 minuta
             }
           } catch (err) {
             console.error(`❌ Voice XP błąd dla ${memberId}:`, err.message);
@@ -284,12 +276,13 @@ function setGlobalMultiplier(val) {
 module.exports = {
   addXP,
   startVoiceXP,
-  loadConfig,
   loadDB,
+  loadConfig,
   saveDB,
   setMessageXP,
   setVoiceXP,
   setLengthBonus,
   setGlobalMultiplier,
-  getMultiplier,        // przydatne do debugowania
+  getMultiplier,
+  neededXP   // przydatne dla leaderboardu
 };
