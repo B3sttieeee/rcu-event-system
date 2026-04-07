@@ -4,7 +4,7 @@ const {
   EmbedBuilder
 } = require("discord.js");
 
-const { reroll } = require("../utils/giveawaySystem");
+const { reroll } = require("../../utils/giveawaySystem");   // ← POPRAWIONA ŚCIEŻKA
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -13,7 +13,7 @@ module.exports = {
     .addStringOption(option =>
       option
         .setName("message_id")
-        .setDescription("ID wiadomości giveawayu (znajdziesz klikając PPM na wiadomość → Copy ID)")
+        .setDescription("ID wiadomości giveawayu (PPM na wiadomość → Copy ID)")
         .setRequired(true)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
@@ -45,7 +45,7 @@ module.exports = {
       const successEmbed = new EmbedBuilder()
         .setColor("#22c55e")
         .setTitle("🎉 Reroll Giveaway")
-        .setDescription(`**Nowy zwycięzca:** ${result}`)
+        .setDescription(result)   // result już zawiera "<@id> Nowy zwycięzca"
         .addFields(
           { name: "📨 ID Wiadomości", value: `\`${messageId}\``, inline: true },
           { name: "👤 Wykonano przez", value: `${interaction.user}`, inline: true }
@@ -53,7 +53,6 @@ module.exports = {
         .setTimestamp();
 
       await interaction.editReply({ embeds: [successEmbed] });
-
       console.log(`🎉 Reroll wykonany przez ${interaction.user.tag} | Giveaway ID: ${messageId}`);
 
     } catch (err) {
