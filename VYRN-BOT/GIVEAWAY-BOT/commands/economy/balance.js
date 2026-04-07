@@ -13,7 +13,9 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor(0x00ff88)
         .setTitle("💰 Stan Konta")
-        .setDescription(`**${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`)
+        .setDescription(
+          `**${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`
+        )
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .addFields(
           {
