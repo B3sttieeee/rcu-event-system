@@ -13,14 +13,19 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setColor(0x00ff88)
         .setTitle("💰 Stan Konta")
-        .setDescription(`**${coins.toLocaleString("pl-PL")}** monet 🪙`)
+        .setDescription(`**${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`)
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-        .addFields({
-          name: "━━━━━━━━━━━━━━━━━━━━",
-          value: "Użyj `/shop`, aby zobaczyć dostępne boosty",
-          inline: false
+        .addFields(
+          {
+            name: "━━━━━━━━━━━━━━━━━━━━━━",
+            value: "Użyj `/shop`, aby przejrzeć dostępne boosty",
+            inline: false
+          }
+        )
+        .setFooter({ 
+          text: "VYRN • Economy System",
+          iconURL: interaction.guild.iconURL({ dynamic: true })
         })
-        .setFooter({ text: "VYRN • Economy System" })
         .setTimestamp();
 
       await interaction.reply({ embeds: [embed] });
