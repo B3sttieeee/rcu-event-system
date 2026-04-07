@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { SHOP_BOOSTS } = require("../../utils/boostSystem");
-const { getCoins } = require("../../utils/economySystem");
+const { SHOP_BOOSTS } = require("../../../utils/boostSystem");   // ← POPRAWIONE
+const { getCoins } = require("../../../utils/economySystem");     // ← POPRAWIONE
 
 module.exports = {
   data: new SlashCommandBuilder()
