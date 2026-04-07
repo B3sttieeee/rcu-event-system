@@ -25,6 +25,7 @@ module.exports = {
         })
         .setTimestamp();
 
+      // Boosty w czytelnych rzędach
       SHOP_BOOSTS.forEach(boost => {
         const minutes = Math.floor(boost.duration / 60000);
 
@@ -32,7 +33,7 @@ module.exports = {
           name: `${boost.id}. ${boost.name}`,
           value: `**${boost.multiplier}x XP** • ${minutes} minut\n` +
                  `Cena: **${boost.price}** <:CASHH:1491180511308157041>`,
-          inline: true
+          inline: false   // ← zmienione na false, żeby było czytelniej
         });
       });
 
