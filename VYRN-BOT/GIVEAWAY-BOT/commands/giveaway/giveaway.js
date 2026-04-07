@@ -4,7 +4,7 @@ const {
   EmbedBuilder
 } = require("discord.js");
 
-const { createGiveaway } = require("../utils/giveawaySystem");
+const { createGiveaway } = require("../../utils/giveawaySystem");   // ← POPRAWIONA ŚCIEŻKA
 
 // ====================== WALIDACJA ======================
 function isValidTime(time) {
@@ -118,7 +118,6 @@ module.exports = {
         .setTimestamp();
 
       await interaction.editReply({ embeds: [successEmbed] });
-
       console.log(`🎉 Giveaway utworzony przez ${interaction.user.tag} | Nagroda: ${prize}`);
 
     } catch (err) {
