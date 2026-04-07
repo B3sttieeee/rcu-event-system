@@ -1,35 +1,52 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { getCurrentBoost, activeBoosts } = require("../../utils/boostSystem");
+// ====================== ŁADOWANIE KOMEND (z podfolderami) ======================
+function loadCommands() {
+  const commandsPath = path.join(__dirname, "commands");
+  if (!fs.existsSync(commandsPath)) {
+    console.warn("⚠️ Folder 'commands' nie istnieje!");
+    return;
+  }
 
-module.exports = {
-  data: new SlashCommandBuilder()
-    .setName("myboost")
-    .setDescription("Pokazuje Twój aktualny aktywny boost"),
+  let loaded = 0;
 
-  async execute(interaction) {
-    const multiplier = getCurrentBoost(interaction.user.id);
-    const boost = activeBoosts.get(interaction.user.id);
+  const items = fs.readdirSync(commandsPath);
 
-    if (multiplier === 1 || !boost) {
-      return interaction.reply({
-        content: "❌ Nie masz obecnie aktywnego boostu.",
-        ephemeral: true
-      });
+  for (const item of items) {
+    const itemPath = path.join(commandsPath, item);
+    const stat = fs.statSync(itemPath);
+
+    if (stat.isDirectory()) {
+      // Ładowanie komend z podfolderu (np. levels/, economy/, giveaway/)
+      const commandFiles = fs.readdirSync(itemPath).filter(file => file.endsWith(".js"));
+
+      for (const file of commandFiles) {
+        try {
+          const command = require(path.join(itemPath, file));
+          if (command?.data?.name && typeof command.execute === "function") {
+            client.commands.set(command.data.name, command);
+            console.log(`✅ Załadowano komendę: /${command.data.name} (z ${item}/)`);
+            loaded++;
+          } else {
+            console.warn(`⚠️ Nieprawidłowa struktura komendy: ${item}/${file}`);
+          }
+        } catch (err) {
+          console.error(`❌ Błąd ładowania komendy ${item}/${file}:`, err.message);
+        }
+      }
+    } 
+    else if (stat.isFile() && item.endsWith(".js")) {
+      // Ładowanie starych komend bezpośrednio z folderu commands/
+      try {
+        const command = require(itemPath);
+        if (command?.data?.name && typeof command.execute === "function") {
+          client.commands.set(command.data.name, command);
+          console.log(`✅ Załadowano komendę: /${command.data.name}`);
+          loaded++;
+        }
+      } catch (err) {
+        console.error(`❌ Błąd ładowania komendy ${item}:`, err.message);
+      }
     }
+  }
 
-    const timeLeft = Math.ceil((boost.endTime - Date.now()) / 60000);
-
-    const embed = new EmbedBuilder()
-      .setColor(0x00ff88)
-      .setTitle("🔥 Twój Aktywny Boost")
-      .setDescription(`**${boost.name}**\nMultiplikator: **${multiplier}x XP**`)
-      .addFields({
-        name: "Czas pozostały",
-        value: `**${timeLeft} minut**`,
-      })
-      .setFooter({ text: "Grinduj szybciej! 🔥" })
-      .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
-  },
-};
+  console.log(`📊 Załadowano łącznie ${loaded} komend slash.`);
+}
