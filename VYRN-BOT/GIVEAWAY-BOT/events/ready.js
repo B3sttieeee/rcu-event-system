@@ -1,12 +1,15 @@
 // ===== INIT SYSTEMS =====
 async function initSystems(client) {
+  console.log("🚀 Uruchamianie systemów...");
+
   // 🎫 TICKETS
   try {
+    const { createTicketPanel } = require("../utils/ticketSystem");
     await createTicketPanel(client);
     log("🎟", "Ticket system ready");
   } catch (err) {
     log("❌", "Ticket system failed");
-    console.log(err);
+    console.error(err);
   }
 
   // 🎮 EVENTS
@@ -18,28 +21,30 @@ async function initSystems(client) {
     }
   } catch (err) {
     log("❌", "Event system failed");
-    console.log(err);
+    console.error(err);
   }
 
   // 🎁 GIVEAWAYS
   try {
+    const { loadGiveaways } = require("../utils/giveawaySystem");
     await loadGiveaways(client);
     log("🎁", "Giveaways loaded");
   } catch (err) {
     log("❌", "Giveaways failed");
-    console.log(err);
+    console.error(err);
   }
 
   // 🎤 VOICE XP
   try {
+    const levelSystem = require("../utils/levelSystem");
     levelSystem?.startVoiceXP?.(client);
     log("🎤", "Voice XP ready");
   } catch (err) {
     log("❌", "Voice XP failed");
-    console.log(err);
+    console.error(err);
   }
 
-  // 💰 ECONOMY + BOOST SYSTEM (NOWE)
+  // 💰 ECONOMY + BOOST
   try {
     const { loadCoins } = require("../utils/economySystem");
     const { loadBoosts } = require("../utils/boostSystem");
@@ -51,25 +56,32 @@ async function initSystems(client) {
     log("🚀", "Boost system ready");
   } catch (err) {
     log("❌", "Economy/Boost system failed");
-    console.log(err);
+    console.error(err);
   }
 
   // 🎯 DAILY RESET
   try {
-    if (startDailyReset) {
+    const { startDailyReset } = require("../utils/profileSystem");
+    if (typeof startDailyReset === "function") {
       startDailyReset();
       log("🎯", "Daily system ready");
     }
   } catch (err) {
     log("❌", "Daily system failed");
+    console.error(err);
   }
 
   // 🧠 CLAN SYSTEM
   try {
-    startClanSystem(client);
-    log("🧠", "Clan system ready");
+    const { startClanSystem } = require("../utils/clanSystem");
+    if (typeof startClanSystem === "function") {
+      startClanSystem(client);
+      log("🧠", "Clan system ready");
+    }
   } catch (err) {
     log("❌", "Clan system failed");
-    console.log(err);
+    console.error(err);
   }
+
+  console.log("✅ Wszystkie systemy uruchomione pomyślnie.");
 }
