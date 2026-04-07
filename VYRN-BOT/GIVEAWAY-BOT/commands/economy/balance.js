@@ -18,7 +18,10 @@ module.exports = {
         .addFields(
           {
             name: "━━━━━━━━━━━━━━━━━━━━━━",
-            value: "Użyj `/shop`, aby przejrzeć dostępne boosty",
+            value: "**Jak zdobywać monety?**\n" +
+                   "• Pisanie wiadomości → **3** <:CASHH:1491180511308157041> co 12 sekund\n" +
+                   "• Spędzanie czasu na VC → **8** <:CASHH:1491180511308157041> za minutę\n" +
+                   "• Wbijanie poziomów → **+50** <:CASHH:1491180511308157041>",
             inline: false
           }
         )
