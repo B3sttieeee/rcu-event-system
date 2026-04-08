@@ -77,8 +77,8 @@ function getCountdown(hours) {
   return `${h}h ${m}m ${s}s`;
 }
 
-// ====================== ANTI-SPAM MEMORY ======================
-const sentEvents = new Map(); // klucz: "merchant-14" lub "egg-12"
+// ====================== ANTI-SPAM + PRE-PING MEMORY ======================
+const prePingMessages = new Map(); // klucz: "merchant-14" lub "egg-12" → message object
 
 // ====================== EMBEDS ======================
 function createPanelEmbed() {
@@ -188,7 +188,7 @@ async function startPanel(client) {
   }
 }
 
-// ====================== MAIN EVENT SYSTEM (NAPRAWIONY - ANTI-SPAM) ======================
+// ====================== MAIN EVENT SYSTEM (POPRAWIONY ANTI-SPAM) ======================
 function startEventSystem(client) {
   console.log("🚀 Event System uruchomiony – monitorowanie godzin...");
 
@@ -199,79 +199,82 @@ function startEventSystem(client) {
 
     // ====================== HONEY MERCHANT ======================
     for (const eventHour of CONFIG.MERCHANT_HOURS) {
-      const eventKey = `merchant-${eventHour}`;
+      const preKey = `merchant-${eventHour}`;
 
-      // 5 minut przed
+      // 5 minut przed startem
       if (hour === eventHour - 1 && minute === 55) {
-        if (!sentEvents.has(eventKey)) {
+        if (!prePingMessages.has(preKey)) {
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
           if (channel) {
-            await channel.send(`<@&${CONFIG.MERCHANT_ROLE}> ⏳ **Honey Merchant** za 5 minut!`).catch(() => {});
-            sentEvents.set(eventKey, true);
+            const pingMsg = await channel.send(`<@&${CONFIG.MERCHANT_ROLE}> ⏳ **Honey Merchant** za 5 minut!`).catch(() => null);
+            if (pingMsg) prePingMessages.set(preKey, pingMsg);
           }
         }
       }
 
       // Start eventu
       if (hour === eventHour && minute === 0) {
-        if (!sentEvents.has(eventKey + "-started")) {
-          const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-          if (channel) {
-            const startMsg = await channel.send({
-              content: `<@&${CONFIG.MERCHANT_ROLE}>`,
-              embeds: [createMerchantStartEmbed()]
-            }).catch(() => null);
+        // Usuń ping sprzed 5 minut
+        const preMsg = prePingMessages.get(preKey);
+        if (preMsg) {
+          preMsg.delete().catch(() => {});
+          prePingMessages.delete(preKey);
+        }
 
-            sendDMNotifications(client, "merchant");
+        const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+        if (channel) {
+          const startMsg = await channel.send({
+            content: `<@&${CONFIG.MERCHANT_ROLE}>`,
+            embeds: [createMerchantStartEmbed()]
+          }).catch(() => null);
 
-            if (startMsg) {
-              setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
-            }
+          sendDMNotifications(client, "merchant");
+
+          if (startMsg) {
+            setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
           }
-          sentEvents.set(eventKey + "-started", true);
         }
       }
     }
 
     // ====================== EGG HUNT ======================
     for (const eventHour of CONFIG.EGG_HOURS) {
-      const eventKey = `egg-${eventHour}`;
+      const preKey = `egg-${eventHour}`;
 
-      // 5 minut przed
+      // 5 minut przed startem
       if (hour === eventHour - 1 && minute === 55) {
-        if (!sentEvents.has(eventKey)) {
+        if (!prePingMessages.has(preKey)) {
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
           if (channel) {
-            await channel.send(`<@&${CONFIG.EGG_ROLE}> ⏳ **Egg Hunt** za 5 minut!`).catch(() => {});
-            sentEvents.set(eventKey, true);
+            const pingMsg = await channel.send(`<@&${CONFIG.EGG_ROLE}> ⏳ **Egg Hunt** za 5 minut!`).catch(() => null);
+            if (pingMsg) prePingMessages.set(preKey, pingMsg);
           }
         }
       }
 
       // Start eventu
       if (hour === eventHour && minute === 0) {
-        if (!sentEvents.has(eventKey + "-started")) {
-          const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-          if (channel) {
-            const startMsg = await channel.send({
-              content: `<@&${CONFIG.EGG_ROLE}>`,
-              embeds: [createEggStartEmbed()]
-            }).catch(() => null);
+        // Usuń ping sprzed 5 minut
+        const preMsg = prePingMessages.get(preKey);
+        if (preMsg) {
+          preMsg.delete().catch(() => {});
+          prePingMessages.delete(preKey);
+        }
 
-            sendDMNotifications(client, "egg");
+        const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+        if (channel) {
+          const startMsg = await channel.send({
+            content: `<@&${CONFIG.EGG_ROLE}>`,
+            embeds: [createEggStartEmbed()]
+          }).catch(() => null);
 
-            if (startMsg) {
-              setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
-            }
+          sendDMNotifications(client, "egg");
+
+          if (startMsg) {
+            setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
           }
-          sentEvents.set(eventKey + "-started", true);
         }
       }
-    }
-
-    // Czyszczenie starych kluczy co godzinę (żeby mapa nie rosła w nieskończoność)
-    if (minute === 1) {
-      sentEvents.clear();
     }
 
   }, CONFIG.REFRESH_INTERVAL);
@@ -325,7 +328,7 @@ async function handleEventInteraction(interaction) {
       await interaction.reply({ content: "❌ Wystąpił błąd.", ephemeral: true }).catch(() => {});
     }
   }
-}
+};
 
 // ====================== EXPORT ======================
 module.exports = {
