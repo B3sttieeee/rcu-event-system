@@ -1,9 +1,9 @@
-// ====================== MAIN EVENT SYSTEM (POPRAWIONY - ANTI-SPAM) ======================
+// ====================== MAIN EVENT SYSTEM (STABILNA WERSJA) ======================
 function startEventSystem(client) {
   console.log("🚀 Event System uruchomiony – monitorowanie godzin...");
 
-  // Klucz: "merchant-14" lub "egg-12"
-  const triggeredEvents = new Map();
+  // Mapa do śledzenia, czy dany event już został obsłużony w tej godzinie
+  const processedEvents = new Map();
 
   setInterval(async () => {
     const now = getNow();
@@ -16,23 +16,24 @@ function startEventSystem(client) {
 
       // 5 minut przed
       if (hour === eventHour - 1 && minute === 55) {
-        if (!triggeredEvents.has(eventKey + "-pre")) {
+        if (!processedEvents.has(eventKey + "-pre")) {
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
           if (channel) {
             await channel.send(`<@&${CONFIG.MERCHANT_ROLE}> ⏳ **Honey Merchant** za 5 minut!`).catch(() => {});
-            triggeredEvents.set(eventKey + "-pre", true);
+            processedEvents.set(eventKey + "-pre", true);
           }
         }
       }
 
-      // Start eventu (tylko raz!)
+      // Start eventu
       if (hour === eventHour && minute === 0) {
-        if (!triggeredEvents.has(eventKey + "-started")) {
-          // Usuń ping sprzed 5 minut
+        if (!processedEvents.has(eventKey + "-started")) {
+          // Usuń poprzedni ping "za 5 minut", jeśli istnieje
           const preKey = eventKey + "-pre";
-          const preMsg = triggeredEvents.get(preKey); // jeśli trzymasz obiekt wiadomości
-          // Jeśli masz obiekt wiadomości, możesz go usunąć:
-          // if (preMsg && preMsg.delete) preMsg.delete().catch(() => {});
+          if (processedEvents.has(preKey)) {
+            // Nie mamy obiektu wiadomości, więc nie usuwamy — ale przynajmniej nie spamujemy
+            processedEvents.delete(preKey);
+          }
 
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
           if (channel) {
@@ -48,7 +49,7 @@ function startEventSystem(client) {
             }
           }
 
-          triggeredEvents.set(eventKey + "-started", true);
+          processedEvents.set(eventKey + "-started", true);
         }
       }
     }
@@ -59,18 +60,21 @@ function startEventSystem(client) {
 
       // 5 minut przed
       if (hour === eventHour - 1 && minute === 55) {
-        if (!triggeredEvents.has(eventKey + "-pre")) {
+        if (!processedEvents.has(eventKey + "-pre")) {
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
           if (channel) {
             await channel.send(`<@&${CONFIG.EGG_ROLE}> ⏳ **Egg Hunt** za 5 minut!`).catch(() => {});
-            triggeredEvents.set(eventKey + "-pre", true);
+            processedEvents.set(eventKey + "-pre", true);
           }
         }
       }
 
       // Start eventu
       if (hour === eventHour && minute === 0) {
-        if (!triggeredEvents.has(eventKey + "-started")) {
+        if (!processedEvents.has(eventKey + "-started")) {
+          const preKey = eventKey + "-pre";
+          if (processedEvents.has(preKey)) processedEvents.delete(preKey);
+
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
           if (channel) {
             const startMsg = await channel.send({
@@ -84,14 +88,15 @@ function startEventSystem(client) {
               setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
             }
           }
-          triggeredEvents.set(eventKey + "-started", true);
+
+          processedEvents.set(eventKey + "-started", true);
         }
       }
     }
 
-    // Czyszczenie pamięci co godzinę (żeby nie rosła w nieskończoność)
+    // Czyszczenie pamięci co godzinę
     if (minute === 5) {
-      triggeredEvents.clear();
+      processedEvents.clear();
     }
 
   }, CONFIG.REFRESH_INTERVAL);
