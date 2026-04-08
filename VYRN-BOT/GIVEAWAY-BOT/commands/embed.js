@@ -10,63 +10,85 @@ const {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('📦 Tworzy embed (formularz)')
+    .setDescription('📦 Tworzy lub edytuje embed')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(opt =>
       opt.setName('kanal')
-        .setDescription('Kanał docelowy')
+        .setDescription('Kanał docelowy (opcjonalnie)')
         .setRequired(false)
     ),
 
   async execute(interaction) {
+    try {
+      const targetChannel = interaction.options.getChannel('kanal') || interaction.channel;
 
-    const channel = interaction.options.getChannel('kanal');
+      // Pobieramy embed z wiadomości, na której kliknięto przycisk "Edytuj" (jeśli istnieje)
+      let oldEmbed = null;
+      if (interaction.message && interaction.message.embeds.length > 0) {
+        oldEmbed = interaction.message.embeds[0];
+      }
 
-    const modal = new ModalBuilder()
-      .setCustomId(`embedModal_${channel?.id || interaction.channel.id}`)
-      .setTitle('📦 Embed Builder');
+      const modal = new ModalBuilder()
+        .setCustomId(`embedModal_${targetChannel.id}`)
+        .setTitle('📦 Embed Builder');
 
-    const title = new TextInputBuilder()
-      .setCustomId('title')
-      .setLabel('Tytuł')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false);
+      const titleInput = new TextInputBuilder()
+        .setCustomId('title')
+        .setLabel('Tytuł embeda')
+        .setStyle(TextInputStyle.Short)
+        .setValue(oldEmbed?.title || "")
+        .setRequired(false);
 
-    const description = new TextInputBuilder()
-      .setCustomId('description')
-      .setLabel('Opis (emoji 🎉)')
-      .setStyle(TextInputStyle.Paragraph)
-      .setRequired(true) // 🔥 HACK (musi być 1 required)
-      .setPlaceholder('Wpisz "." jeśli nie chcesz opisu');
+      const descriptionInput = new TextInputBuilder()
+        .setCustomId('description')
+        .setLabel('Opis embeda')
+        .setStyle(TextInputStyle.Paragraph)
+        .setValue(oldEmbed?.description || "")
+        .setRequired(false)
+        .setPlaceholder('Wpisz "." jeśli nie chcesz opisu');
 
-    const color = new TextInputBuilder()
-      .setCustomId('color')
-      .setLabel('Kolor HEX (#ff0000)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false);
+      const colorInput = new TextInputBuilder()
+        .setCustomId('color')
+        .setLabel('Kolor HEX (np. #ff0000)')
+        .setStyle(TextInputStyle.Short)
+        .setValue(oldEmbed?.hexColor ? `#${oldEmbed.hexColor}` : "#2b2d31")
+        .setRequired(false);
 
-    const author = new TextInputBuilder()
-      .setCustomId('author')
-      .setLabel('Autor: nazwa | iconURL')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('Admin | https://...');
+      const authorInput = new TextInputBuilder()
+        .setCustomId('author')
+        .setLabel('Autor (nazwa | icon URL)')
+        .setStyle(TextInputStyle.Short)
+        .setValue(oldEmbed?.author ? 
+          (oldEmbed.author.iconURL ? 
+            `${oldEmbed.author.name} | ${oldEmbed.author.iconURL}` : 
+            oldEmbed.author.name) : "")
+        .setRequired(false)
+        .setPlaceholder('Admin | https://i.imgur.com/...');
 
-    const image = new TextInputBuilder()
-      .setCustomId('image')
-      .setLabel('GIF / obraz URL')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder('https://i.imgur.com/...gif');
+      const imageInput = new TextInputBuilder()
+        .setCustomId('image')
+        .setLabel('URL obrazka / GIF')
+        .setStyle(TextInputStyle.Short)
+        .setValue(oldEmbed?.image?.url || "")
+        .setRequired(false)
+        .setPlaceholder('https://i.imgur.com/...');
 
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(title),
-      new ActionRowBuilder().addComponents(description),
-      new ActionRowBuilder().addComponents(color),
-      new ActionRowBuilder().addComponents(author),
-      new ActionRowBuilder().addComponents(image)
-    );
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(titleInput),
+        new ActionRowBuilder().addComponents(descriptionInput),
+        new ActionRowBuilder().addComponents(colorInput),
+        new ActionRowBuilder().addComponents(authorInput),
+        new ActionRowBuilder().addComponents(imageInput)
+      );
 
-    await interaction.showModal(modal);
+      await interaction.showModal(modal);
+
+    } catch (err) {
+      console.error("❌ Błąd w komendzie /embed:", err);
+      await interaction.reply({
+        content: "❌ Wystąpił błąd podczas otwierania formularza.",
+        ephemeral: true
+      });
+    }
   }
 };
