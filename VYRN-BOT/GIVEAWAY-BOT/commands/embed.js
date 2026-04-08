@@ -22,7 +22,7 @@ module.exports = {
     try {
       const targetChannel = interaction.options.getChannel('kanal') || interaction.channel;
 
-      // Pobieramy embed z wiadomości, jeśli kliknięto "Edytuj"
+      // Pobieramy istniejący embed (jeśli kliknięto "Edytuj")
       let oldEmbed = null;
       if (interaction.message && interaction.message.embeds.length > 0) {
         oldEmbed = interaction.message.embeds[0];
@@ -57,22 +57,23 @@ module.exports = {
         .setValue(oldEmbed?.hexColor ? `#${oldEmbed.hexColor}` : "#2b2d31")
         .setRequired(false);
 
-      // AUTHOR
+      // AUTHOR - NAPRAWIONE
       let authorValue = "";
       if (oldEmbed?.author) {
         authorValue = oldEmbed.author.iconURL 
           ? `${oldEmbed.author.name} | ${oldEmbed.author.iconURL}`
-          : oldEmbed.author.name;
+          : oldEmbed.author.name || "";
       }
+
       const authorInput = new TextInputBuilder()
         .setCustomId('author')
         .setLabel('Autor (nazwa | icon URL)')
         .setStyle(TextInputStyle.Short)
         .setValue(authorValue)
-        .setRequired(false)
+        .setRequired(false)           // ← ważne
         .setPlaceholder('Admin | https://i.imgur.com/...');
 
-      // IMAGE / GIF
+      // IMAGE
       const imageInput = new TextInputBuilder()
         .setCustomId('image')
         .setLabel('URL obrazka lub GIF')
