@@ -4,7 +4,7 @@ const path = require("path");
 const DATA_DIR = "/data";
 const BOOST_PATH = path.join(DATA_DIR, "activeBoosts.json");
 
-let activeBoosts = new Map(); // userId => { multiplier, endTime, name }
+let activeBoosts = new Map(); // userId => { multiplier, endTime, name, type: "lucky" | "shop" }
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -14,14 +14,17 @@ if (!fs.existsSync(DATA_DIR)) {
 function loadBoosts() {
   if (!fs.existsSync(BOOST_PATH)) {
     fs.writeFileSync(BOOST_PATH, JSON.stringify({}, null, 2));
+    console.log("[BOOST] Utworzono nowy plik activeBoosts.json");
     return;
   }
+
   try {
     const data = JSON.parse(fs.readFileSync(BOOST_PATH, "utf-8"));
     activeBoosts = new Map(Object.entries(data));
     console.log(`[BOOST] Załadowano ${activeBoosts.size} aktywnych boostów`);
   } catch (err) {
     console.error("[BOOST] Błąd odczytu activeBoosts.json:", err.message);
+    activeBoosts = new Map();
   }
 }
 
@@ -49,12 +52,20 @@ function getCurrentBoost(userId) {
   return boost ? boost.multiplier : 1;
 }
 
-// ====================== LUCKY BOOST ======================
+// ====================== LUCKY BOOST (losowy z wiadomości) ======================
 async function tryGiveRandomBoost(member) {
   if (!member || member.user.bot) return false;
 
   // 8% szansy na lucky boost
   if (Math.random() > 0.08) return false;
+
+  // Nie dajemy lucky boosta, jeśli użytkownik ma już kupiony boost ze sklepu
+  if (activeBoosts.has(member.id)) {
+    const existing = activeBoosts.get(member.id);
+    if (existing.type === "shop") {
+      return false; // Szanujemy droższy boost kupiony przez użytkownika
+    }
+  }
 
   const boostsPool = [
     { multiplier: 1.5, duration: 15 * 60 * 1000, name: "1.5x XP" },
@@ -69,6 +80,7 @@ async function tryGiveRandomBoost(member) {
     multiplier: chosen.multiplier,
     endTime,
     name: chosen.name,
+    type: "lucky"                    // oznaczamy jako losowy
   });
 
   saveBoosts();
@@ -97,30 +109,36 @@ const SHOP_BOOSTS = [
 
 async function buyBoost(member, boostId) {
   const boost = SHOP_BOOSTS.find(b => b.id === boostId);
-  if (!boost) return { success: false, message: "❌ Nie znaleziono takiego boostu!" };
+  if (!boost) {
+    return { success: false, message: "❌ Nie znaleziono takiego boostu!" };
+  }
 
   const economy = require("./economySystem");
   if (!economy.spendCoins(member.id, boost.price)) {
-    return { 
-      success: false, 
-      message: `❌ Nie masz wystarczająco monet! Potrzebujesz **${boost.price}** 🪙` 
+    return {
+      success: false,
+      message: `❌ Nie masz wystarczająco monet! Potrzebujesz **${boost.price}** <:CASHH:1491180511308157041>`
     };
   }
 
   const endTime = Date.now() + boost.duration;
+
+  // Kupiony boost ZAWSZE nadpisuje poprzedni (nawet lucky)
   activeBoosts.set(member.id, {
     multiplier: boost.multiplier,
     endTime,
     name: boost.name,
+    type: "shop"                     // oznaczamy jako kupiony ze sklepu
   });
 
   saveBoosts();
 
   const embed = {
     color: 0x00ff88,
-    title: "🎉 Kupiono Boost!",
-    description: `**${boost.name}** na **${Math.floor(boost.duration / 60000)} minut**!\n\nZużyto: **${boost.price}** 🪙`,
-    footer: { text: "Grinduj jeszcze szybciej! 🔥" },
+    title: "✅ Boost zakupiony pomyślnie!",
+    description: `**${boost.name}** na **${Math.floor(boost.duration / 60000)} minut**!\n\n` +
+                 `Zużyto: **${boost.price}** <:CASHH:1491180511308157041>`,
+    footer: { text: "Grinduj szybciej! 🔥" },
   };
 
   try {
@@ -136,5 +154,5 @@ module.exports = {
   tryGiveRandomBoost,
   buyBoost,
   SHOP_BOOSTS,
-  activeBoosts, // tylko do debugu
+  activeBoosts, // tylko do debugowania
 };
