@@ -4,7 +4,7 @@ const path = require("path");
 const DATA_DIR = "/data";
 const BOOST_PATH = path.join(DATA_DIR, "activeBoosts.json");
 
-let activeBoosts = new Map(); // userId => { multiplier, endTime, name, type: "lucky" | "shop" }
+let activeBoosts = new Map(); // userId => { multiplier, endTime, name, type: "shop" }
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -17,7 +17,6 @@ function loadBoosts() {
     console.log("[BOOST] Utworzono nowy plik activeBoosts.json");
     return;
   }
-
   try {
     const data = JSON.parse(fs.readFileSync(BOOST_PATH, "utf-8"));
     activeBoosts = new Map(Object.entries(data));
@@ -37,6 +36,7 @@ function saveBoosts() {
   }
 }
 
+// ====================== CORE ======================
 function cleanExpiredBoosts() {
   const now = Date.now();
   for (const [userId, boost] of activeBoosts.entries()) {
@@ -50,53 +50,6 @@ function getCurrentBoost(userId) {
   cleanExpiredBoosts();
   const boost = activeBoosts.get(userId);
   return boost ? boost.multiplier : 1;
-}
-
-// ====================== LUCKY BOOST (losowy z wiadomości) ======================
-async function tryGiveRandomBoost(member) {
-  if (!member || member.user.bot) return false;
-
-  // 8% szansy na lucky boost
-  if (Math.random() > 0.08) return false;
-
-  // Nie dajemy lucky boosta, jeśli użytkownik ma już kupiony boost ze sklepu
-  if (activeBoosts.has(member.id)) {
-    const existing = activeBoosts.get(member.id);
-    if (existing.type === "shop") {
-      return false; // Szanujemy droższy boost kupiony przez użytkownika
-    }
-  }
-
-  const boostsPool = [
-    { multiplier: 1.5, duration: 15 * 60 * 1000, name: "1.5x XP" },
-    { multiplier: 2.0, duration: 10 * 60 * 1000, name: "2x XP" },
-    { multiplier: 2.5, duration: 7 * 60 * 1000, name: "2.5x XP" },
-  ];
-
-  const chosen = boostsPool[Math.floor(Math.random() * boostsPool.length)];
-  const endTime = Date.now() + chosen.duration;
-
-  activeBoosts.set(member.id, {
-    multiplier: chosen.multiplier,
-    endTime,
-    name: chosen.name,
-    type: "lucky"                    // oznaczamy jako losowy
-  });
-
-  saveBoosts();
-
-  const embed = {
-    color: 0x00ff88,
-    title: "🎉 LUCKY BOOST!",
-    description: `Otrzymałeś **${chosen.name}** na **${Math.floor(chosen.duration / 60000)} minut**!`,
-    footer: { text: "Grinduj szybciej! 🔥" },
-  };
-
-  try {
-    await member.send({ embeds: [embed] });
-  } catch (e) {}
-
-  return true;
 }
 
 // ====================== SKLEP Z BOOSTAMI ======================
@@ -123,12 +76,12 @@ async function buyBoost(member, boostId) {
 
   const endTime = Date.now() + boost.duration;
 
-  // Kupiony boost ZAWSZE nadpisuje poprzedni (nawet lucky)
+  // Nadpisujemy poprzedni boost (nawet jeśli był aktywny)
   activeBoosts.set(member.id, {
     multiplier: boost.multiplier,
     endTime,
     name: boost.name,
-    type: "shop"                     // oznaczamy jako kupiony ze sklepu
+    type: "shop"
   });
 
   saveBoosts();
@@ -143,7 +96,9 @@ async function buyBoost(member, boostId) {
 
   try {
     await member.send({ embeds: [embed] });
-  } catch (e) {}
+  } catch (e) {
+    // DM zablokowane - ignorujemy
+  }
 
   return { success: true, boost };
 }
@@ -151,7 +106,6 @@ async function buyBoost(member, boostId) {
 module.exports = {
   loadBoosts,
   getCurrentBoost,
-  tryGiveRandomBoost,
   buyBoost,
   SHOP_BOOSTS,
   activeBoosts, // tylko do debugowania
