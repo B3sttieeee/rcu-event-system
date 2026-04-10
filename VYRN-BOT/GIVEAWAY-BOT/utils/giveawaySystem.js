@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 
 // ====================== CONFIG ======================
-const DATA_DIR = "./data";                    // ← zmienione na ./data (lepsze)
+const DATA_DIR = "./data";
 const DB_PATH = path.join(DATA_DIR, "giveaways.json");
 
 const BONUS_ROLES = {
@@ -57,37 +57,28 @@ function saveDB() {
 // ====================== LOAD & RESUME ======================
 function loadGiveaways(client) {
   const data = loadDB();
-  let loaded = 0;
-
   for (const [messageId, giveawayData] of Object.entries(data)) {
-    giveaways.set(messageId, giveawayData); // ładujemy WSZYSTKIE (także ended)
+    giveaways.set(messageId, giveawayData);
 
     if (!giveawayData.ended) {
-      resumeGiveaway(client, messageId).then(success => {
-        if (success) loaded++;
-      });
+      resumeGiveaway(client, messageId);
     }
   }
-  console.log(`🎁 Załadowano ${giveaways.size} giveawayów (w tym zakończonych)`);
+  console.log(`🎁 Załadowano ${giveaways.size} giveawayów`);
 }
 
 async function resumeGiveaway(client, messageId) {
   const data = giveaways.get(messageId);
-  if (!data) return false;
+  if (!data || data.ended) return false;
 
   try {
     const channel = await client.channels.fetch(data.channelId).catch(() => null);
     if (!channel) return false;
 
     const message = await channel.messages.fetch(messageId).catch(() => null);
-    if (!message) {
-      // giveawayData.ended = true; // zostawiamy w bazie
-      return false;
-    }
+    if (!message) return false;
 
-    if (!data.ended) {
-      startTimer(message);
-    }
+    startTimer(message);
     return true;
   } catch (err) {
     console.error(`❌ Błąd przy wznawianiu giveaway ${messageId}:`, err.message);
@@ -167,7 +158,7 @@ async function createGiveaway(interaction, options) {
   if (!duration) throw new Error("Nieprawidłowy format czasu (np. 30m, 2h, 1d)");
 
   const giveawayData = {
-    guildId: interaction.guild.id,        // ← WAŻNE!
+    guildId: interaction.guild.id,
     channelId: interaction.channel.id,
     messageId: null,
     prize: options.prize,
@@ -217,29 +208,32 @@ function startTimer(message) {
     }
 
     try {
-      await message.edit({ embeds: [buildEmbed(data)] });
+      await message.edit({ embeds: [buildEmbed(data)] }).catch(() => {});
     } catch (err) {
-      if (err.code === 10008) { // wiadomość usunięta
+      if (err.code === 10008) {
         giveaways.delete(message.id);
         saveDB();
         clearInterval(interval);
       }
     }
 
+    // Automatyczne zakończenie
     if (Date.now() >= data.end && !data.ended) {
+      console.log(`[TIMER] Automatycznie kończę giveaway: ${message.id}`);
       data.ended = true;
       clearInterval(interval);
-      await endGiveaway(message, data);
+      await endGiveaway(message, data).catch(console.error);
     }
-  }, 10000); // co 10 sekund
+  }, 8000); // co 8 sekund (szybciej niż wcześniej)
 }
 
 // ====================== END GIVEAWAY ======================
 async function endGiveaway(message, data) {
+  data.ended = true;
+  saveDB();
+
   if (data.users.length === 0) {
-    await message.channel.send("❌ Giveaway zakończony – brak uczestników.");
-    // Zostawiamy w bazie (dla rerolla)
-    saveDB();
+    await message.channel.send("❌ Giveaway zakończony – brak uczestników.").catch(() => {});
     return;
   }
 
@@ -256,8 +250,7 @@ async function endGiveaway(message, data) {
   }
 
   if (weightedUsers.length === 0) {
-    await message.channel.send("❌ Nie udało się wylosować zwycięzców.");
-    saveDB();
+    await message.channel.send("❌ Nie udało się wylosować zwycięzców.").catch(() => {});
     return;
   }
 
@@ -278,25 +271,33 @@ async function endGiveaway(message, data) {
     .setDescription(`**Nagroda:** ${data.prize}\n**Zwycięzcy:** ${winnerMentions}`)
     .setTimestamp();
 
-  await message.channel.send({ embeds: [endEmbed] });
+  await message.channel.send({ embeds: [endEmbed] }).catch(() => {});
   await message.edit({ components: [] }).catch(() => {});
-
-  saveDB(); // zapisujemy zakończony giveaway
 }
 
 // ====================== REROLL ======================
 async function reroll(client, messageId) {
   let data = giveaways.get(messageId);
 
-  // Jeśli nie ma w pamięci — ładujemy z pliku
   if (!data) {
     const allData = loadDB();
     data = allData[messageId];
   }
 
-  if (!data) return "❌ Giveaway o podanym ID nie został znaleziony.";
+  if (!data) {
+    return "❌ Giveaway o podanym ID nie został znaleziony.";
+  }
 
-  if (!data.ended) return "❌ Ten giveaway jeszcze się nie zakończył!";
+  // Automatyczne oznaczenie jako ended, jeśli czas już minął
+  if (!data.ended && Date.now() >= data.end) {
+    data.ended = true;
+    saveDB();
+    console.log(`[REROLL] Automatycznie oznaczono jako ended: ${messageId}`);
+  }
+
+  if (!data.ended) {
+    return "❌ Ten giveaway jeszcze się nie zakończył!";
+  }
 
   if (!data.users || data.users.length === 0) {
     return "❌ Brak uczestników do rerolla.";
@@ -317,7 +318,7 @@ async function reroll(client, messageId) {
       }
     }
   } catch (e) {
-    console.error("Błąd rerolla:", e);
+    console.error("Błąd przy rerollu:", e);
   }
 
   if (weightedUsers.length === 0) {
