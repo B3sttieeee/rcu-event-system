@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 
 // ====================== CONFIG ======================
-const DATA_DIR = "/data";
+const DATA_DIR = "./data";                    // ← zmienione na ./data (lepsze)
 const DB_PATH = path.join(DATA_DIR, "giveaways.json");
 
 const BONUS_ROLES = {
@@ -20,7 +20,7 @@ const BONUS_ROLES = {
   "1476000992351879229": 15   // Level 75
 };
 
-const REQUIRED_ROLE_TO_CREATE = "1476000458987278397"; // Level 5+ do tworzenia
+const REQUIRED_ROLE_TO_CREATE = "1476000458987278397"; // Level 5+
 
 // ====================== DATABASE ======================
 const giveaways = new Map(); // messageId => data
@@ -60,14 +60,15 @@ function loadGiveaways(client) {
   let loaded = 0;
 
   for (const [messageId, giveawayData] of Object.entries(data)) {
-    if (giveawayData.ended) continue;
+    giveaways.set(messageId, giveawayData); // ładujemy WSZYSTKIE (także ended)
 
-    giveaways.set(messageId, giveawayData);
-    resumeGiveaway(client, messageId).then(success => {
-      if (success) loaded++;
-    });
+    if (!giveawayData.ended) {
+      resumeGiveaway(client, messageId).then(success => {
+        if (success) loaded++;
+      });
+    }
   }
-  console.log(`🎁 Załadowano ${giveaways.size} aktywnych giveawayów`);
+  console.log(`🎁 Załadowano ${giveaways.size} giveawayów (w tym zakończonych)`);
 }
 
 async function resumeGiveaway(client, messageId) {
@@ -80,12 +81,13 @@ async function resumeGiveaway(client, messageId) {
 
     const message = await channel.messages.fetch(messageId).catch(() => null);
     if (!message) {
-      giveaways.delete(messageId);
-      saveDB();
+      // giveawayData.ended = true; // zostawiamy w bazie
       return false;
     }
 
-    startTimer(message);
+    if (!data.ended) {
+      startTimer(message);
+    }
     return true;
   } catch (err) {
     console.error(`❌ Błąd przy wznawianiu giveaway ${messageId}:`, err.message);
@@ -95,10 +97,11 @@ async function resumeGiveaway(client, messageId) {
 
 // ====================== HELPERS ======================
 function parseTime(timeStr) {
-  const match = timeStr.match(/^(\d+)([smhd])$/);
+  const match = timeStr.match(/^(\d+)([smhd])$/i);
   if (!match) return null;
   const num = parseInt(match[1]);
-  const unit = match[2];
+  const unit = match[2].toLowerCase();
+
   switch (unit) {
     case "s": return num * 1000;
     case "m": return num * 60000;
@@ -146,7 +149,7 @@ function buildEmbed(data) {
         name: "🎟 System Boostów",
         value: Object.entries(BONUS_ROLES)
           .map(([roleId, bonus]) => `<@&${roleId}> → **+${bonus}** losów`)
-          .join("\n") || "Brak bonusów",
+          .join("\n"),
         inline: false
       }
     )
@@ -164,16 +167,18 @@ async function createGiveaway(interaction, options) {
   if (!duration) throw new Error("Nieprawidłowy format czasu (np. 30m, 2h, 1d)");
 
   const giveawayData = {
+    guildId: interaction.guild.id,        // ← WAŻNE!
+    channelId: interaction.channel.id,
+    messageId: null,
     prize: options.prize,
     winners: parseInt(options.winners) || 1,
     end: Date.now() + duration,
     users: [],
-    channelId: interaction.channel.id,
-    messageId: null,
     ended: false,
     hostId: interaction.user.id,
     description: options.description || null,
-    requiredRole: options.requiredRole || null
+    requiredRole: options.requiredRole || null,
+    createdAt: Date.now()
   };
 
   const row = new ActionRowBuilder().addComponents(
@@ -188,10 +193,7 @@ async function createGiveaway(interaction, options) {
   );
 
   const embed = buildEmbed(giveawayData);
-  const msg = await interaction.channel.send({
-    embeds: [embed],
-    components: [row]
-  });
+  const msg = await interaction.channel.send({ embeds: [embed], components: [row] });
 
   giveawayData.messageId = msg.id;
   giveaways.set(msg.id, giveawayData);
@@ -200,7 +202,7 @@ async function createGiveaway(interaction, options) {
   startTimer(msg);
 
   await interaction.reply({
-    content: `✅ Giveaway utworzony! ID: \`${msg.id}\``,
+    content: `✅ Giveaway utworzony!\n**ID:** \`${msg.id}\``,
     ephemeral: true
   });
 }
@@ -217,7 +219,7 @@ function startTimer(message) {
     try {
       await message.edit({ embeds: [buildEmbed(data)] });
     } catch (err) {
-      if (err.code === 10008) {
+      if (err.code === 10008) { // wiadomość usunięta
         giveaways.delete(message.id);
         saveDB();
         clearInterval(interval);
@@ -229,33 +231,32 @@ function startTimer(message) {
       clearInterval(interval);
       await endGiveaway(message, data);
     }
-  }, 10000);
+  }, 10000); // co 10 sekund
 }
 
 // ====================== END GIVEAWAY ======================
 async function endGiveaway(message, data) {
   if (data.users.length === 0) {
     await message.channel.send("❌ Giveaway zakończony – brak uczestników.");
-    giveaways.delete(message.id);
+    // Zostawiamy w bazie (dla rerolla)
     saveDB();
     return;
   }
 
   let weightedUsers = [];
+  const guild = message.guild;
+
   for (const userId of data.users) {
-    try {
-      const member = await message.guild.members.fetch(userId).catch(() => null);
-      if (!member) continue;
-      const entries = getEntries(member);
-      for (let i = 0; i < entries; i++) {
-        weightedUsers.push(userId);
-      }
-    } catch (e) {}
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (!member) continue;
+    const entries = getEntries(member);
+    for (let i = 0; i < entries; i++) {
+      weightedUsers.push(userId);
+    }
   }
 
   if (weightedUsers.length === 0) {
     await message.channel.send("❌ Nie udało się wylosować zwycięzców.");
-    giveaways.delete(message.id);
     saveDB();
     return;
   }
@@ -280,21 +281,33 @@ async function endGiveaway(message, data) {
   await message.channel.send({ embeds: [endEmbed] });
   await message.edit({ components: [] }).catch(() => {});
 
-  giveaways.delete(message.id);
-  saveDB();
+  saveDB(); // zapisujemy zakończony giveaway
 }
 
 // ====================== REROLL ======================
 async function reroll(client, messageId) {
-  const data = giveaways.get(messageId);
-  if (!data) return "❌ Giveaway nie został znaleziony.";
-  if (!data.ended) return "❌ Giveaway jeszcze się nie zakończył.";
+  let data = giveaways.get(messageId);
+
+  // Jeśli nie ma w pamięci — ładujemy z pliku
+  if (!data) {
+    const allData = loadDB();
+    data = allData[messageId];
+  }
+
+  if (!data) return "❌ Giveaway o podanym ID nie został znaleziony.";
+
+  if (!data.ended) return "❌ Ten giveaway jeszcze się nie zakończył!";
+
+  if (!data.users || data.users.length === 0) {
+    return "❌ Brak uczestników do rerolla.";
+  }
 
   let weightedUsers = [];
-  for (const userId of data.users) {
-    try {
-      const guild = client.guilds.cache.get(data.channelId.split('/')[0]) || await client.guilds.fetch(data.channelId.split('/')[0]).catch(() => null);
-      if (!guild) continue;
+  try {
+    const guild = await client.guilds.fetch(data.guildId).catch(() => null);
+    if (!guild) return "❌ Nie mogę znaleźć serwera.";
+
+    for (const userId of data.users) {
       const member = await guild.members.fetch(userId).catch(() => null);
       if (!member) continue;
 
@@ -302,13 +315,18 @@ async function reroll(client, messageId) {
       for (let i = 0; i < entries; i++) {
         weightedUsers.push(userId);
       }
-    } catch (e) {}
+    }
+  } catch (e) {
+    console.error("Błąd rerolla:", e);
   }
 
-  if (weightedUsers.length === 0) return "❌ Brak ważnych uczestników do rerolla.";
+  if (weightedUsers.length === 0) {
+    return "❌ Żaden z uczestników nie jest już na serwerze.";
+  }
 
   const winnerId = weightedUsers[Math.floor(Math.random() * weightedUsers.length)];
-  return `🎉 **Reroll!** Nowy zwycięzca: <@${winnerId}>`;
+
+  return `🎉 **Reroll!** Nowy zwycięzca:\n<@${winnerId}>`;
 }
 
 // ====================== BUTTON HANDLER ======================
@@ -325,7 +343,7 @@ async function handleGiveaway(interaction) {
       return interaction.reply({ content: "✅ Już bierzesz udział!", ephemeral: true });
     }
     if (data.requiredRole && !interaction.member.roles.cache.has(data.requiredRole)) {
-      return interaction.reply({ content: "❌ Nie posiadasz wymaganej roli do udziału.", ephemeral: true });
+      return interaction.reply({ content: "❌ Nie posiadasz wymaganej roli.", ephemeral: true });
     }
 
     data.users.push(userId);
