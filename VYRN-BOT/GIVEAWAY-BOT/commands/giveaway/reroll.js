@@ -4,7 +4,7 @@ const {
   EmbedBuilder
 } = require("discord.js");
 
-const { reroll } = require("../../utils/giveawaySystem");   // ← POPRAWIONA ŚCIEŻKA
+const { reroll } = require("../../utils/giveawaySystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -13,7 +13,7 @@ module.exports = {
     .addStringOption(option =>
       option
         .setName("message_id")
-        .setDescription("ID wiadomości giveawayu (PPM na wiadomość → Copy ID)")
+        .setDescription("ID wiadomości giveawayu (PPM → Copy Message ID)")
         .setRequired(true)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
@@ -24,28 +24,26 @@ module.exports = {
 
       const messageId = interaction.options.getString("message_id").trim();
 
-      // ====================== WALIDACJA ======================
+      // Walidacja ID
       if (!/^\d{17,20}$/.test(messageId)) {
         return interaction.editReply({
-          content: "❌ **Nieprawidłowe ID wiadomości!**\n\nID powinno składać się z 17–20 cyfr.\n\n**Jak znaleźć ID?**\n1. Włącz tryb deweloperski w Discordzie\n2. PPM na wiadomość giveawayu → `Copy Message ID`"
+          content: "❌ **Nieprawidłowe ID wiadomości!**\n\nUpewnij się, że skopiowałeś dokładnie `Copy Message ID`."
         });
       }
 
-      // ====================== WYKONANIE REROLLA ======================
+      console.log(`[REROLL CMD] Użytkownik ${interaction.user.tag} próbuje reroll dla ID: ${messageId}`);
+
       const result = await reroll(interaction.client, messageId);
 
-      // Jeśli wynik zawiera błąd
-      if (!result || result.startsWith("❌")) {
-        return interaction.editReply({
-          content: result || "❌ Nie udało się wykonać rerolla. Giveaway mógł zostać usunięty lub jeszcze nie zakończył się."
-        });
+      if (result.startsWith("❌")) {
+        return interaction.editReply({ content: result });
       }
 
-      // ====================== SUKCES ======================
+      // Sukces
       const successEmbed = new EmbedBuilder()
         .setColor("#22c55e")
         .setTitle("🎉 Reroll Giveaway")
-        .setDescription(result)   // result już zawiera "<@id> Nowy zwycięzca"
+        .setDescription(result)
         .addFields(
           { name: "📨 ID Wiadomości", value: `\`${messageId}\``, inline: true },
           { name: "👤 Wykonano przez", value: `${interaction.user}`, inline: true }
@@ -53,21 +51,14 @@ module.exports = {
         .setTimestamp();
 
       await interaction.editReply({ embeds: [successEmbed] });
-      console.log(`🎉 Reroll wykonany przez ${interaction.user.tag} | Giveaway ID: ${messageId}`);
+
+      console.log(`[REROLL SUCCESS] Reroll wykonany dla ${messageId}`);
 
     } catch (err) {
-      console.error("❌ Błąd podczas rerolla:", err);
-
-      const errorMsg = "❌ Wystąpił nieoczekiwany błąd podczas wykonywania rerolla.";
-
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({ content: errorMsg }).catch(() => {});
-      } else {
-        await interaction.reply({
-          content: errorMsg,
-          ephemeral: true
-        }).catch(() => {});
-      }
+      console.error("❌ Błąd w komendzie reroll:", err);
+      await interaction.editReply({
+        content: "❌ Wystąpił nieoczekiwany błąd podczas rerolla."
+      }).catch(() => {});
     }
   }
 };
