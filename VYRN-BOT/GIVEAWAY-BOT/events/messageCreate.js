@@ -42,7 +42,7 @@ async function handleXPSystem(message) {
   const now = Date.now();
   const userId = message.author.id;
 
-  // Cooldown na XP
+  // Cooldown na XP (2 sekundy)
   if (xpCooldown.has(userId) && now - xpCooldown.get(userId) < 2000) return;
   xpCooldown.set(userId, now);
 
@@ -50,7 +50,7 @@ async function handleXPSystem(message) {
 
   const cfg = loadConfig();
 
-  // === MONETY ZA WIADOMOŚĆ ===
+  // === MONETY ZA WIADOMOŚĆ (3 co 12 sekund) ===
   if (!messageCoinCooldown.has(userId) || now - messageCoinCooldown.get(userId) > 12000) {
     addCoins(userId, 3);
     messageCoinCooldown.set(userId, now);
@@ -64,50 +64,62 @@ async function handleXPSystem(message) {
     message.content.length
   );
 
-  // Daily
+  // === DAILY SYSTEM ===
   addMessage(userId);
   if (isDailyReady(userId)) {
     await checkDailyDM(message.member);
   }
 
+  // === LEVEL UP ===
   if (result?.leveledUp) {
     console.log(`🎉 ${message.author.tag} wbija level ${result.level}!`);
     await sendLevelUpMessage(message, result);
 
     try {
-      await message.author.send({
-        embeds: [new EmbedBuilder()
-          .setColor("#b8a672")
-          .setTitle(`🎉 Level ${result.level}!`)
-          .setDescription(`**+50** <:CASHH:1491180511308157041> dodano!`)
-        ]
-      });
+      const levelUpEmbed = new EmbedBuilder()
+        .setColor("#b8a672")
+        .setTitle(`🎉 Gratulacje! Osiągnąłeś poziom ${result.level}!`)
+        .setDescription(`**+50** <:CASHH:1491180511308157041> zostało dodane do Twojego konta!`)
+        .setFooter({ text: "VYRN • Level System" })
+        .setTimestamp();
+
+      await message.author.send({ embeds: [levelUpEmbed] });
       addCoins(userId, 50);
-    } catch (e) {}
+    } catch (e) {
+      // DM zablokowane - ignorujemy
+    }
   }
-}
+};
 
 // ====================== LEVEL UP MESSAGE ======================
 async function sendLevelUpMessage(message, result) {
-  const channel = message.guild.channels.cache.get(LEVEL_CHANNEL_ID);
-  if (!channel) return;
+  const levelUpChannel = message.guild.channels.cache.get(LEVEL_CHANNEL_ID);
+  if (!levelUpChannel?.isTextBased()) return;
 
   const embed = new EmbedBuilder()
     .setColor("#b8a672")
     .setTitle(`🏆 ${message.author.username} awansował na Level ${result.level}!`)
-    .setDescription(`Zdobyto: +${result.gained} XP`)
-    .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
+    .setDescription(`Zdobyto: \`+${result.gained} XP\``)
+    .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
+    .setTimestamp();
 
-  channel.send({ content: `🎉 ${message.author}`, embeds: [embed] }).catch(() => {});
-}
+  await levelUpChannel.send({
+    content: `🎉 ${message.author}`,
+    embeds: [embed]
+  }).catch(() => {});
+};
 
-// ====================== KOMENDY (bez zmian) ======================
+// ====================== KOMENDY PREFIXOWE ======================
 async function handleCommands(message, PREFIX) {
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const cmd = args.shift()?.toLowerCase();
   if (!cmd) return;
 
-  if (cmd === "rank" || cmd === "r") return await showRank(message);
+  if (cmd === "rank" || cmd === "r") {
+    await showRank(message);
+    return;
+  }
+
   if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
 
   switch (cmd) {
@@ -116,12 +128,58 @@ async function handleCommands(message, PREFIX) {
     case "setlengthbonus": await setLengthBonus(message, args); break;
     case "multixp": await setGlobalMultiplier(message, args); break;
   }
+};
+
+// ====================== RANK ======================
+async function showRank(message) {
+  const { loadDB } = require("../utils/levelSystem");
+  const db = loadDB();
+  const userData = db.xp?.[message.author.id] || { xp: 0, level: 0 };
+  const needed = Math.floor(100 * Math.pow(userData.level, 1.5));
+  const progress = needed > 0 ? Math.min(100, Math.floor((userData.xp / needed) * 100)) : 0;
+
+  const embed = new EmbedBuilder()
+    .setColor("#0f172a")
+    .setAuthor({
+      name: message.author.username,
+      iconURL: message.author.displayAvatarURL({ dynamic: true })
+    })
+    .setDescription(
+      `🏆 **LEVEL ${userData.level}**\n\n` +
+      `<a:XP:1488763317857161377> \`${userData.xp} / ${needed} XP\` **(${progress}%)**`
+    )
+    .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
+    .setFooter({ text: "VYRN • Level System" })
+    .setTimestamp();
+
+  await message.reply({ embeds: [embed] }).catch(() => {});
+};
+
+// ====================== ADMIN COMMANDS ======================
+async function setMessageXP(message, args) {
+  const val = parseInt(args[0]);
+  if (isNaN(val) || val < 1) return message.reply("❌ Poprawne użycie: `.setxp <liczba>`");
+  require("../utils/levelSystem").setMessageXP(val);
+  await message.reply(`✅ Message XP ustawione na **${val}**`);
 }
 
-// Reszta funkcji (showRank, setMessageXP itd.) zostaw bez zmian albo wklej z poprzedniej wersji.
+async function setVoiceXP(message, args) {
+  const val = parseInt(args[0]);
+  if (isNaN(val) || val < 1) return message.reply("❌ Poprawne użycie: `.setvcxp <liczba>`");
+  require("../utils/levelSystem").setVoiceXP(val);
+  await message.reply(`✅ Voice XP ustawione na **${val}**`);
+}
 
-async function showRank(message) { /* Twój kod ranku */ }
-async function setMessageXP(message, args) { /* ... */ }
-async function setVoiceXP(message, args) { /* ... */ }
-async function setLengthBonus(message, args) { /* ... */ }
-async function setGlobalMultiplier(message, args) { /* ... */ }
+async function setLengthBonus(message, args) {
+  const val = parseFloat(args[0]);
+  if (isNaN(val)) return message.reply("❌ Poprawne użycie: `.setlengthbonus <liczba>`");
+  require("../utils/levelSystem").setLengthBonus(val);
+  await message.reply(`✅ Length Bonus ustawiony na **${val}**`);
+}
+
+async function setGlobalMultiplier(message, args) {
+  const val = parseFloat(args[0]);
+  if (isNaN(val) || val < 0.1) return message.reply("❌ Poprawne użycie: `.multixp <liczba>`");
+  require("../utils/levelSystem").setGlobalMultiplier(val);
+  await message.reply(`🔥 Global Multiplier ustawiony na **${val}x**`);
+}
