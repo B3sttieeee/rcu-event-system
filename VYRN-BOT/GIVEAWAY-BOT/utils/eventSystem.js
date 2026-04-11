@@ -12,7 +12,7 @@ const CONFIG = {
   PANEL_IMAGE: "https://imgur.com/AybkuW5.png",
   START_MERCHANT_IMAGE: "https://imgur.com/7GBAq8Z.png",
   EGG_IMAGE: "https://imgur.com/xppQUWX.png",
-  SPRING_MERCHANT_IMAGE: "https://imgur.com/89tmfpV",
+  SPRING_MERCHANT_IMAGE: "https://imgur.com/89tmfpV.png",
 
   MERCHANT_HOURS: [2, 5, 8, 11, 14, 17, 20, 23],
   EGG_HOURS: [0, 3, 6, 9, 12, 15, 18, 21],
