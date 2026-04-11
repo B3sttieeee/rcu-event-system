@@ -7,18 +7,18 @@ const CONFIG = {
   CHANNEL_ID: "1484937784283369502",
   MERCHANT_ROLE: "1476000993660502139",
   EGG_ROLE: "1489930030166573150",
+  SPRING_MERCHANT_ROLE: "1476000993119568105",
+
   PANEL_IMAGE: "https://imgur.com/AybkuW5.png",
   START_MERCHANT_IMAGE: "https://imgur.com/7GBAq8Z.png",
   EGG_IMAGE: "https://imgur.com/xppQUWX.png",
-  MERCHANT_HOURS: [2, 5, 8, 11, 14, 17, 20, 23],
-  EGG_HOURS: [0, 3, 6, 9, 12, 15, 18, 21],
-
-  // === NOWY SPRING MERCHANT (co godzinę) ===
-  SPRING_MERCHANT_HOURS: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
-  SPRING_MERCHANT_ROLE: "1476000993119568105", // ← ZMIEŃ NA ID ROLI SPRING MERCHANT
   SPRING_MERCHANT_IMAGE: "https://imgur.com/89tmfpV",
 
-  REFRESH_INTERVAL: 10000, // 10 sekund
+  MERCHANT_HOURS: [2, 5, 8, 11, 14, 17, 20, 23],
+  EGG_HOURS: [0, 3, 6, 9, 12, 15, 18, 21],
+  SPRING_MERCHANT_HOURS: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23],
+
+  REFRESH_INTERVAL: 10000,           // 10 sekund
   START_MESSAGE_DELETE_AFTER: 15 * 60 * 1000, // 15 minut
 };
 
@@ -65,9 +65,7 @@ function getCountdown(hours) {
   const now = getNow();
   let target = new Date(now);
   const nextHour = getNextEvent(hours);
-  if (nextHour <= now.getHours()) {
-    target.setDate(target.getDate() + 1);
-  }
+  if (nextHour <= now.getHours()) target.setDate(target.getDate() + 1);
   target.setHours(nextHour, 0, 0, 0);
   const diff = target - now;
   const totalSeconds = Math.floor(diff / 1000);
@@ -77,6 +75,9 @@ function getCountdown(hours) {
   return `${h}h ${m}m ${s}s`;
 }
 
+// ====================== GLOBAL ANTI-SPAM ======================
+const processedEvents = new Map(); // Klucz: "spring-14-pre", "merchant-5-started" itd.
+
 // ====================== EMBEDS ======================
 function createPanelEmbed() {
   return new EmbedBuilder()
@@ -85,6 +86,10 @@ function createPanelEmbed() {
     .setDescription(
       `🍯 **Honey Merchant**\n` +
       `\`${getNextEvent(CONFIG.MERCHANT_HOURS)}:00\` • ${getCountdown(CONFIG.MERCHANT_HOURS)}\n\n` +
+
+      `🌸 **Spring Merchant**\n` +
+      `\`${getNextEvent(CONFIG.SPRING_MERCHANT_HOURS)}:00\` • ${getCountdown(CONFIG.SPRING_MERCHANT_HOURS)}\n\n` +
+
       `🐣 **Egg Hunt**\n` +
       `\`${getNextEvent(CONFIG.EGG_HOURS)}:00\` • ${getCountdown(CONFIG.EGG_HOURS)}`
     )
@@ -101,28 +106,65 @@ function createMerchantStartEmbed() {
     .setTimestamp();
 }
 
-function createEggStartEmbed() {
-  return new EmbedBuilder()
-    .setColor("#ff69b4")
-    .setTitle("🐣 EGG HUNT START!")
-    .setDescription(
-      `🇵🇱 **Zbieraj 5 jajek** na eventowej mapie!\n` +
-      `🇬🇧 **Collect 5 eggs** on the event map!`
-    )
-    .setImage(CONFIG.EGG_IMAGE)
-    .setTimestamp();
-}
-
-// ====================== NOWY EMBED DLA SPRING MERCHANT ======================
 function createSpringMerchantStartEmbed() {
   return new EmbedBuilder()
-    .setColor("#22c55e") // zielony wiosenny kolor
+    .setColor("#22c55e")
     .setTitle("🌸 SPRING MERCHANT START!")
     .setImage(CONFIG.SPRING_MERCHANT_IMAGE)
     .setTimestamp();
 }
 
-// ====================== BUTTONS & MENUS ======================
+function createEggStartEmbed() {
+  return new EmbedBuilder()
+    .setColor("#ff69b4")
+    .setTitle("🐣 EGG HUNT START!")
+    .setDescription(`🇵🇱 **Zbieraj 5 jajek** na eventowej mapie!\n🇬🇧 **Collect 5 eggs** on the event map!`)
+    .setImage(CONFIG.EGG_IMAGE)
+    .setTimestamp();
+}
+
+// ====================== DM NOTIFICATIONS ======================
+async function sendDMNotifications(client, type) {
+  const db = loadDB();
+  let message = "";
+
+  if (type === "merchant") message = "🍯 **Honey Merchant właśnie się rozpoczął!**";
+  else if (type === "spring") message = "🌸 **Spring Merchant właśnie się rozpoczął!**";
+  else if (type === "egg") message = `🐣 **EGG HUNT START!**\n\n🇵🇱 Zbieraj 5 jajek na eventowej mapie!\n🇬🇧 Collect 5 eggs on the event map!`;
+
+  for (const [userId, subscriptions] of Object.entries(db.dm || {})) {
+    if (subscriptions.includes(type)) {
+      const user = await client.users.fetch(userId).catch(() => null);
+      if (user) user.send(message).catch(() => {});
+    }
+  }
+}
+
+// ====================== PANEL ======================
+async function startPanel(client) {
+  try {
+    const channel = await client.channels.fetch(CONFIG.CHANNEL_ID);
+    if (!channel?.isTextBased()) return console.error("❌ Kanał event panel nie istnieje!");
+
+    const message = await channel.send({
+      embeds: [createPanelEmbed()],
+      components: [getControlButtons()]
+    });
+
+    setInterval(async () => {
+      try {
+        await message.edit({ embeds: [createPanelEmbed()], components: [getControlButtons()] });
+      } catch (err) {
+        if (err.code !== 10008) console.error("Panel refresh error:", err.message);
+      }
+    }, CONFIG.REFRESH_INTERVAL);
+
+    console.log("✅ Event Panel uruchomiony pomyślnie");
+  } catch (err) {
+    console.error("❌ Błąd uruchamiania panelu:", err);
+  }
+}
+
 function getControlButtons() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId("refresh").setLabel("🔄 Odśwież").setStyle(ButtonStyle.Secondary),
@@ -138,6 +180,7 @@ function getRoleSelectMenu() {
       .setPlaceholder("Wybierz role eventowe")
       .addOptions([
         { label: "Honey Merchant", value: "merchant", emoji: "🍯" },
+        { label: "Spring Merchant", value: "spring", emoji: "🌸" },
         { label: "Egg Hunt", value: "egg", emoji: "🐣" }
       ])
   );
@@ -150,195 +193,51 @@ function getDMSelectMenu() {
       .setPlaceholder("Powiadomienia w DM")
       .addOptions([
         { label: "Honey Merchant", value: "merchant", emoji: "🍯" },
+        { label: "Spring Merchant", value: "spring", emoji: "🌸" },
         { label: "Egg Hunt", value: "egg", emoji: "🐣" }
       ])
       .setMinValues(0)
-      .setMaxValues(2)
+      .setMaxValues(3)
   );
-}
-
-// ====================== DM NOTIFICATIONS ======================
-async function sendDMNotifications(client, type) {
-  const db = loadDB();
-  const message = type === "merchant"
-    ? "🍯 **Honey Merchant właśnie się rozpoczął!**"
-    : `🐣 **EGG HUNT START!**\n\n🇵🇱 Zbieraj 5 jajek na eventowej mapie!\n🇬🇧 Collect 5 eggs on the event map!`;
-
-  for (const [userId, subscriptions] of Object.entries(db.dm || {})) {
-    if (!subscriptions.includes(type)) continue;
-    const user = await client.users.fetch(userId).catch(() => null);
-    if (user) user.send(message).catch(() => {});
-  }
-}
-
-// ====================== PANEL ======================
-async function startPanel(client) {
-  try {
-    const channel = await client.channels.fetch(CONFIG.CHANNEL_ID);
-    if (!channel?.isTextBased()) {
-      return console.error("❌ Kanał event panel nie istnieje lub nie jest tekstowy!");
-    }
-
-    const embed = createPanelEmbed();
-    const message = await channel.send({ embeds: [embed], components: [getControlButtons()] });
-
-    // Odświeżanie panelu co 10 sekund
-    setInterval(async () => {
-      try {
-        await message.edit({ embeds: [createPanelEmbed()], components: [getControlButtons()] });
-      } catch (err) {
-        if (err.code !== 10008) console.error("Panel refresh error:", err.message);
-      }
-    }, CONFIG.REFRESH_INTERVAL);
-
-    console.log("✅ Event Panel uruchomiony pomyślnie");
-  } catch (err) {
-    console.error("❌ Błąd uruchamiania panelu:", err);
-  }
 }
 
 // ====================== MAIN EVENT SYSTEM ======================
 function startEventSystem(client) {
-  console.log("🚀 Event System uruchomiony – monitorowanie godzin...");
+  console.log("🚀 Event System uruchomiony – monitorowanie eventów...");
 
   setInterval(async () => {
     const now = getNow();
     const hour = now.getHours();
     const minute = now.getMinutes();
 
-    const processedEvents = new Map(); // anti-spam + przechowywanie ID wiadomości "za 5 minut"
-
-    // ====================== HONEY MERCHANT ======================
-    for (const eventHour of CONFIG.MERCHANT_HOURS) {
-      const eventKey = `merchant-${eventHour}`;
-
-      // 5 minut przed (poprawione o zawijanie godziny 0 → 23)
-      const preHour = (eventHour - 1 + 24) % 24;
-      if (hour === preHour && minute === 55) {
-        if (!processedEvents.has(eventKey + "-pre")) {
-          const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-          if (channel) {
-            const preMsg = await channel.send(`<@&${CONFIG.MERCHANT_ROLE}> ⏳ **Honey Merchant** za 5 minut!`).catch(() => null);
-            if (preMsg) processedEvents.set(eventKey + "-pre", preMsg.id);
-          }
-        }
-      }
-
-      // Start eventu + USUNIĘCIE powiadomienia 5 minut przed
-      if (hour === eventHour && minute === 0) {
-        if (!processedEvents.has(eventKey + "-started")) {
-          // Usuwamy powiadomienie "za 5 minut"
-          const preKey = eventKey + "-pre";
-          if (processedEvents.has(preKey)) {
-            const preId = processedEvents.get(preKey);
-            if (preId) {
-              const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-              if (channel) {
-                const preMessage = await channel.messages.fetch(preId).catch(() => null);
-                if (preMessage) await preMessage.delete().catch(() => {});
-              }
-            }
-            processedEvents.delete(preKey);
-          }
-
-          const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-          if (channel) {
-            const startMsg = await channel.send({
-              content: `<@&${CONFIG.MERCHANT_ROLE}>`,
-              embeds: [createMerchantStartEmbed()]
-            }).catch(() => null);
-
-            sendDMNotifications(client, "merchant");
-
-            if (startMsg) {
-              setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
-            }
-          }
-          processedEvents.set(eventKey + "-started", true);
-        }
-      }
-    }
-
-    // ====================== EGG HUNT ======================
-    for (const eventHour of CONFIG.EGG_HOURS) {
-      const eventKey = `egg-${eventHour}`;
-
-      // 5 minut przed (poprawione o zawijanie)
-      const preHour = (eventHour - 1 + 24) % 24;
-      if (hour === preHour && minute === 55) {
-        if (!processedEvents.has(eventKey + "-pre")) {
-          const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-          if (channel) {
-            const preMsg = await channel.send(`<@&${CONFIG.EGG_ROLE}> ⏳ **Egg Hunt** za 5 minut!`).catch(() => null);
-            if (preMsg) processedEvents.set(eventKey + "-pre", preMsg.id);
-          }
-        }
-      }
-
-      // Start eventu + USUNIĘCIE powiadomienia 5 minut przed
-      if (hour === eventHour && minute === 0) {
-        if (!processedEvents.has(eventKey + "-started")) {
-          const preKey = eventKey + "-pre";
-          if (processedEvents.has(preKey)) {
-            const preId = processedEvents.get(preKey);
-            if (preId) {
-              const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-              if (channel) {
-                const preMessage = await channel.messages.fetch(preId).catch(() => null);
-                if (preMessage) await preMessage.delete().catch(() => {});
-              }
-            }
-            processedEvents.delete(preKey);
-          }
-
-          const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-          if (channel) {
-            const startMsg = await channel.send({
-              content: `<@&${CONFIG.EGG_ROLE}>`,
-              embeds: [createEggStartEmbed()]
-            }).catch(() => null);
-
-            sendDMNotifications(client, "egg");
-
-            if (startMsg) {
-              setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
-            }
-          }
-          processedEvents.set(eventKey + "-started", true);
-        }
-      }
-    }
-
-    // ====================== SPRING MERCHANT (nowy – co godzinę) ======================
+    // ====================== SPRING MERCHANT (co godzinę) ======================
     for (const eventHour of CONFIG.SPRING_MERCHANT_HOURS) {
-      const eventKey = `spring-${eventHour}`;
-
-      // 5 minut przed (poprawione o zawijanie godziny)
+      const key = `spring-${eventHour}`;
       const preHour = (eventHour - 1 + 24) % 24;
+
+      // 5 minut przed
       if (hour === preHour && minute === 55) {
-        if (!processedEvents.has(eventKey + "-pre")) {
+        if (!processedEvents.has(key + "-pre")) {
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
           if (channel) {
             const preMsg = await channel.send(`<@&${CONFIG.SPRING_MERCHANT_ROLE}> ⏳ **Spring Merchant** za 5 minut!`).catch(() => null);
-            if (preMsg) processedEvents.set(eventKey + "-pre", preMsg.id);
+            if (preMsg) processedEvents.set(key + "-pre", preMsg.id);
           }
         }
       }
 
-      // Start eventu + USUNIĘCIE powiadomienia 5 minut przed
+      // Start + usunięcie powiadomienia 5 min przed
       if (hour === eventHour && minute === 0) {
-        if (!processedEvents.has(eventKey + "-started")) {
-          const preKey = eventKey + "-pre";
-          if (processedEvents.has(preKey)) {
-            const preId = processedEvents.get(preKey);
-            if (preId) {
-              const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-              if (channel) {
-                const preMessage = await channel.messages.fetch(preId).catch(() => null);
-                if (preMessage) await preMessage.delete().catch(() => {});
-              }
+        if (!processedEvents.has(key + "-started")) {
+          // Usuń "za 5 minut"
+          const preId = processedEvents.get(key + "-pre");
+          if (preId) {
+            const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+            if (channel) {
+              const msg = await channel.messages.fetch(preId).catch(() => null);
+              if (msg) await msg.delete().catch(() => {});
             }
-            processedEvents.delete(preKey);
+            processedEvents.delete(key + "-pre");
           }
 
           const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
@@ -348,18 +247,97 @@ function startEventSystem(client) {
               embeds: [createSpringMerchantStartEmbed()]
             }).catch(() => null);
 
-            // (nie dodajemy DM dla Spring Merchant – jak chcesz, daj znać)
+            sendDMNotifications(client, "spring");
 
             if (startMsg) {
               setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
             }
           }
-          processedEvents.set(eventKey + "-started", true);
+          processedEvents.set(key + "-started", true);
         }
       }
     }
 
-    // Czyszczenie pamięci co godzinę (po 5 minucie)
+    // ====================== HONEY MERCHANT ======================
+    for (const eventHour of CONFIG.MERCHANT_HOURS) {
+      const key = `merchant-${eventHour}`;
+      const preHour = (eventHour - 1 + 24) % 24;
+
+      if (hour === preHour && minute === 55 && !processedEvents.has(key + "-pre")) {
+        const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+        if (channel) {
+          const preMsg = await channel.send(`<@&${CONFIG.MERCHANT_ROLE}> ⏳ **Honey Merchant** za 5 minut!`).catch(() => null);
+          if (preMsg) processedEvents.set(key + "-pre", preMsg.id);
+        }
+      }
+
+      if (hour === eventHour && minute === 0 && !processedEvents.has(key + "-started")) {
+        // Usuń pre
+        const preId = processedEvents.get(key + "-pre");
+        if (preId) {
+          const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+          if (channel) {
+            const msg = await channel.messages.fetch(preId).catch(() => null);
+            if (msg) await msg.delete().catch(() => {});
+          }
+          processedEvents.delete(key + "-pre");
+        }
+
+        const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+        if (channel) {
+          const startMsg = await channel.send({
+            content: `<@&${CONFIG.MERCHANT_ROLE}>`,
+            embeds: [createMerchantStartEmbed()]
+          }).catch(() => null);
+
+          sendDMNotifications(client, "merchant");
+
+          if (startMsg) setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
+        }
+        processedEvents.set(key + "-started", true);
+      }
+    }
+
+    // ====================== EGG HUNT ======================
+    for (const eventHour of CONFIG.EGG_HOURS) {
+      const key = `egg-${eventHour}`;
+      const preHour = (eventHour - 1 + 24) % 24;
+
+      if (hour === preHour && minute === 55 && !processedEvents.has(key + "-pre")) {
+        const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+        if (channel) {
+          const preMsg = await channel.send(`<@&${CONFIG.EGG_ROLE}> ⏳ **Egg Hunt** za 5 minut!`).catch(() => null);
+          if (preMsg) processedEvents.set(key + "-pre", preMsg.id);
+        }
+      }
+
+      if (hour === eventHour && minute === 0 && !processedEvents.has(key + "-started")) {
+        const preId = processedEvents.get(key + "-pre");
+        if (preId) {
+          const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+          if (channel) {
+            const msg = await channel.messages.fetch(preId).catch(() => null);
+            if (msg) await msg.delete().catch(() => {});
+          }
+          processedEvents.delete(key + "-pre");
+        }
+
+        const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+        if (channel) {
+          const startMsg = await channel.send({
+            content: `<@&${CONFIG.EGG_ROLE}>`,
+            embeds: [createEggStartEmbed()]
+          }).catch(() => null);
+
+          sendDMNotifications(client, "egg");
+
+          if (startMsg) setTimeout(() => startMsg.delete().catch(() => {}), CONFIG.START_MESSAGE_DELETE_AFTER);
+        }
+        processedEvents.set(key + "-started", true);
+      }
+    }
+
+    // Czyszczenie starej pamięci co godzinę
     if (minute === 5) {
       processedEvents.clear();
     }
@@ -383,9 +361,12 @@ async function handleEventInteraction(interaction) {
 
     if (interaction.isStringSelectMenu() && interaction.customId === "role_menu") {
       const member = await interaction.guild.members.fetch(interaction.user.id);
-      await member.roles.remove([CONFIG.MERCHANT_ROLE, CONFIG.EGG_ROLE]).catch(() => {});
+      await member.roles.remove([CONFIG.MERCHANT_ROLE, CONFIG.SPRING_MERCHANT_ROLE, CONFIG.EGG_ROLE]).catch(() => {});
+
       if (interaction.values.includes("merchant")) await member.roles.add(CONFIG.MERCHANT_ROLE).catch(() => {});
+      if (interaction.values.includes("spring")) await member.roles.add(CONFIG.SPRING_MERCHANT_ROLE).catch(() => {});
       if (interaction.values.includes("egg")) await member.roles.add(CONFIG.EGG_ROLE).catch(() => {});
+
       return await interaction.reply({ content: "✅ Role eventowe zaktualizowane!", ephemeral: true });
     }
 
@@ -397,15 +378,7 @@ async function handleEventInteraction(interaction) {
     }
   } catch (err) {
     console.error("❌ Błąd w handleEventInteraction:", err);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: "❌ Wystąpił błąd.", ephemeral: true }).catch(() => {});
-    }
   }
 }
 
-// ====================== EXPORT ======================
-module.exports = {
-  startPanel,
-  startEventSystem,
-  handleEventInteraction
-};
+module.exports = { startPanel, startEventSystem, handleEventInteraction };
