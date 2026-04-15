@@ -2,72 +2,111 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   StringSelectMenuBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   ChannelType,
   PermissionsBitField
 } = require("discord.js");
 
+// ====================== CONFIG ======================
 const CONFIG = {
   PANEL_CHANNEL_ID: "1475558248487583805",
   LOG_CHANNEL_ID: "1494072832827850953",
   CATEGORY_ID: "1475985874385899530",
-  ADMIN_ROLE: "1475998527191519302"
+  ADMIN_ROLE: "1475998527191519302",
+
+  IMAGE:
+    "https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif"
 };
 
-// ====================== MEMORY ======================
-let ticketCounter = 0;
-
-// ====================== PANEL ======================
+// ====================== PANEL (PRO UI) ======================
 async function createTicketPanel(client) {
   const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
   if (!channel) return;
 
   const embed = new EmbedBuilder()
-    .setColor("#ff6600")
-    .setTitle("📌 VYRN Recruitment System")
-    .setDescription("Wybierz klan z listy poniżej");
+    .setColor("#5865F2")
+    .setTitle("🎫 Support Center")
+    .setDescription(
+      [
+        "**Welcome to the official support system.**",
+        "",
+        "Please select a category below to create a ticket.",
+        "",
+        "```",
+        "• Response time: up to 24 hours",
+        "• Please provide clear information",
+        "• Do not spam tickets",
+        "```"
+      ].join("\n")
+    )
+    .setImage(CONFIG.IMAGE)
+    .setFooter({ text: "Support System • Professional Help Desk" });
 
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId("ticket_select")
-    .setPlaceholder("Wybierz rekrutację")
-    .addOptions(
-      {
-        label: "🔥 VYRN Main Clan",
-        value: "vyrn",
-        description: "Rekrutacja do głównego klanu"
-      },
-      {
-        label: "🛡️ V2RN Academy",
-        value: "v2rn",
-        description: "Akademia / trening"
-      }
-    );
+  const menu = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("ticket_select")
+      .setPlaceholder("Select ticket category...")
+      .addOptions([
+        {
+          label: "General Support",
+          description: "Questions, help, general issues",
+          value: "general",
+          emoji: "💬"
+        },
+        {
+          label: "Recruitment",
+          description: "Apply for clan / staff / academy",
+          value: "recruitment",
+          emoji: "📝"
+        },
+        {
+          label: "Report User",
+          description: "Report rule breaking user",
+          value: "report",
+          emoji: "🚨"
+        },
+        {
+          label: "Billing / Payment",
+          description: "Payments, donations, shop",
+          value: "billing",
+          emoji: "💰"
+        }
+      ])
+  );
 
-  const row = new ActionRowBuilder().addComponents(menu);
+  const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
 
-  const msgs = await channel.messages.fetch({ limit: 10 });
-  const existing = msgs.find(m => m.embeds?.[0]?.title?.includes("Recruitment"));
+  const existing = messages?.find(m =>
+    m.embeds?.[0]?.title?.includes("Support Center")
+  );
 
   if (existing) {
-    await existing.edit({ embeds: [embed], components: [row] });
+    await existing.edit({ embeds: [embed], components: [menu] });
   } else {
-    await channel.send({ embeds: [embed], components: [row] });
+    await channel.send({ embeds: [embed], components: [menu] });
   }
 }
 
-// ====================== OPEN ======================
-async function handleSelect(interaction) {
-  const type = interaction.values[0];
+// ====================== TICKET CREATE ======================
+async function createTicket(interaction, type) {
+  const user = interaction.user;
 
-  const ticketId = ++ticketCounter;
+  const existing = interaction.guild.channels.cache.find(
+    c => c.topic === user.id
+  );
+
+  if (existing) {
+    return interaction.reply({
+      content: `❌ You already have an active ticket: ${existing}`,
+      ephemeral: true
+    });
+  }
 
   await interaction.deferReply({ ephemeral: true });
 
   const channel = await interaction.guild.channels.create({
-    name: `ticket-${ticketId}-${type}-${interaction.user.username}`.toLowerCase(),
+    name: `ticket-${user.username}`.toLowerCase(),
     type: ChannelType.GuildText,
-    topic: interaction.user.id,
+    topic: user.id,
     parent: CONFIG.CATEGORY_ID,
     permissionOverwrites: [
       {
@@ -75,7 +114,7 @@ async function handleSelect(interaction) {
         deny: [PermissionsBitField.Flags.ViewChannel]
       },
       {
-        id: interaction.user.id,
+        id: user.id,
         allow: [
           PermissionsBitField.Flags.ViewChannel,
           PermissionsBitField.Flags.SendMessages,
@@ -94,85 +133,39 @@ async function handleSelect(interaction) {
   });
 
   const embed = new EmbedBuilder()
-    .setColor("Green")
-    .setTitle("🎫 Ticket Opened")
+    .setColor("#57F287")
+    .setTitle("🎫 Ticket Created")
     .setDescription(
-      `🆔 ID: #${ticketId}\n` +
-      `👤 User: ${interaction.user.tag}\n` +
-      `🏷️ Klan: ${type}\n\n` +
-      `📌 Czekaj na odpowiedź (do 24h)`
-    );
-
-  const closeBtn = new ButtonBuilder()
-    .setCustomId(`close_ticket_${ticketId}`)
-    .setLabel("🔒 Close Ticket")
-    .setStyle(ButtonStyle.Danger);
+      [
+        `**Category:** \`${type.toUpperCase()}\``,
+        `**User:** ${user}`,
+        "",
+        "A staff member will respond soon.",
+        "Please describe your issue clearly."
+      ].join("\n")
+    )
+    .setTimestamp();
 
   await channel.send({
-    content: `${interaction.user}`,
-    embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(closeBtn)]
+    content: `${user}`,
+    embeds: [embed]
   });
 
   await interaction.editReply({
-    content: `✅ Ticket utworzony: ${channel}`
+    content: `✅ Ticket created: ${channel}`
   });
-}
-
-// ====================== CLOSE + TRANSCRIPT ======================
-async function handleClose(interaction) {
-  const channel = interaction.channel;
-
-  await interaction.reply({ content: "🗑 Generuję transcript...", ephemeral: true });
-
-  const messages = await channel.messages.fetch({ limit: 100 });
-  const sorted = [...messages.values()].reverse();
-
-  let transcript = `TICKET TRANSCRIPT\nChannel: ${channel.name}\n\n`;
-
-  sorted.forEach(m => {
-    transcript += `[${m.author.tag}] ${m.content}\n`;
-  });
-
-  const userId = channel.topic;
-
-  // ===== DM USER =====
-  try {
-    const user = await interaction.client.users.fetch(userId);
-    await user.send({
-      embeds: [
-        new EmbedBuilder()
-          .setTitle("📜 Twój transcript ticketu")
-          .setDescription("Załączam historię rozmowy.")
-      ]
-    });
-  } catch {}
-
-  // ===== LOG CHANNEL =====
-  const logChannel = await interaction.client.channels.fetch(CONFIG.LOG_CHANNEL_ID);
-
-  await logChannel.send({
-    embeds: [
-      new EmbedBuilder()
-        .setTitle("📩 Ticket Closed")
-        .addFields(
-          { name: "Channel", value: channel.name },
-          { name: "User ID", value: userId || "unknown" }
-        )
-    ]
-  });
-
-  await channel.delete().catch(() => {});
 }
 
 // ====================== HANDLER ======================
-async function handle(interaction, client) {
-  if (interaction.isStringSelectMenu() && interaction.customId === "ticket_select") {
-    return handleSelect(interaction);
-  }
-
-  if (interaction.isButton() && interaction.customId.startsWith("close_ticket_")) {
-    return handleClose(interaction);
+async function handle(interaction) {
+  try {
+    // SELECT MENU
+    if (interaction.isStringSelectMenu() && interaction.customId === "ticket_select") {
+      const value = interaction.values[0];
+      return createTicket(interaction, value);
+    }
+  } catch (err) {
+    console.error("Ticket error:", err);
   }
 }
 
