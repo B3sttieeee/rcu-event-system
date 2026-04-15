@@ -36,7 +36,7 @@ module.exports = {
       }
 
       // =====================================================
-      // 2. EVENT SYSTEM (BUTTONS + SELECTS FIXED)
+      // 2. EVENT SYSTEM
       // =====================================================
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
 
@@ -66,19 +66,28 @@ module.exports = {
       }
 
       // =====================================================
-      // 5. TICKETS
+      // 5. TICKETS (FIX 🔥 ADD SELECT SUPPORT)
       // =====================================================
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
         "close_ticket",
         "ticket_modal_vyrn",
-        "ticket_modal_v2rn"
+        "ticket_modal_v2rn",
+        "clan_ticket_select" // 🔥 FIX HERE
       ];
 
       if (
         (interaction.isButton() || interaction.isModalSubmit()) &&
         ticketIds.includes(cid)
+      ) {
+        return await ticketSystem.handle(interaction, client);
+      }
+
+      // 🔥 EXTRA FIX FOR SELECT MENU (IMPORTANT)
+      if (
+        interaction.isStringSelectMenu() &&
+        cid === "clan_ticket_select"
       ) {
         return await ticketSystem.handle(interaction, client);
       }
