@@ -3,7 +3,6 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
 } = require("discord.js");
 
 const fs = require("fs");
@@ -48,9 +47,10 @@ const loadDB = () => {
   }
 };
 
-const saveDB = (db) => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+const saveDB = (db) =>
+  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
-// ====================== TIME (UNCHANGED LOGIC) ======================
+// ====================== TIME (UNCHANGED) ======================
 const getNow = () =>
   new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
 
@@ -62,48 +62,58 @@ const getNextHour = (hours) => {
 // ====================== CACHE ======================
 const processed = new Map();
 
-// ====================== 🔥 ONLY UI FIX: EMBEDS ======================
+// =====================================================
+// 🔥 UI FIX: CLEAN EMBEDS ONLY (NO COLORFUL SPAM STYLE)
+// =====================================================
 
-// PANEL (ładniejszy, ale ta sama funkcja)
+// PANEL (clean, minimal, professional)
 const panelEmbed = () =>
   new EmbedBuilder()
-    .setColor("#f59e0b")
-    .setTitle("🎉 EVENT TRACKER")
+    .setTitle("Event Schedule")
     .setDescription(
       Object.entries(CONFIG.EVENTS)
         .map(([name, e]) => {
-          const hours = e.hours;
-          return `**${name.toUpperCase()}**\nNext: \`${getNextHour(hours)}:00\``;
+          const next = getNextHour(e.hours);
+          return `• **${name.toUpperCase()}** — next: ${next}:00`;
         })
-        .join("\n\n")
+        .join("\n")
     )
     .setImage(CONFIG.IMAGES.PANEL)
-    .setFooter({ text: "Event System • Live Tracker" })
+    .setFooter({ text: "Event System" })
     .setTimestamp();
 
-// START EVENT EMBED (ONLY VISUAL UPGRADE)
+// EVENT START (neutral, no hype colors spam)
 const eventEmbed = (name, image) =>
   new EmbedBuilder()
-    .setColor("#f59e0b")
-    .setTitle(`🚀 ${name.toUpperCase()} STARTED`)
+    .setTitle(`${name.toUpperCase()} EVENT STARTED`)
     .setDescription(
       [
-        "```",
-        "Event is now active!",
-        "Join and participate now.",
-        "```"
+        "Event is now active.",
+        "",
+        "Join now and participate."
       ].join("\n")
     )
     .setImage(image || null)
     .setFooter({ text: "Event System" })
     .setTimestamp();
 
-// ====================== COMPONENTS (UNCHANGED) ======================
+// ====================== BUTTONS (UNCHANGED) ======================
 const buttons = () =>
   new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("refresh").setLabel("🔄").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("roles").setLabel("🎭").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("dm").setLabel("📩").setStyle(ButtonStyle.Primary)
+    new ButtonBuilder()
+      .setCustomId("refresh")
+      .setLabel("Refresh")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("roles")
+      .setLabel("Roles")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("dm")
+      .setLabel("Notifications")
+      .setStyle(ButtonStyle.Primary)
   );
 
 // ====================== CORE ENGINE (UNCHANGED LOGIC) ======================
@@ -119,16 +129,16 @@ function registerEvent(client, key, event, hour, roleId, image) {
   const channelFetch = () =>
     client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
 
-  // PRE (55 min) — unchanged
+  // PRE (55 min) — untouched logic
   if (h === (hour - 1 + 24) % 24 && m === 55 && !processed.has(preKey)) {
     channelFetch().then((ch) => {
       if (!ch) return;
-      ch.send(`<@&${roleId}> ⏳ ${key} starts in 5 minutes`)
+      ch.send(`<@&${roleId}> ${key} starts in 5 minutes`)
         .then((msg) => processed.set(preKey, msg.id));
     });
   }
 
-  // START (00 min) — ONLY EMBED CHANGED
+  // START (ONLY EMBED CHANGED)
   if (h === hour && m === 0 && !processed.has(startKey)) {
     channelFetch().then(async (ch) => {
       if (!ch) return;
@@ -152,9 +162,9 @@ function registerEvent(client, key, event, hour, roleId, image) {
   }
 }
 
-// ====================== ENGINE ======================
+// ====================== SYSTEM ======================
 function startEventSystem(client) {
-  console.log("🚀 Event system running (UI ONLY FIX)");
+  console.log("Event system running");
 
   setInterval(() => {
     for (const [name, data] of Object.entries(CONFIG.EVENTS)) {
@@ -171,7 +181,6 @@ function startEventSystem(client) {
     }
 
     if (getNow().getMinutes() === 5) processed.clear();
-
   }, CONFIG.REFRESH_INTERVAL);
 }
 
@@ -193,7 +202,7 @@ async function startPanel(client) {
   }, CONFIG.REFRESH_INTERVAL);
 }
 
-// ====================== INTERACTIONS (UNCHANGED) ======================
+// ====================== INTERACTIONS ======================
 async function handleEventInteraction(interaction) {
   const id = interaction.customId;
 
@@ -204,10 +213,16 @@ async function handleEventInteraction(interaction) {
     });
 
   if (id === "roles")
-    return interaction.reply({ content: "WIP roles", ephemeral: true });
+    return interaction.reply({
+      content: "Role system is not ready yet.",
+      ephemeral: true
+    });
 
   if (id === "dm")
-    return interaction.reply({ content: "WIP dm", ephemeral: true });
+    return interaction.reply({
+      content: "Notification system is not ready yet.",
+      ephemeral: true
+    });
 }
 
 module.exports = {
