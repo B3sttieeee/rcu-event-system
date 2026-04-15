@@ -35,22 +35,7 @@ const CONFIG = {
   DELETE_AFTER: 15 * 60 * 1000,
 };
 
-// ====================== DB ======================
-const DB_PATH = path.join(__dirname, "..", "eventDB.json");
-
-const loadDB = () => {
-  if (!fs.existsSync(DB_PATH)) return { dm: {} };
-  try {
-    return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-  } catch {
-    return { dm: {} };
-  }
-};
-
-const saveDB = (db) =>
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-
-// ====================== TIME (UNCHANGED) ======================
+// ====================== TIME ======================
 const getNow = () =>
   new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
 
@@ -59,45 +44,67 @@ const getNextHour = (hours) => {
   return hours.find((h) => h > now) ?? hours[0];
 };
 
+const getCountdown = (hour) => {
+  const now = getNow();
+  const target = new Date(now);
+
+  if (hour <= now.getHours()) target.setDate(target.getDate() + 1);
+
+  target.setHours(hour, 0, 0, 0);
+
+  const diff = target - now;
+  const s = Math.floor(diff / 1000);
+
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ${s % 60}s`;
+};
+
 // ====================== CACHE ======================
 const processed = new Map();
 
 // =====================================================
-// 🔥 UI FIX: CLEAN EMBEDS ONLY (NO COLORFUL SPAM STYLE)
+// 🔥 TICKET STYLE UI (CLEAN CLAN LOOK)
 // =====================================================
 
-// PANEL (clean, minimal, professional)
+// PANEL (jak ticket system style)
 const panelEmbed = () =>
   new EmbedBuilder()
-    .setTitle("Event Schedule")
+    .setColor("#2b2d31")
+    .setTitle("🎫 EVENT CENTER")
     .setDescription(
       Object.entries(CONFIG.EVENTS)
         .map(([name, e]) => {
           const next = getNextHour(e.hours);
-          return `• **${name.toUpperCase()}** — next: ${next}:00`;
+          return [
+            `**${name.toUpperCase()} EVENT**`,
+            `Next: \`${next}:00\``,
+            `Countdown: **${getCountdown(next)}**`,
+          ].join("\n");
         })
-        .join("\n")
+        .join("\n\n━━━━━━━━━━━━━━\n\n")
     )
     .setImage(CONFIG.IMAGES.PANEL)
-    .setFooter({ text: "Event System" })
+    .setFooter({ text: "Clan System • Event Tracker" })
     .setTimestamp();
 
-// EVENT START (neutral, no hype colors spam)
+// EVENT START (ticket style embed)
 const eventEmbed = (name, image) =>
   new EmbedBuilder()
-    .setTitle(`${name.toUpperCase()} EVENT STARTED`)
+    .setColor("#2b2d31")
+    .setTitle(`🎉 ${name.toUpperCase()} EVENT STARTED`)
     .setDescription(
       [
-        "Event is now active.",
+        "━━━━━━━━━━━━━━",
+        "📢 Event is now ACTIVE",
         "",
-        "Join now and participate."
+        "👉 Join now & participate",
+        "━━━━━━━━━━━━━━",
       ].join("\n")
     )
     .setImage(image || null)
-    .setFooter({ text: "Event System" })
+    .setFooter({ text: "Clan Event System" })
     .setTimestamp();
 
-// ====================== BUTTONS (UNCHANGED) ======================
+// ====================== BUTTONS ======================
 const buttons = () =>
   new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -116,7 +123,7 @@ const buttons = () =>
       .setStyle(ButtonStyle.Primary)
   );
 
-// ====================== CORE ENGINE (UNCHANGED LOGIC) ======================
+// ====================== CORE (UNCHANGED LOGIC) ======================
 function registerEvent(client, key, event, hour, roleId, image) {
   const now = getNow();
   const h = now.getHours();
@@ -129,7 +136,7 @@ function registerEvent(client, key, event, hour, roleId, image) {
   const channelFetch = () =>
     client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
 
-  // PRE (55 min) — untouched logic
+  // PRE
   if (h === (hour - 1 + 24) % 24 && m === 55 && !processed.has(preKey)) {
     channelFetch().then((ch) => {
       if (!ch) return;
@@ -138,7 +145,7 @@ function registerEvent(client, key, event, hour, roleId, image) {
     });
   }
 
-  // START (ONLY EMBED CHANGED)
+  // START
   if (h === hour && m === 0 && !processed.has(startKey)) {
     channelFetch().then(async (ch) => {
       if (!ch) return;
@@ -152,7 +159,7 @@ function registerEvent(client, key, event, hour, roleId, image) {
 
       const msg = await ch.send({
         content: `<@&${roleId}>`,
-        embeds: [eventEmbed(key, image)]
+        embeds: [eventEmbed(key, image)],
       });
 
       setTimeout(() => msg.delete().catch(() => {}), CONFIG.DELETE_AFTER);
@@ -164,7 +171,7 @@ function registerEvent(client, key, event, hour, roleId, image) {
 
 // ====================== SYSTEM ======================
 function startEventSystem(client) {
-  console.log("Event system running");
+  console.log("Event system running (ticket style UI)");
 
   setInterval(() => {
     for (const [name, data] of Object.entries(CONFIG.EVENTS)) {
@@ -191,42 +198,40 @@ async function startPanel(client) {
 
   let msg = await channel.send({
     embeds: [panelEmbed()],
-    components: [buttons()]
+    components: [buttons()],
   });
 
   setInterval(() => {
     msg.edit({
       embeds: [panelEmbed()],
-      components: [buttons()]
+      components: [buttons()],
     }).catch(() => {});
   }, CONFIG.REFRESH_INTERVAL);
 }
 
 // ====================== INTERACTIONS ======================
 async function handleEventInteraction(interaction) {
-  const id = interaction.customId;
-
-  if (id === "refresh")
+  if (interaction.customId === "refresh")
     return interaction.update({
       embeds: [panelEmbed()],
-      components: [buttons()]
+      components: [buttons()],
     });
 
-  if (id === "roles")
+  if (interaction.customId === "roles")
     return interaction.reply({
-      content: "Role system is not ready yet.",
-      ephemeral: true
+      content: "Role system coming soon.",
+      ephemeral: true,
     });
 
-  if (id === "dm")
+  if (interaction.customId === "dm")
     return interaction.reply({
-      content: "Notification system is not ready yet.",
-      ephemeral: true
+      content: "Notification system coming soon.",
+      ephemeral: true,
     });
 }
 
 module.exports = {
   startPanel,
   startEventSystem,
-  handleEventInteraction
+  handleEventInteraction,
 };
