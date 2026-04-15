@@ -1,213 +1,182 @@
-const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ChannelType,
+  PermissionsBitField
+} = require("discord.js");
 
-// ====================== SYSTEMY ======================
-const { addXP, loadConfig, loadDB } = require("../utils/levelSystem");
-const { addMessage, isDailyReady } = require("../utils/profileSystem");
-const { getConfig } = require("../utils/configSystem");
-const { addCoins } = require("../utils/economySystem");
-const { checkDailyDM } = require("../utils/dailySystem");
-const { getCurrentBoost } = require("../utils/boostSystem");
-
-// 👉 AI (opcjonalnie — nie crashuje jeśli brak)
-let ticketAI = null;
-try {
-  ticketAI = require("../utils/ticketAI").handleTicketAI;
-} catch (e) {
-  console.log("⚠️ ticketAI nie załadowany");
-}
-
-// ====================== COOLDOWN ======================
-const xpCooldown = new Map();
-const coinCooldown = new Map();
-
-// ====================== CONFIG ======================
-const LEVEL_CHANNEL_ID = "1475999590716018719";
-
-// ====================== MAIN EVENT ======================
-module.exports = {
-  name: Events.MessageCreate,
-
-  async execute(message) {
-    if (!message.guild || message.author.bot) return;
-
-    try {
-      const config = await getConfig(message.guild.id).catch(() => ({}));
-      const PREFIX = config?.prefix || ".";
-
-      // ====================== PREFIX COMMANDS ======================
-      if (message.content.startsWith(PREFIX)) {
-        return await handleCommands(message, PREFIX);
-      }
-
-      // ====================== AI (TICKET) ======================
-      if (ticketAI) {
-        await ticketAI(message, message.client);
-      }
-
-      // ====================== XP SYSTEM ======================
-      await handleXP(message);
-
-    } catch (err) {
-      console.error("❌ MessageCreate error:", err);
-    }
-  }
+// ================= CONFIG =================
+const CONFIG = {
+  PANEL_CHANNEL_ID: "1475558248487583805",
+  LOG_CHANNEL_ID: "1494072832827850953",
+  CATEGORY_ID: "1475985874385899530",
+  ADMIN_ROLE: "1475998527191519302"
 };
 
-// ====================== XP SYSTEM ======================
-async function handleXP(message) {
-  const now = Date.now();
-  const userId = message.author.id;
+// ================= AI =================
+function aiBrain(text) {
+  const msg = text.toLowerCase();
 
-  // anti spam XP
-  const lastXP = xpCooldown.get(userId) || 0;
-  if (now - lastXP < 2000) return;
-  xpCooldown.set(userId, now);
-
-  if (message.content.length < 3) return;
-
-  const cfg = loadConfig();
-
-  // ====================== COINS ======================
-  const lastCoin = coinCooldown.get(userId) || 0;
-  if (now - lastCoin > 12000) {
-    addCoins(userId, 3);
-    coinCooldown.set(userId, now);
+  if (msg.includes("hej") || msg.includes("cześć")) {
+    return "👋 Hej! Jestem AI Support.";
   }
 
-  // ====================== XP ======================
-  const boost = getCurrentBoost(userId);
+  if (msg.includes("ile") && msg.includes("czek")) {
+    return "⏳ Do 24h odpowiedzi.";
+  }
 
-  const result = await addXP(
-    message.member,
-    Math.floor((cfg.messageXP || 10) * boost),
-    message.content.length
+  if (msg.includes("rekrut")) {
+    return "📌 Rekrutacja trwa do 24h.";
+  }
+
+  return null;
+}
+
+// ================= HANDLE =================
+async function handle(interaction, client) {
+
+  // ===== BUTTONS =====
+  if (interaction.isButton()) {
+
+    if (interaction.customId === "ticket_vyrn") {
+      return openTicket(interaction, "vyrn");
+    }
+
+    if (interaction.customId === "ticket_v2rn") {
+      return openTicket(interaction, "v2rn");
+    }
+
+    if (interaction.customId === "close_ticket") {
+      return closeTicket(interaction);
+    }
+  }
+
+  // ===== MODAL =====
+  if (interaction.isModalSubmit()) {
+
+    if (interaction.customId === "ticket_modal_vyrn") {
+      return createTicket(interaction, "vyrn");
+    }
+
+    if (interaction.customId === "ticket_modal_v2rn") {
+      return createTicket(interaction, "v2rn");
+    }
+  }
+}
+
+// ================= OPEN =================
+async function openTicket(interaction, type) {
+
+  const modal = new ModalBuilder()
+    .setCustomId(`ticket_modal_${type}`)
+    .setTitle("Ticket Form");
+
+  const nick = new TextInputBuilder()
+    .setCustomId("nick")
+    .setLabel("Nick")
+    .setStyle(TextInputStyle.Short);
+
+  const lang = new TextInputBuilder()
+    .setCustomId("lang")
+    .setLabel("Lang (pl/en)")
+    .setStyle(TextInputStyle.Short);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(nick),
+    new ActionRowBuilder().addComponents(lang)
   );
 
-  // ====================== DAILY ======================
-  addMessage(userId);
+  await interaction.showModal(modal);
+}
 
-  if (isDailyReady(userId)) {
-    await checkDailyDM(message.member);
-  }
+// ================= CREATE =================
+async function createTicket(interaction, type) {
 
-  // ====================== LEVEL UP ======================
-  if (result?.leveledUp) {
-    await sendLevelUp(message, result);
+  const nick = interaction.fields.getTextInputValue("nick");
+  const lang = interaction.fields.getTextInputValue("lang");
 
-    try {
-      await message.author.send({
-        embeds: [
-          new EmbedBuilder()
-            .setColor("#b8a672")
-            .setTitle(`🎉 Level UP! ${result.level}`)
-            .setDescription(`+50 coins nagrody`)
-            .setTimestamp()
+  const channel = await interaction.guild.channels.create({
+    name: `${type}-${interaction.user.username}`,
+    type: ChannelType.GuildText,
+    topic: interaction.user.id,
+    parent: CONFIG.CATEGORY_ID,
+    permissionOverwrites: [
+      {
+        id: interaction.guild.id,
+        deny: [PermissionsBitField.Flags.ViewChannel]
+      },
+      {
+        id: interaction.user.id,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages
         ]
-      });
-
-      addCoins(userId, 50);
-    } catch {}
-  }
-}
-
-// ====================== LEVEL UP ======================
-async function sendLevelUp(message, result) {
-  const channel = message.guild.channels.cache.get(LEVEL_CHANNEL_ID);
-  if (!channel?.isTextBased()) return;
-
-  const embed = new EmbedBuilder()
-    .setColor("#b8a672")
-    .setTitle(`🏆 Level UP ${message.author.username}`)
-    .setDescription(`Nowy poziom: **${result.level}**`)
-    .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
-    .setTimestamp();
-
-  channel.send({
-    content: `🎉 ${message.author}`,
-    embeds: [embed],
-  }).catch(() => {});
-}
-
-// ====================== COMMANDS ======================
-async function handleCommands(message, PREFIX) {
-  const args = message.content.slice(PREFIX.length).trim().split(/ +/);
-  const cmd = args.shift()?.toLowerCase();
-  if (!cmd) return;
-
-  // public rank
-  if (cmd === "rank" || cmd === "r") {
-    return showRank(message);
-  }
-
-  if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
-
-  switch (cmd) {
-    case "setxp":
-      return setMessageXP(message, args);
-
-    case "setvcxp":
-      return setVoiceXP(message, args);
-
-    case "setlengthbonus":
-      return setLengthBonus(message, args);
-
-    case "multixp":
-      return setGlobalMultiplier(message, args);
-  }
-}
-
-// ====================== RANK ======================
-async function showRank(message) {
-  const db = loadDB();
-  const user = db.xp?.[message.author.id] || { xp: 0, level: 0 };
-
-  const needed = Math.floor(100 * Math.pow(user.level, 1.5));
-  const percent = needed ? Math.floor((user.xp / needed) * 100) : 0;
+      },
+      {
+        id: CONFIG.ADMIN_ROLE,
+        allow: [
+          PermissionsBitField.Flags.ViewChannel,
+          PermissionsBitField.Flags.SendMessages
+        ]
+      }
+    ]
+  });
 
   const embed = new EmbedBuilder()
-    .setColor("#0f172a")
-    .setAuthor({
-      name: message.author.username,
-      iconURL: message.author.displayAvatarURL({ dynamic: true }),
-    })
-    .setDescription(
-      `🏆 Level: **${user.level}**\n` +
-      `XP: \`${user.xp}/${needed}\` (${percent}%)`
+    .setTitle("🎫 Ticket opened")
+    .setDescription(`Nick: ${nick}\nLang: ${lang}`)
+    .setColor("Green");
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("close_ticket")
+      .setLabel("Close")
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  await channel.send({ embeds: [embed], components: [row] });
+
+  await interaction.reply({
+    content: `Ticket created: ${channel}`,
+    ephemeral: true
+  });
+}
+
+// ================= CLOSE =================
+async function closeTicket(interaction) {
+  await interaction.reply({ content: "Closing...", ephemeral: true });
+  setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
+}
+
+// ================= AI + LOGS =================
+async function handleAI(message, client) {
+
+  const response = aiBrain(message.content);
+  if (!response) return;
+
+  await message.reply(response);
+
+  const log = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID);
+
+  const embed = new EmbedBuilder()
+    .setTitle("AI LOG")
+    .addFields(
+      { name: "User", value: message.author.tag },
+      { name: "Channel", value: message.channel.name },
+      { name: "Msg", value: message.content },
+      { name: "AI", value: response }
     )
-    .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
+    .setColor("Orange");
 
-  message.reply({ embeds: [embed] }).catch(() => {});
+  log.send({ embeds: [embed] });
 }
 
-// ====================== ADMIN ======================
-function setMessageXP(message, args) {
-  const val = parseInt(args[0]);
-  if (!val) return message.reply("❌ `.setxp <liczba>`");
-
-  require("../utils/levelSystem").setMessageXP(val);
-  message.reply(`✅ Message XP = ${val}`);
-}
-
-function setVoiceXP(message, args) {
-  const val = parseInt(args[0]);
-  if (!val) return message.reply("❌ `.setvcxp <liczba>`");
-
-  require("../utils/levelSystem").setVoiceXP(val);
-  message.reply(`✅ Voice XP = ${val}`);
-}
-
-function setLengthBonus(message, args) {
-  const val = parseFloat(args[0]);
-  if (!val) return message.reply("❌ `.setlengthbonus <liczba>`");
-
-  require("../utils/levelSystem").setLengthBonus(val);
-  message.reply(`✅ Length bonus = ${val}`);
-}
-
-function setGlobalMultiplier(message, args) {
-  const val = parseFloat(args[0]);
-  if (!val) return message.reply("❌ `.multixp <liczba>`");
-
-  require("../utils/levelSystem").setGlobalMultiplier(val);
-  message.reply(`🔥 Multiplier = ${val}x`);
-}
+module.exports = {
+  handle,
+  handleAI
+};
