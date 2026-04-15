@@ -1,172 +1,164 @@
 const { EmbedBuilder, Events } = require("discord.js");
 
-// ====================== IMPORTY SYSTEMÓW ======================
+// ====================== SYSTEMS ======================
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleExpeditionSelect } = require("../commands/expedition");
 const { isDailyReady, claimDaily } = require("../utils/profileSystem");
 
+// ====================== CONFIG ======================
+const CONFIG = {
+  LOG_CHANNEL_ID: "1494072832827850953"
+};
+
 module.exports = {
   name: Events.InteractionCreate,
 
   async execute(interaction, client) {
-    const startTime = Date.now();
-    const interactionType = getInteractionType(interaction);
+    const start = Date.now();
+
+    const type = getType(interaction);
+    const cid = interaction.customId || "N/A";
 
     try {
-      console.log(
-        `[INTERACTION] ${interactionType} | User: ${interaction.user.tag} (${interaction.user.id}) | CustomID: ${interaction.customId || "N/A"}`
-      );
+      console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid}`);
 
-      // ====================== 1. GIVEAWAY ======================
-      if (interaction.isButton() && interaction.customId?.startsWith("gw_")) {
+      // =====================================================
+      // 1. GIVEAWAY
+      // =====================================================
+      if (interaction.isButton() && cid.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
 
-      // ====================== 2. EVENT ======================
+      // =====================================================
+      // 2. EVENT SYSTEM
+      // =====================================================
       if (
         (interaction.isButton() || interaction.isStringSelectMenu()) &&
-        ["refresh", "roles", "dm", "role_menu", "dm_menu"].includes(interaction.customId)
+        ["refresh", "roles", "dm", "role_menu", "dm_menu"].includes(cid)
       ) {
         return await handleEventInteraction(interaction);
       }
 
-      // ====================== 3. EXPEDITION ======================
-      if (
-        interaction.isStringSelectMenu() &&
-        interaction.customId === "expedition_time_select"
-      ) {
+      // =====================================================
+      // 3. EXPEDITION
+      // =====================================================
+      if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
         return await handleExpeditionSelect(interaction);
       }
 
-      // ====================== 4. DAILY ======================
-      if (interaction.isButton() && interaction.customId === "daily_claim") {
-        return await handleDailyClaim(interaction);
+      // =====================================================
+      // 4. DAILY
+      // =====================================================
+      if (interaction.isButton() && cid === "daily_claim") {
+        return await handleDaily(interaction);
       }
 
-      // ====================== 5. TICKETY (FIXED 🔥) ======================
-      if (interaction.isButton() || interaction.isModalSubmit()) {
-        const id = interaction.customId || "";
+      // =====================================================
+      // 5. TICKETS (🔥 FIX: TWARDY RETURN FLOW)
+      // =====================================================
+      const ticketIds = [
+        "open_ticket_vyrn",
+        "open_ticket_v2rn",
+        "close_ticket",
+        "ticket_modal_vyrn",
+        "ticket_modal_v2rn"
+      ];
 
-        if (
-          id.startsWith("ticket_") ||
-          id.startsWith("open_ticket_") ||
-          id.startsWith("ticket_modal_") ||
-          id === "close_ticket"
-        ) {
-          return await ticketSystem.handle(interaction, client);
-        }
+      if (
+        (interaction.isButton() || interaction.isModalSubmit()) &&
+        ticketIds.includes(cid)
+      ) {
+        return await ticketSystem.handle(interaction, client);
       }
 
-      // ====================== 6. SLASH COMMANDS ======================
+      // =====================================================
+      // 6. SLASH COMMANDS
+      // =====================================================
       if (interaction.isChatInputCommand()) {
-        const command = client.commands.get(interaction.commandName);
+        const cmd = client.commands.get(interaction.commandName);
 
-        if (!command) {
+        if (!cmd) {
           return interaction.reply({
-            content: "❌ Nie znaleziono takiej komendy.",
+            content: "❌ Nie znaleziono komendy.",
             ephemeral: true
           });
         }
 
-        return await command.execute(interaction, client);
+        return await cmd.execute(interaction, client);
       }
 
-      // ====================== NIEOBSŁUŻONE ======================
-      if (!interaction.replied && !interaction.deferred) {
-        console.warn(
-          `[INTERACTION] Nieobsłużona interakcja: ${interactionType} | CustomID: ${interaction.customId || "N/A"}`
-        );
-      }
+      // =====================================================
+      // fallback
+      // =====================================================
+      console.log(`[UNHANDLED] ${type} | ${cid}`);
 
     } catch (err) {
-      console.error(`❌ INTERACTION ERROR [${interactionType}]`, err);
+      console.error("❌ INTERACTION ERROR:", err);
 
-      const errorResponse = {
-        content:
-          "❌ Wystąpił nieoczekiwany błąd podczas przetwarzania interakcji.\nSpróbuj ponownie lub zgłoś administratorowi.",
+      const msg = {
+        content: "❌ Błąd systemu.",
         ephemeral: true
       };
 
-      try {
-        if (interaction.replied || interaction.deferred) {
-          await interaction.followUp(errorResponse);
-        } else {
-          await interaction.reply(errorResponse);
-        }
-      } catch (followUpError) {
-        console.error("❌ Nie udało się wysłać wiadomości o błędzie:", followUpError);
+      if (interaction.deferred || interaction.replied) {
+        await interaction.followUp(msg).catch(() => {});
+      } else {
+        await interaction.reply(msg).catch(() => {});
       }
     } finally {
-      const executionTime = Date.now() - startTime;
-
-      if (executionTime > 3000) {
-        console.warn(
-          `[INTERACTION] Wolna interakcja (${executionTime}ms) | Type: ${interactionType}`
-        );
+      const ms = Date.now() - start;
+      if (ms > 2500) {
+        console.warn(`[SLOW INTERACTION] ${ms}ms | ${type}`);
       }
     }
   }
 };
 
-// ====================== HELPER ======================
-function getInteractionType(interaction) {
-  if (interaction.isChatInputCommand()) return "SLASH_COMMAND";
-  if (interaction.isButton()) return `BUTTON (${interaction.customId || "N/A"})`;
-  if (interaction.isModalSubmit()) return `MODAL (${interaction.customId || "N/A"})`;
-  if (interaction.isStringSelectMenu()) return `SELECT_MENU (${interaction.customId || "N/A"})`;
-  if (interaction.isUserSelectMenu()) return "USER_SELECT_MENU";
-  if (interaction.isRoleSelectMenu()) return "ROLE_SELECT_MENU";
-  if (interaction.isChannelSelectMenu()) return "CHANNEL_SELECT_MENU";
-  return "UNKNOWN_INTERACTION";
-}
+// ====================== DAILY HANDLER ======================
+async function handleDaily(interaction) {
+  await interaction.deferUpdate().catch(() => {});
 
-// ====================== DAILY CLAIM ======================
-async function handleDailyClaim(interaction) {
-  try {
-    await interaction.deferUpdate();
+  const userId = interaction.user.id;
+  const member = interaction.member;
 
-    const userId = interaction.user.id;
-    const member = interaction.member;
-
-    if (!isDailyReady(userId)) {
-      return await interaction.editReply({
-        content: "❌ Twój daily nie jest jeszcze gotowy!",
-        components: [],
-        embeds: []
-      });
-    }
-
-    const result = await claimDaily(userId, member);
-
-    if (!result.success) {
-      return await interaction.editReply({
-        content:
-          result.error === "cooldown"
-            ? "❌ Daily możesz odebrać tylko raz na 24h!"
-            : "❌ Błąd podczas odbierania daily.",
-        components: [],
-        embeds: []
-      });
-    }
-
-    const embed = new EmbedBuilder()
-      .setColor("#22c55e")
-      .setTitle("🎁 Daily Odebrany!")
-      .setDescription(
-        `**XP:** \`${result.xp}\`\n` +
-        `🔥 **Streak:** \`${result.streak}\`\n\n` +
-        `Wróć jutro po więcej!`
-      )
-      .setTimestamp();
-
-    await interaction.editReply({
-      embeds: [embed],
+  if (!isDailyReady(userId)) {
+    return interaction.editReply({
+      content: "❌ Daily nie gotowy.",
+      embeds: [],
       components: []
     });
-
-  } catch (err) {
-    console.error("❌ Daily error:", err);
   }
+
+  const result = await claimDaily(userId, member);
+
+  if (!result.success) {
+    return interaction.editReply({
+      content: "❌ Nie możesz jeszcze odebrać daily.",
+      embeds: [],
+      components: []
+    });
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor("#22c55e")
+    .setTitle("🎁 Daily Odebrany")
+    .setDescription(
+      `+${result.xp} XP\n🔥 streak: ${result.streak}`
+    );
+
+  return interaction.editReply({
+    embeds: [embed],
+    components: []
+  });
+}
+
+// ====================== TYPE ======================
+function getType(i) {
+  if (i.isChatInputCommand()) return "SLASH";
+  if (i.isButton()) return `BUTTON:${i.customId}`;
+  if (i.isModalSubmit()) return `MODAL:${i.customId}`;
+  if (i.isStringSelectMenu()) return `SELECT:${i.customId}`;
+  return "UNKNOWN";
 }
