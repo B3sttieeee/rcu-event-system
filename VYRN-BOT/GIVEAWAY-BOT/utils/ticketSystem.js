@@ -14,97 +14,128 @@ const {
 const CONFIG = {
   ADMIN_ROLE: "1475998527191519302",
   PANEL_CHANNEL_ID: "1475558248487583805",
+  LOG_CHANNEL_ID: "1494072832827850953",
+
   TICKET_CATEGORY_ID: "1475985874385899530",
   VERIFY_ROLE: "1475998527191519302",
 
-  PREFIX_VYRN: "vyrn-",
-  PREFIX_V2RN: "v2rn-",
+  IMAGE:
+    "https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif",
 
-  DELETE_AFTER_CLOSE: 5000
+  PREFIX_VYRN: "vyrn-",
+  PREFIX_V2RN: "v2rn-"
 };
+
+// ====================== AI SUPPORT ======================
+function aiSupportResponse(lang, type) {
+  const isPL = lang === "pl";
+
+  const responses = {
+    vyrn: {
+      pl:
+        "🤖 **VYRN AI Support**\n\n" +
+        "Twoje zgłoszenie zostało przyjęte.\n\n" +
+        "⏳ Standardowy czas odpowiedzi: **do 24h**\n" +
+        "📌 Rekrutacja zależy od aktywności administracji\n" +
+        "📊 W międzyczasie możesz normalnie grać i czekać na odpowiedź",
+
+      en:
+        "🤖 **VYRN AI Support**\n\n" +
+        "Your application has been received.\n\n" +
+        "⏳ Response time: **up to 24h**\n" +
+        "📌 Recruitment depends on admin availability\n" +
+        "📊 You can continue playing while waiting"
+    },
+
+    v2rn: {
+      pl:
+        "🤖 **V2RN Academy AI Support**\n\n" +
+        "Twoje zgłoszenie zostało zapisane.\n\n" +
+        "⏳ Czas odpowiedzi: **do 24h**\n" +
+        "📌 Akademia może odpowiadać szybciej lub wolniej\n" +
+        "📊 Prosimy o cierpliwość",
+
+      en:
+        "🤖 **V2RN Academy AI Support**\n\n" +
+        "Your application has been recorded.\n\n" +
+        "⏳ Response time: **up to 24h**\n" +
+        "📌 Academy response time may vary\n" +
+        "📊 Please be patient"
+    }
+  };
+
+  return isPL ? responses[type].pl : responses[type].en;
+}
 
 // ====================== PANEL ======================
 async function createTicketPanel(client) {
-  try {
-    const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID);
-    if (!channel?.isTextBased()) return;
+  const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID);
+  if (!channel) return;
 
-    const embed = new EmbedBuilder()
-      .setColor("#ff6600")
-      .setTitle("🎫 VYRN Support & Recruitment Center")
-      .setDescription(
-        `📌 **Wybierz typ aplikacji**\n\n` +
+  const embed = new EmbedBuilder()
+    .setColor("#ff6600")
+    .setTitle("📌 VYRN • Recruitment System")
+    .setDescription(
+      "📩 **Wybierz typ zgłoszenia**\n\n" +
+        "🔥 **VYRN Main Clan**\n" +
+        "🛡️ **V2RN Academy**\n\n" +
+        "Kliknij przycisk aby rozpocząć rekrutację"
+    )
+    .setImage(CONFIG.IMAGE)
+    .setFooter({ text: "VYRN Recruitment System" })
+    .setTimestamp();
 
-        `🔥 **VYRN MAIN CLAN**\n` +
-        `• 3MN+ Rebirthy\n• 15M+ Jajek\n• Dobry team\n\n` +
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("open_ticket_vyrn")
+      .setLabel("🔥 VYRN")
+      .setStyle(ButtonStyle.Primary),
 
-        `🛡️ **V2RN ACADEMY**\n` +
-        `• 150 O+\n• Starter friendly\n\n` +
+    new ButtonBuilder()
+      .setCustomId("open_ticket_v2rn")
+      .setLabel("🛡️ V2RN")
+      .setStyle(ButtonStyle.Success)
+  );
 
-        `━━━━━━━━━━━━━━━━━━\n` +
-        `Kliknij przycisk aby rozpocząć aplikację`
-      )
-      .setFooter({ text: "VYRN Recruitment System" })
-      .setTimestamp();
+  const messages = await channel.messages.fetch({ limit: 10 });
+  const existing = messages.find(m =>
+    m.author.id === client.user.id &&
+    m.embeds[0]?.title?.includes("Recruitment")
+  );
 
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId("ticket_vyrn")
-        .setLabel("🔥 VYRN Clan")
-        .setStyle(ButtonStyle.Primary)
-        .setEmoji("🎫"),
-
-      new ButtonBuilder()
-        .setCustomId("ticket_v2rn")
-        .setLabel("🛡️ V2RN Academy")
-        .setStyle(ButtonStyle.Success)
-        .setEmoji("🛡️")
-    );
-
-    const messages = await channel.messages.fetch({ limit: 20 });
-
-    const existing = messages.find(m =>
-      m.author.id === client.user.id &&
-      m.embeds[0]?.title?.includes("Support & Recruitment")
-    );
-
-    if (existing) {
-      await existing.edit({ embeds: [embed], components: [row] });
-    } else {
-      await channel.send({ embeds: [embed], components: [row] });
-    }
-
-  } catch (err) {
-    console.error("Ticket panel error:", err);
+  if (existing) {
+    await existing.edit({ embeds: [embed], components: [row] });
+  } else {
+    await channel.send({ embeds: [embed], components: [row] });
   }
 }
 
-// ====================== HANDLER ======================
-async function handle(interaction) {
+// ====================== MAIN HANDLER ======================
+async function handle(interaction, client) {
   try {
     if (interaction.isButton()) {
-      if (interaction.customId === "ticket_vyrn")
-        return openTicketModal(interaction, "vyrn");
+      if (interaction.customId === "open_ticket_vyrn")
+        return openTicket(interaction, "vyrn");
 
-      if (interaction.customId === "ticket_v2rn")
-        return openTicketModal(interaction, "v2rn");
+      if (interaction.customId === "open_ticket_v2rn")
+        return openTicket(interaction, "v2rn");
 
       if (interaction.customId === "close_ticket")
         return closeTicket(interaction);
     }
 
     if (interaction.isModalSubmit()) {
-      if (interaction.customId.startsWith("ticket_modal_"))
-        return createTicket(interaction);
+      if (interaction.customId.startsWith("ticket_modal_")) {
+        return submitTicket(interaction, client);
+      }
     }
-
   } catch (err) {
-    console.error("Ticket system error:", err);
+    console.error("Ticket error:", err);
   }
 }
 
-// ====================== OPEN MODAL ======================
-async function openTicketModal(interaction, type) {
+// ====================== OPEN TICKET ======================
+async function openTicket(interaction, type) {
   const modal = new ModalBuilder()
     .setCustomId(`ticket_modal_${type}`)
     .setTitle(type === "vyrn" ? "🔥 VYRN Application" : "🛡️ V2RN Application");
@@ -129,31 +160,21 @@ async function openTicketModal(interaction, type) {
   await interaction.showModal(modal);
 }
 
-// ====================== CREATE TICKET ======================
-async function createTicket(interaction) {
-  await interaction.deferReply({ ephemeral: true });
+// ====================== SUBMIT ======================
+async function submitTicket(interaction, client) {
+  const nick = interaction.fields.getTextInputValue("nick");
+  const lang = interaction.fields.getTextInputValue("lang").toLowerCase();
 
-  const type = interaction.customId.split("_")[2];
+  const type = interaction.customId.includes("v2rn") ? "v2rn" : "vyrn";
   const prefix = type === "v2rn" ? CONFIG.PREFIX_V2RN : CONFIG.PREFIX_VYRN;
 
-  const nick = interaction.fields.getTextInputValue("nick");
-  const lang = interaction.fields.getTextInputValue("lang");
-
-  // 🔥 anti duplicate
-  const existing = interaction.guild.channels.cache.find(c =>
-    c.topic === interaction.user.id && c.name.startsWith(prefix)
-  );
-
-  if (existing) {
-    return interaction.editReply("❌ Masz już aktywny ticket.");
-  }
+  await interaction.deferReply({ ephemeral: true });
 
   const channel = await interaction.guild.channels.create({
     name: `${prefix}${interaction.user.username}`.toLowerCase(),
-    topic: interaction.user.id,
     type: ChannelType.GuildText,
     parent: CONFIG.TICKET_CATEGORY_ID,
-
+    topic: interaction.user.id,
     permissionOverwrites: [
       {
         id: interaction.guild.id,
@@ -169,10 +190,7 @@ async function createTicket(interaction) {
       },
       {
         id: CONFIG.ADMIN_ROLE,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.ManageMessages
-        ]
+        allow: [PermissionsBitField.Flags.ViewChannel]
       },
       {
         id: CONFIG.VERIFY_ROLE,
@@ -183,21 +201,21 @@ async function createTicket(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor("#22c55e")
-    .setTitle("🎫 New Ticket Created")
+    .setTitle(type === "vyrn" ? "🔥 VYRN Ticket" : "🛡️ V2RN Ticket")
+    .setThumbnail(interaction.user.displayAvatarURL())
     .setDescription(
       `👤 User: ${interaction.user}\n` +
-      `📝 Nick: **${nick}**\n` +
-      `🌍 Language: **${lang}**\n\n` +
-      `📌 Staff will assist you soon.`
+      `📝 Nick: **${nick}**\n\n` +
+      aiSupportResponse(lang, type)
     )
+    .setImage(CONFIG.IMAGE)
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("close_ticket")
-      .setLabel("Close Ticket")
+      .setLabel("Close")
       .setStyle(ButtonStyle.Danger)
-      .setEmoji("🔒")
   );
 
   await channel.send({
@@ -206,32 +224,51 @@ async function createTicket(interaction) {
     components: [row]
   });
 
-  await interaction.editReply(`✅ Ticket created: ${channel}`);
+  // ================= LOGS =================
+  const logChannel = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID);
+  if (logChannel) {
+    logChannel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setColor("#ffaa00")
+          .setTitle("📥 Ticket Created")
+          .setDescription(
+            `👤 User: ${interaction.user.tag}\n` +
+            `📌 Type: ${type}\n` +
+            `🌐 Lang: ${lang}\n` +
+            `📺 Channel: ${channel}`
+          )
+          .setTimestamp()
+      ]
+    });
+  }
+
+  await interaction.editReply({
+    content: `✅ Ticket created: ${channel}`
+  });
 }
 
 // ====================== CLOSE ======================
 async function closeTicket(interaction) {
-  if (
-    !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) &&
-    !interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE)
-  ) {
+  const isAdmin =
+    interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+    interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE);
+
+  if (!isAdmin) {
     return interaction.reply({
-      content: "❌ No permission.",
+      content: "❌ No permission",
       ephemeral: true
     });
   }
 
   await interaction.reply({
-    content: "🔒 Closing ticket...",
+    content: "🗑️ Closing ticket...",
     ephemeral: true
   });
 
-  setTimeout(() => {
-    interaction.channel.delete().catch(() => {});
-  }, CONFIG.DELETE_AFTER_CLOSE);
+  setTimeout(() => interaction.channel.delete(), 2500);
 }
 
-// ====================== EXPORT ======================
 module.exports = {
   handle,
   createTicketPanel
