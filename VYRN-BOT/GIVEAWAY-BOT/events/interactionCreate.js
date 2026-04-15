@@ -12,22 +12,23 @@ const CONFIG = {
   LOG_CHANNEL_ID: "1494072832827850953"
 };
 
+// ====================== MAIN ======================
 module.exports = {
   name: Events.InteractionCreate,
 
   async execute(interaction, client) {
     const start = Date.now();
+    const cid = interaction.customId || null;
 
     const type = getType(interaction);
-    const cid = interaction.customId || "N/A";
 
     try {
-      console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid}`);
+      console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NO_ID"}`);
 
       // =====================================================
-      // 1. GIVEAWAY
+      // 1. GIVEAWAY BUTTONS
       // =====================================================
-      if (interaction.isButton() && cid.startsWith("gw_")) {
+      if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
 
@@ -42,33 +43,33 @@ module.exports = {
       }
 
       // =====================================================
-      // 3. EXPEDITION
+      // 3. EXPEDITION MENU
       // =====================================================
       if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
         return await handleExpeditionSelect(interaction);
       }
 
       // =====================================================
-      // 4. DAILY
+      // 4. DAILY SYSTEM
       // =====================================================
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDaily(interaction);
       }
 
       // =====================================================
-      // 5. TICKETS (🔥 FIX: TWARDY RETURN FLOW)
+      // 5. TICKETS (FULL SAFE HANDOFF)
       // =====================================================
-      const ticketIds = [
+      const ticketIds = new Set([
         "open_ticket_vyrn",
         "open_ticket_v2rn",
         "close_ticket",
         "ticket_modal_vyrn",
         "ticket_modal_v2rn"
-      ];
+      ]);
 
       if (
         (interaction.isButton() || interaction.isModalSubmit()) &&
-        ticketIds.includes(cid)
+        ticketIds.has(cid)
       ) {
         return await ticketSystem.handle(interaction, client);
       }
@@ -90,23 +91,25 @@ module.exports = {
       }
 
       // =====================================================
-      // fallback
+      // UNKNOWN
       // =====================================================
-      console.log(`[UNHANDLED] ${type} | ${cid}`);
+      console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
 
     } catch (err) {
       console.error("❌ INTERACTION ERROR:", err);
 
-      const msg = {
-        content: "❌ Błąd systemu.",
+      const payload = {
+        content: "❌ Wystąpił błąd systemu.",
         ephemeral: true
       };
 
-      if (interaction.deferred || interaction.replied) {
-        await interaction.followUp(msg).catch(() => {});
-      } else {
-        await interaction.reply(msg).catch(() => {});
-      }
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.followUp(payload);
+        } else {
+          await interaction.reply(payload);
+        }
+      } catch (_) {}
     } finally {
       const ms = Date.now() - start;
       if (ms > 2500) {
@@ -116,45 +119,48 @@ module.exports = {
   }
 };
 
-// ====================== DAILY HANDLER ======================
+// ====================== DAILY ======================
 async function handleDaily(interaction) {
-  await interaction.deferUpdate().catch(() => {});
+  try {
+    await interaction.deferUpdate();
 
-  const userId = interaction.user.id;
-  const member = interaction.member;
+    const userId = interaction.user.id;
+    const member = interaction.member;
 
-  if (!isDailyReady(userId)) {
+    if (!isDailyReady(userId)) {
+      return interaction.editReply({
+        content: "❌ Daily nie jest jeszcze gotowy.",
+        embeds: [],
+        components: []
+      });
+    }
+
+    const result = await claimDaily(userId, member);
+
+    if (!result?.success) {
+      return interaction.editReply({
+        content: "❌ Nie możesz jeszcze odebrać daily.",
+        embeds: [],
+        components: []
+      });
+    }
+
+    const embed = new EmbedBuilder()
+      .setColor("#22c55e")
+      .setTitle("🎁 Daily Odebrany")
+      .setDescription(`+${result.xp} XP\n🔥 streak: ${result.streak || 0}`);
+
     return interaction.editReply({
-      content: "❌ Daily nie gotowy.",
-      embeds: [],
+      embeds: [embed],
       components: []
     });
+
+  } catch (err) {
+    console.error("DAILY ERROR:", err);
   }
-
-  const result = await claimDaily(userId, member);
-
-  if (!result.success) {
-    return interaction.editReply({
-      content: "❌ Nie możesz jeszcze odebrać daily.",
-      embeds: [],
-      components: []
-    });
-  }
-
-  const embed = new EmbedBuilder()
-    .setColor("#22c55e")
-    .setTitle("🎁 Daily Odebrany")
-    .setDescription(
-      `+${result.xp} XP\n🔥 streak: ${result.streak}`
-    );
-
-  return interaction.editReply({
-    embeds: [embed],
-    components: []
-  });
 }
 
-// ====================== TYPE ======================
+// ====================== TYPE DEBUG ======================
 function getType(i) {
   if (i.isChatInputCommand()) return "SLASH";
   if (i.isButton()) return `BUTTON:${i.customId}`;
