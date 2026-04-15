@@ -14,25 +14,25 @@ const CONFIG = {
   CHANNEL_ID: "1484937784283369502",
 
   ROLES: {
-    MERCHANT: "1476000993660502139",
-    EGG: "1489930030166573150",
-    SPRING: "1476000993119568105",
+    merchant: "1476000993660502139",
+    egg: "1489930030166573150",
+    spring: "1476000993119568105",
   },
 
   IMAGES: {
-    PANEL: "https://imgur.com/AybkuW5.png",
-    MERCHANT: "https://imgur.com/7GBAq8Z.png",
-    EGG: "https://imgur.com/xppQUWX.png",
-    SPRING: "https://imgur.com/89tmfpV.png",
+    panel: "https://imgur.com/AybkuW5.png",
+    merchant: "https://imgur.com/7GBAq8Z.png",
+    egg: "https://imgur.com/xppQUWX.png",
+    spring: "https://imgur.com/89tmfpV.png",
   },
 
   EVENTS: {
-    merchant: { hours: [2, 5, 8, 11, 14, 17, 20, 23], role: "MERCHANT" },
-    spring: { hours: Array.from({ length: 24 }, (_, i) => i), role: "SPRING" },
-    egg: { hours: [0, 3, 6, 9, 12, 15, 18, 21], role: "EGG" },
+    merchant: { hours: [2, 5, 8, 11, 14, 17, 20, 23], role: "merchant" },
+    spring: { hours: Array.from({ length: 24 }, (_, i) => i), role: "spring" },
+    egg: { hours: [0, 3, 6, 9, 12, 15, 18, 21], role: "egg" },
   },
 
-  REFRESH_INTERVAL: 10_000,
+  REFRESH_INTERVAL: 15_000,
   DELETE_AFTER: 15 * 60 * 1000,
 };
 
@@ -40,81 +40,98 @@ const CONFIG = {
 const DB_PATH = path.join(__dirname, "..", "eventDB.json");
 
 const loadDB = () => {
-  if (!fs.existsSync(DB_PATH)) return { dm: {} };
   try {
+    if (!fs.existsSync(DB_PATH)) return { dm: {} };
     return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
   } catch {
     return { dm: {} };
   }
 };
 
-const saveDB = (db) => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+const saveDB = (db) =>
+  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
-// ====================== TIME ======================
-const getNow = () =>
+// ====================== TIME (WARSAW SAFE) ======================
+const now = () =>
   new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
 
-const getNextHour = (hours) => {
-  const now = getNow().getHours();
-  return hours.find((h) => h > now) ?? hours[0];
+const hoursLeft = (targetHour) => {
+  const n = now();
+  const current = n.getHours();
+
+  let diff = targetHour - current;
+  if (diff < 0) diff += 24;
+
+  const mins = 60 - n.getMinutes();
+  return { h: diff, m: mins };
 };
 
-const getCountdown = (hours) => {
-  const now = getNow();
-  const next = getNextHour(hours);
+const formatCountdown = (hour) => {
+  const n = now();
+  const target = new Date(n);
+  target.setHours(hour, 0, 0, 0);
 
-  const target = new Date(now);
-  if (next <= now.getHours()) target.setDate(target.getDate() + 1);
+  if (target < n) target.setDate(target.getDate() + 1);
 
-  target.setHours(next, 0, 0, 0);
+  const diff = target - n;
 
-  const diff = target - now;
   const s = Math.floor(diff / 1000);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
 
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ${s % 60}s`;
+  return `⏳ ${h}h ${m}m ${sec}s`;
 };
 
 // ====================== CACHE ======================
-const processed = new Map();
+const processed = new Set();
 
 // ====================== EMBEDS ======================
-const embed = (title, color, image, desc) =>
-  new EmbedBuilder()
-    .setTitle(title)
-    .setColor(color)
-    .setImage(image)
-    .setDescription(desc ?? "")
-    .setTimestamp();
-
 const panelEmbed = () =>
   new EmbedBuilder()
-    .setColor("#f59e0b")
-    .setTitle("🎉 EVENT TRACKER")
+    .setColor("#0f172a")
+    .setTitle("📊 EVENT CONTROL CENTER")
     .setDescription(
       Object.entries(CONFIG.EVENTS)
         .map(([name, e]) => {
-          const hours = e.hours;
-          return `**${name.toUpperCase()}**\n\`${getNextHour(hours)}:00\` • ${getCountdown(hours)}`;
+          const next = e.hours.find((h) => h >= now().getHours()) ?? e.hours[0];
+
+          return (
+            `**${name.toUpperCase()} EVENT**\n` +
+            `🕒 Next: \`${next}:00\`\n` +
+            `${formatCountdown(next)}`
+          );
         })
         .join("\n\n")
     )
-    .setImage(CONFIG.IMAGES.PANEL)
-    .setFooter({ text: "Event System" })
+    .setImage(CONFIG.IMAGES.panel)
+    .setFooter({ text: "Live Event System • Warsaw Time" })
     .setTimestamp();
 
 // ====================== COMPONENTS ======================
 const buttons = () =>
   new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("refresh").setLabel("🔄").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("roles").setLabel("🎭").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("dm").setLabel("📩").setStyle(ButtonStyle.Primary)
+    new ButtonBuilder()
+      .setCustomId("refresh")
+      .setLabel("Refresh")
+      .setStyle(ButtonStyle.Secondary),
+
+    new ButtonBuilder()
+      .setCustomId("roles")
+      .setLabel("Roles")
+      .setStyle(ButtonStyle.Primary),
+
+    new ButtonBuilder()
+      .setCustomId("dm")
+      .setLabel("DM Alerts")
+      .setStyle(ButtonStyle.Success)
   );
 
 const roleMenu = () =>
   new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("role_menu")
-      .setPlaceholder("Wybierz role")
+      .setPlaceholder("Select event role")
       .addOptions([
         { label: "Merchant", value: "merchant", emoji: "🍯" },
         { label: "Spring", value: "spring", emoji: "🌸" },
@@ -126,7 +143,7 @@ const dmMenu = () =>
   new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("dm_menu")
-      .setPlaceholder("DM notifications")
+      .setPlaceholder("Select DM notifications")
       .setMinValues(0)
       .setMaxValues(3)
       .addOptions([
@@ -136,86 +153,67 @@ const dmMenu = () =>
       ])
   );
 
-// ====================== DISPATCHER ======================
-async function sendDM(client, type, message) {
+// ====================== DM SYSTEM ======================
+async function sendDM(client, type, msg) {
   const db = loadDB();
 
-  for (const [id, subs] of Object.entries(db.dm || {})) {
+  for (const [userId, subs] of Object.entries(db.dm || {})) {
     if (!subs.includes(type)) continue;
 
-    const user = await client.users.fetch(id).catch(() => null);
-    if (user) user.send(message).catch(() => {});
+    const user = await client.users.fetch(userId).catch(() => null);
+    if (user) user.send(msg).catch(() => {});
   }
 }
 
 // ====================== EVENT ENGINE ======================
-function registerEvent(client, key, event, hour, roleId, embed) {
-  const base = `${key}-${hour}`;
-  const now = getNow();
-  const h = now.getHours();
-  const m = now.getMinutes();
-
-  const preKey = base + "-pre";
-  const startKey = base + "-start";
-
-  const channelFetch = () =>
-    client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-
-  // PRE
-  if (h === (hour - 1 + 24) % 24 && m === 55 && !processed.has(preKey)) {
-    channelFetch().then((ch) => {
-      if (!ch) return;
-      ch.send(`<@&${roleId}> ⏳ ${key} za 5 minut!`).then((msg) => {
-        processed.set(preKey, msg.id);
-      });
-    });
-  }
-
-  // START
-  if (h === hour && m === 0 && !processed.has(startKey)) {
-    channelFetch().then(async (ch) => {
-      if (!ch) return;
-
-      const preId = processed.get(preKey);
-      if (preId) {
-        const msg = await ch.messages.fetch(preId).catch(() => null);
-        msg?.delete().catch(() => {});
-        processed.delete(preKey);
-      }
-
-      const msg = await ch.send({
-        content: `<@&${roleId}>`,
-        embeds: [embed],
-      });
-
-      sendDM(client, key, `🚀 ${key.toUpperCase()} started!`);
-
-      setTimeout(() => msg.delete().catch(() => {}), CONFIG.DELETE_AFTER);
-      processed.set(startKey, true);
-    });
-  }
-}
-
-// ====================== SYSTEM ======================
 function startEventSystem(client) {
-  console.log("🚀 Event system running");
+  console.log("🚀 Event system ONLINE");
 
   setInterval(() => {
-    const now = getNow();
-    const h = now.getHours();
-    const m = now.getMinutes();
+    const n = now();
+    const h = n.getHours();
+    const m = n.getMinutes();
 
     for (const [name, data] of Object.entries(CONFIG.EVENTS)) {
-      data.hours.forEach((hour) => {
-        registerEvent(
-          client,
-          name,
-          data,
-          hour,
-          CONFIG.ROLES[data.role],
-          embed(`${name.toUpperCase()} START`, "#f59e0b", CONFIG.IMAGES[name.toUpperCase()] || "")
-        );
-      });
+      for (const hour of data.hours) {
+        const key = `${name}-${hour}`;
+
+        const roleId = CONFIG.ROLES[data.role];
+        const channelPromise = client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+
+        // PRE ALERT
+        if (h === (hour + 23) % 24 && m === 55 && !processed.has(key + "-pre")) {
+          channelPromise.then((ch) => {
+            if (!ch) return;
+
+            ch.send(`⏳ <@&${roleId}> ${name.toUpperCase()} starts in 5 minutes`);
+            processed.add(key + "-pre");
+          });
+        }
+
+        // START EVENT
+        if (h === hour && m === 0 && !processed.has(key + "-start")) {
+          channelPromise.then(async (ch) => {
+            if (!ch) return;
+
+            const msg = await ch.send({
+              content: `<@&${roleId}>`,
+              embeds: [
+                new EmbedBuilder()
+                  .setColor("#f59e0b")
+                  .setTitle(`🔥 ${name.toUpperCase()} EVENT STARTED`)
+                  .setImage(CONFIG.IMAGES[name])
+              ],
+            });
+
+            sendDM(client, name, `🚀 ${name.toUpperCase()} just started!`);
+
+            setTimeout(() => msg.delete().catch(() => {}), CONFIG.DELETE_AFTER);
+
+            processed.add(key + "-start");
+          });
+        }
+      }
     }
 
     if (m === 5) processed.clear();
@@ -224,10 +222,10 @@ function startEventSystem(client) {
 
 // ====================== PANEL ======================
 async function startPanel(client) {
-  const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-  if (!channel) return;
+  const ch = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+  if (!ch) return;
 
-  const msg = await channel.send({
+  const msg = await ch.send({
     embeds: [panelEmbed()],
     components: [buttons()],
   });
@@ -243,29 +241,36 @@ async function startPanel(client) {
 // ====================== INTERACTIONS ======================
 async function handleEventInteraction(interaction) {
   if (interaction.customId === "refresh")
-    return interaction.update({ embeds: [panelEmbed()], components: [buttons()] });
+    return interaction.update({
+      embeds: [panelEmbed()],
+      components: [buttons()],
+    });
 
   if (interaction.customId === "roles")
-    return interaction.reply({ components: [roleMenu()], ephemeral: true });
+    return interaction.reply({
+      components: [roleMenu()],
+      ephemeral: true,
+    });
 
   if (interaction.customId === "dm")
-    return interaction.reply({ components: [dmMenu()], ephemeral: true });
-
-  if (interaction.customId === "role_menu") {
-    const m = await interaction.guild.members.fetch(interaction.user.id);
-    await m.roles.set([]).catch(() => {});
-    return interaction.reply({ content: "OK", ephemeral: true });
-  }
+    return interaction.reply({
+      components: [dmMenu()],
+      ephemeral: true,
+    });
 
   if (interaction.customId === "dm_menu") {
     const db = loadDB();
     db.dm[interaction.user.id] = interaction.values;
     saveDB(db);
 
-    return interaction.reply({ content: "Saved", ephemeral: true });
+    return interaction.reply({
+      content: "✅ Saved notification settings",
+      ephemeral: true,
+    });
   }
 }
 
+// ====================== EXPORT ======================
 module.exports = {
   startPanel,
   startEventSystem,
