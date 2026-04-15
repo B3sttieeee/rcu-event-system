@@ -3,8 +3,13 @@ const {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
 } = require("discord.js");
 
+const fs = require("fs");
+const path = require("path");
+
+// ====================== CONFIG ======================
 const CONFIG = {
   CHANNEL_ID: "1484937784283369502",
 
@@ -30,6 +35,21 @@ const CONFIG = {
   REFRESH_INTERVAL: 10_000,
   DELETE_AFTER: 15 * 60 * 1000,
 };
+
+// ====================== DB ======================
+const DB_PATH = path.join(__dirname, "..", "eventDB.json");
+
+const loadDB = () => {
+  if (!fs.existsSync(DB_PATH)) return { dm: {} };
+  try {
+    return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+  } catch {
+    return { dm: {} };
+  }
+};
+
+const saveDB = (db) =>
+  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
 // ====================== TIME ======================
 const getNow = () =>
@@ -57,10 +77,7 @@ const getCountdown = (hour) => {
 // ====================== CACHE ======================
 const processed = new Map();
 
-// =====================================================
-// 🎯 TICKET-STYLE CLEAN UI
-// =====================================================
-
+// ====================== EMBEDS ======================
 const panelEmbed = () =>
   new EmbedBuilder()
     .setColor("#2b2d31")
@@ -98,26 +115,56 @@ const eventEmbed = (name, image) =>
     .setFooter({ text: "Clan Event System" })
     .setTimestamp();
 
-// ====================== BUTTONS (MATCH ROLES STYLE) ======================
+// ====================== BUTTONS ======================
 const buttons = () =>
   new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("refresh")
       .setLabel("Refresh")
-      .setStyle(ButtonStyle.Secondary), // 🔘 jak roles
+      .setStyle(ButtonStyle.Secondary),
 
     new ButtonBuilder()
       .setCustomId("roles")
       .setLabel("Roles")
-      .setStyle(ButtonStyle.Secondary), // 🔘 jak roles
+      .setStyle(ButtonStyle.Secondary),
 
     new ButtonBuilder()
       .setCustomId("dm")
       .setLabel("Notifications")
-      .setStyle(ButtonStyle.Primary) // 🔵 jak główny action
+      .setStyle(ButtonStyle.Primary)
   );
 
-// ====================== CORE (UNCHANGED LOGIC) ======================
+// ====================== ROLE MENU ======================
+const roleMenu = () =>
+  new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("role_menu")
+      .setPlaceholder("Select event roles")
+      .setMinValues(0)
+      .setMaxValues(3)
+      .addOptions([
+        { label: "Merchant", value: "merchant", emoji: "🍯" },
+        { label: "Spring", value: "spring", emoji: "🌸" },
+        { label: "Egg", value: "egg", emoji: "🐣" },
+      ])
+  );
+
+// ====================== DM MENU ======================
+const dmMenu = () =>
+  new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId("dm_menu")
+      .setPlaceholder("Event notifications DM")
+      .setMinValues(0)
+      .setMaxValues(3)
+      .addOptions([
+        { label: "Merchant", value: "merchant", emoji: "🍯" },
+        { label: "Spring", value: "spring", emoji: "🌸" },
+        { label: "Egg", value: "egg", emoji: "🐣" },
+      ])
+  );
+
+// ====================== CORE EVENT ENGINE (UNCHANGED) ======================
 function registerEvent(client, key, event, hour, roleId, image) {
   const now = getNow();
   const h = now.getHours();
@@ -130,7 +177,6 @@ function registerEvent(client, key, event, hour, roleId, image) {
   const fetchChannel = () =>
     client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
 
-  // PRE
   if (h === (hour - 1 + 24) % 24 && m === 55 && !processed.has(preKey)) {
     fetchChannel().then((ch) => {
       if (!ch) return;
@@ -139,7 +185,6 @@ function registerEvent(client, key, event, hour, roleId, image) {
     });
   }
 
-  // START
   if (h === hour && m === 0 && !processed.has(startKey)) {
     fetchChannel().then(async (ch) => {
       if (!ch) return;
@@ -165,8 +210,6 @@ function registerEvent(client, key, event, hour, roleId, image) {
 
 // ====================== SYSTEM ======================
 function startEventSystem(client) {
-  console.log("🚀 Event system running (clean UI)");
-
   setInterval(() => {
     for (const [name, data] of Object.entries(CONFIG.EVENTS)) {
       for (const hour of data.hours) {
@@ -203,27 +246,74 @@ async function startPanel(client) {
   }, CONFIG.REFRESH_INTERVAL);
 }
 
-// ====================== INTERACTIONS ======================
+// ====================== INTERACTIONS (FULL FIX) ======================
 async function handleEventInteraction(interaction) {
   const id = interaction.customId;
 
-  if (id === "refresh")
+  // REFRESH
+  if (id === "refresh") {
     return interaction.update({
       embeds: [panelEmbed()],
       components: [buttons()],
     });
+  }
 
-  if (id === "roles")
+  // ROLES MENU
+  if (id === "roles") {
     return interaction.reply({
-      content: "Role system coming soon.",
+      content: "🎭 Select your roles:",
+      components: [roleMenu()],
       ephemeral: true,
     });
+  }
 
-  if (id === "dm")
+  // DM MENU
+  if (id === "dm") {
     return interaction.reply({
-      content: "Notification system coming soon.",
+      content: "📩 Select DM notifications:",
+      components: [dmMenu()],
       ephemeral: true,
     });
+  }
+
+  // ROLE APPLY
+  if (id === "role_menu") {
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+
+    const map = {
+      merchant: CONFIG.ROLES.MERCHANT,
+      spring: CONFIG.ROLES.SPRING,
+      egg: CONFIG.ROLES.EGG,
+    };
+
+    for (const r of Object.values(map)) {
+      if (member.roles.cache.has(r)) {
+        await member.roles.remove(r).catch(() => {});
+      }
+    }
+
+    for (const val of interaction.values) {
+      const role = map[val];
+      if (role) await member.roles.add(role).catch(() => {});
+    }
+
+    return interaction.reply({
+      content: "✅ Roles updated!",
+      ephemeral: true,
+    });
+  }
+
+  // DM SAVE
+  if (id === "dm_menu") {
+    const db = loadDB();
+    db.dm[interaction.user.id] = interaction.values;
+    saveDB(db);
+
+    return interaction.reply({
+      content: "📩 Notifications saved!",
+      ephemeral: true,
+    });
+  }
 }
 
 module.exports = {
