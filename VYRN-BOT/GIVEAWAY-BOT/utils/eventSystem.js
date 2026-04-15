@@ -5,10 +5,6 @@ const {
   ButtonStyle,
 } = require("discord.js");
 
-const fs = require("fs");
-const path = require("path");
-
-// ====================== CONFIG ======================
 const CONFIG = {
   CHANNEL_ID: "1484937784283369502",
 
@@ -62,10 +58,9 @@ const getCountdown = (hour) => {
 const processed = new Map();
 
 // =====================================================
-// 🔥 TICKET STYLE UI (CLEAN CLAN LOOK)
+// 🎯 TICKET-STYLE CLEAN UI
 // =====================================================
 
-// PANEL (jak ticket system style)
 const panelEmbed = () =>
   new EmbedBuilder()
     .setColor("#2b2d31")
@@ -77,7 +72,7 @@ const panelEmbed = () =>
           return [
             `**${name.toUpperCase()} EVENT**`,
             `Next: \`${next}:00\``,
-            `Countdown: **${getCountdown(next)}**`,
+            `Starts in: **${getCountdown(next)}**`,
           ].join("\n");
         })
         .join("\n\n━━━━━━━━━━━━━━\n\n")
@@ -86,7 +81,6 @@ const panelEmbed = () =>
     .setFooter({ text: "Clan System • Event Tracker" })
     .setTimestamp();
 
-// EVENT START (ticket style embed)
 const eventEmbed = (name, image) =>
   new EmbedBuilder()
     .setColor("#2b2d31")
@@ -94,7 +88,7 @@ const eventEmbed = (name, image) =>
     .setDescription(
       [
         "━━━━━━━━━━━━━━",
-        "📢 Event is now ACTIVE",
+        "📢 Event is ACTIVE",
         "",
         "👉 Join now & participate",
         "━━━━━━━━━━━━━━",
@@ -104,23 +98,23 @@ const eventEmbed = (name, image) =>
     .setFooter({ text: "Clan Event System" })
     .setTimestamp();
 
-// ====================== BUTTONS ======================
+// ====================== BUTTONS (MATCH ROLES STYLE) ======================
 const buttons = () =>
   new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("refresh")
       .setLabel("Refresh")
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Secondary), // 🔘 jak roles
 
     new ButtonBuilder()
       .setCustomId("roles")
       .setLabel("Roles")
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Secondary), // 🔘 jak roles
 
     new ButtonBuilder()
       .setCustomId("dm")
       .setLabel("Notifications")
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Primary) // 🔵 jak główny action
   );
 
 // ====================== CORE (UNCHANGED LOGIC) ======================
@@ -133,12 +127,12 @@ function registerEvent(client, key, event, hour, roleId, image) {
   const preKey = baseKey + "-pre";
   const startKey = baseKey + "-start";
 
-  const channelFetch = () =>
+  const fetchChannel = () =>
     client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
 
   // PRE
   if (h === (hour - 1 + 24) % 24 && m === 55 && !processed.has(preKey)) {
-    channelFetch().then((ch) => {
+    fetchChannel().then((ch) => {
       if (!ch) return;
       ch.send(`<@&${roleId}> ${key} starts in 5 minutes`)
         .then((msg) => processed.set(preKey, msg.id));
@@ -147,13 +141,13 @@ function registerEvent(client, key, event, hour, roleId, image) {
 
   // START
   if (h === hour && m === 0 && !processed.has(startKey)) {
-    channelFetch().then(async (ch) => {
+    fetchChannel().then(async (ch) => {
       if (!ch) return;
 
       const preId = processed.get(preKey);
       if (preId) {
         const msg = await ch.messages.fetch(preId).catch(() => null);
-        if (msg) msg.delete().catch(() => {});
+        msg?.delete().catch(() => {});
         processed.delete(preKey);
       }
 
@@ -171,7 +165,7 @@ function registerEvent(client, key, event, hour, roleId, image) {
 
 // ====================== SYSTEM ======================
 function startEventSystem(client) {
-  console.log("Event system running (ticket style UI)");
+  console.log("🚀 Event system running (clean UI)");
 
   setInterval(() => {
     for (const [name, data] of Object.entries(CONFIG.EVENTS)) {
@@ -211,19 +205,21 @@ async function startPanel(client) {
 
 // ====================== INTERACTIONS ======================
 async function handleEventInteraction(interaction) {
-  if (interaction.customId === "refresh")
+  const id = interaction.customId;
+
+  if (id === "refresh")
     return interaction.update({
       embeds: [panelEmbed()],
       components: [buttons()],
     });
 
-  if (interaction.customId === "roles")
+  if (id === "roles")
     return interaction.reply({
       content: "Role system coming soon.",
       ephemeral: true,
     });
 
-  if (interaction.customId === "dm")
+  if (id === "dm")
     return interaction.reply({
       content: "Notification system coming soon.",
       ephemeral: true,
