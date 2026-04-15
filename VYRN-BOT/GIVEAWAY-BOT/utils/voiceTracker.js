@@ -1,17 +1,23 @@
-const voiceSessions = new Map();
 const { addVoiceTime } = require("./profileSystem");
 
+// userId -> { start, channelId }
+const voiceSessions = new Map();
+
 /**
- * START FULL VOICE TRACKING SYSTEM
+ * VOICE TRACKER (REAL TIME SESSION BASED)
  */
 function initVoiceTracker(client) {
-  console.log("🎤 Voice Tracker ONLINE");
+  console.log("🎤 Voice Tracker v2 ONLINE");
 
   client.on("voiceStateUpdate", (oldState, newState) => {
     const userId = newState.id || oldState.id;
 
     const joined = !oldState.channelId && newState.channelId;
     const left = oldState.channelId && !newState.channelId;
+    const switched =
+      oldState.channelId &&
+      newState.channelId &&
+      oldState.channelId !== newState.channelId;
 
     // ================= JOIN =================
     if (joined) {
@@ -37,7 +43,7 @@ function initVoiceTracker(client) {
     }
 
     // ================= SWITCH CHANNEL =================
-    if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+    if (switched) {
       const session = voiceSessions.get(userId);
 
       if (session) {
@@ -62,7 +68,7 @@ function initVoiceTracker(client) {
     for (const [userId, session] of voiceSessions.entries()) {
       const duration = (now - session.start) / 1000;
 
-      // anty bug / AFK memory leak protection
+      // anti bug / AFK leak protection
       if (duration > 60 * 60 * 12) {
         voiceSessions.delete(userId);
       }
