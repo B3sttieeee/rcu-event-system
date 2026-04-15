@@ -4,100 +4,121 @@ const {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
-  PermissionFlagsBits
-} = require('discord.js');
+  PermissionFlagsBits,
+  ChannelType
+} = require("discord.js");
 
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName('embed')
-    .setDescription('📦 Tworzy lub edytuje embed')
+    .setName("embed")
+    .setDescription("📦 Advanced Embed Builder (Pro)")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(opt =>
-      opt.setName('kanal')
-        .setDescription('Kanał docelowy')
+      opt.setName("channel")
+        .setDescription("Kanał docelowy embeda")
+        .addChannelTypes(ChannelType.GuildText)
         .setRequired(false)
     ),
 
   async execute(interaction) {
     try {
-      const targetChannel = interaction.options.getChannel('kanal') || interaction.channel;
+      const targetChannel =
+        interaction.options.getChannel("channel") || interaction.channel;
 
-      // Pobieramy istniejący embed (jeśli kliknięto "Edytuj")
-      let oldEmbed = null;
-      if (interaction.message && interaction.message.embeds.length > 0) {
-        oldEmbed = interaction.message.embeds[0];
+      // ====================== SAFE OLD EMBED ======================
+      let old = null;
+
+      if (interaction.message?.embeds?.length) {
+        old = interaction.message.embeds[0];
       }
 
+      // ====================== CLEAN DATA ======================
+      const title = old?.title || "";
+      const description = old?.description || "";
+      const color = old?.color ? `#${old.hexColor}` : "#2b2d31";
+      const image = old?.image?.url || "";
+
+      let author = "";
+      if (old?.author) {
+        author = old.author.iconURL
+          ? `${old.author.name} | ${old.author.iconURL}`
+          : old.author.name;
+      }
+
+      // ====================== MODAL ======================
       const modal = new ModalBuilder()
-        .setCustomId(`embedModal_${targetChannel.id}`)
-        .setTitle('📦 Embed Builder');
+        .setCustomId(`embed_builder_${targetChannel.id}`)
+        .setTitle("📦 Advanced Embed Builder");
 
-      // TITLE
-      const titleInput = new TextInputBuilder()
-        .setCustomId('title')
-        .setLabel('Tytuł')
-        .setStyle(TextInputStyle.Short)
-        .setValue(oldEmbed?.title || "")
-        .setRequired(false);
+      const components = [
+        createInput("title", "Title (opcjonalne)", TextInputStyle.Short, title, false, "Mój embed..."),
 
-      // DESCRIPTION
-      const descriptionInput = new TextInputBuilder()
-        .setCustomId('description')
-        .setLabel('Opis embeda')
-        .setStyle(TextInputStyle.Paragraph)
-        .setValue(oldEmbed?.description || "")
-        .setRequired(false)
-        .setPlaceholder('Wpisz "." jeśli nie chcesz opisu');
+        createInput(
+          "description",
+          "Description",
+          TextInputStyle.Paragraph,
+          description,
+          false,
+          "Wpisz treść embeda..."
+        ),
 
-      // COLOR
-      const colorInput = new TextInputBuilder()
-        .setCustomId('color')
-        .setLabel('Kolor HEX (#ff0000)')
-        .setStyle(TextInputStyle.Short)
-        .setValue(oldEmbed?.hexColor ? `#${oldEmbed.hexColor}` : "#2b2d31")
-        .setRequired(false);
+        createInput(
+          "color",
+          "Color HEX (#ff0000)",
+          TextInputStyle.Short,
+          color,
+          false,
+          "#2b2d31"
+        ),
 
-      // AUTHOR - NAPRAWIONE
-      let authorValue = "";
-      if (oldEmbed?.author) {
-        authorValue = oldEmbed.author.iconURL 
-          ? `${oldEmbed.author.name} | ${oldEmbed.author.iconURL}`
-          : oldEmbed.author.name || "";
-      }
+        createInput(
+          "author",
+          "Author (name | icon URL)",
+          TextInputStyle.Short,
+          author,
+          false,
+          "Admin | https://i.imgur.com/xxx.png"
+        ),
 
-      const authorInput = new TextInputBuilder()
-        .setCustomId('author')
-        .setLabel('Autor (nazwa | icon URL)')
-        .setStyle(TextInputStyle.Short)
-        .setValue(authorValue)
-        .setRequired(false)           // ← ważne
-        .setPlaceholder('Admin | https://i.imgur.com/...');
+        createInput(
+          "image",
+          "Image URL",
+          TextInputStyle.Short,
+          image,
+          false,
+          "https://i.imgur.com/image.png"
+        ),
+      ];
 
-      // IMAGE
-      const imageInput = new TextInputBuilder()
-        .setCustomId('image')
-        .setLabel('URL obrazka lub GIF')
-        .setStyle(TextInputStyle.Short)
-        .setValue(oldEmbed?.image?.url || "")
-        .setRequired(false)
-        .setPlaceholder('https://i.imgur.com/...gif');
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(titleInput),
-        new ActionRowBuilder().addComponents(descriptionInput),
-        new ActionRowBuilder().addComponents(colorInput),
-        new ActionRowBuilder().addComponents(authorInput),
-        new ActionRowBuilder().addComponents(imageInput)
-      );
+      modal.addComponents(...components.map(c => new ActionRowBuilder().addComponents(c)));
 
       await interaction.showModal(modal);
 
     } catch (err) {
-      console.error("❌ Błąd w komendzie /embed:", err);
-      await interaction.reply({
-        content: "❌ Wystąpił błąd podczas otwierania formularza.",
-        ephemeral: true
-      });
+      console.error("❌ /embed error:", err);
+
+      if (!interaction.replied) {
+        await interaction.reply({
+          content: "❌ Nie udało się otworzyć edytora embeda.",
+          ephemeral: true
+        });
+      }
     }
   }
 };
+
+// ====================== HELPER ======================
+function createInput(id, label, style, value, required, placeholder) {
+  const input = new TextInputBuilder()
+    .setCustomId(id)
+    .setLabel(label)
+    .setStyle(style)
+    .setRequired(required)
+    .setPlaceholder(placeholder);
+
+  if (value && value.length <= 1000) {
+    input.setValue(value);
+  }
+
+  return input;
+}
