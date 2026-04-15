@@ -17,66 +17,60 @@ const CONFIG = {
     "https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif"
 };
 
-// ====================== PANEL (PRO UI) ======================
+// ====================== PANEL ======================
 async function createTicketPanel(client) {
   const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
   if (!channel) return;
 
   const embed = new EmbedBuilder()
-    .setColor("#5865F2")
-    .setTitle("🎫 Support Center")
+    .setColor("#2b2d31")
+    .setTitle("🎫 Clan Recruitment")
     .setDescription(
       [
-        "**Welcome to the official support system.**",
-        "",
-        "Please select a category below to create a ticket.",
+        "**Select the clan you want to apply for:**",
         "",
         "```",
-        "• Response time: up to 24 hours",
-        "• Please provide clear information",
-        "• Do not spam tickets",
-        "```"
+        "• VYRN Main Clan",
+        "• V2RN Academy",
+        "• Staff Recruitment",
+        "```",
+        "",
+        "⚠️ Make sure your application is clear and complete."
       ].join("\n")
     )
     .setImage(CONFIG.IMAGE)
-    .setFooter({ text: "Support System • Professional Help Desk" });
+    .setFooter({ text: "Clan System • Recruitment Panel" });
 
   const menu = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId("ticket_select")
-      .setPlaceholder("Select ticket category...")
+      .setCustomId("clan_ticket_select")
+      .setPlaceholder("Select a clan...")
       .addOptions([
         {
-          label: "General Support",
-          description: "Questions, help, general issues",
-          value: "general",
-          emoji: "💬"
+          label: "VYRN Main Clan",
+          description: "High rank clan recruitment",
+          value: "vyrn",
+          emoji: "🔥"
         },
         {
-          label: "Recruitment",
-          description: "Apply for clan / staff / academy",
-          value: "recruitment",
-          emoji: "📝"
+          label: "V2RN Academy",
+          description: "Training & academy recruitment",
+          value: "v2rn",
+          emoji: "🛡️"
         },
         {
-          label: "Report User",
-          description: "Report rule breaking user",
-          value: "report",
-          emoji: "🚨"
-        },
-        {
-          label: "Billing / Payment",
-          description: "Payments, donations, shop",
-          value: "billing",
-          emoji: "💰"
+          label: "Staff Team",
+          description: "Moderator / admin applications",
+          value: "staff",
+          emoji: "⚙️"
         }
       ])
   );
 
-  const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+  const msgs = await channel.messages.fetch({ limit: 10 }).catch(() => null);
 
-  const existing = messages?.find(m =>
-    m.embeds?.[0]?.title?.includes("Support Center")
+  const existing = msgs?.find(m =>
+    m.embeds?.[0]?.title?.includes("Clan Recruitment")
   );
 
   if (existing) {
@@ -86,7 +80,7 @@ async function createTicketPanel(client) {
   }
 }
 
-// ====================== TICKET CREATE ======================
+// ====================== CREATE TICKET ======================
 async function createTicket(interaction, type) {
   const user = interaction.user;
 
@@ -104,7 +98,7 @@ async function createTicket(interaction, type) {
   await interaction.deferReply({ ephemeral: true });
 
   const channel = await interaction.guild.channels.create({
-    name: `ticket-${user.username}`.toLowerCase(),
+    name: `apply-${type}-${user.username}`.toLowerCase(),
     type: ChannelType.GuildText,
     topic: user.id,
     parent: CONFIG.CATEGORY_ID,
@@ -134,14 +128,16 @@ async function createTicket(interaction, type) {
 
   const embed = new EmbedBuilder()
     .setColor("#57F287")
-    .setTitle("🎫 Ticket Created")
+    .setTitle("🎫 Application Ticket Created")
     .setDescription(
       [
-        `**Category:** \`${type.toUpperCase()}\``,
+        `**Clan:** \`${type.toUpperCase()}\``,
         `**User:** ${user}`,
         "",
-        "A staff member will respond soon.",
-        "Please describe your issue clearly."
+        "Please provide your application:",
+        "- In-game nickname",
+        "- Experience",
+        "- Why do you want to join"
       ].join("\n")
     )
     .setTimestamp();
@@ -154,13 +150,31 @@ async function createTicket(interaction, type) {
   await interaction.editReply({
     content: `✅ Ticket created: ${channel}`
   });
+
+  // ================= LOG =================
+  const log = await interaction.client.channels.fetch(CONFIG.LOG_CHANNEL_ID).catch(() => null);
+
+  if (log) {
+    const logEmbed = new EmbedBuilder()
+      .setColor("#f59e0b")
+      .setTitle("📩 New Clan Ticket")
+      .addFields(
+        { name: "User", value: `${user.tag}` },
+        { name: "Clan", value: type },
+        { name: "Channel", value: `${channel.name}` }
+      )
+      .setTimestamp();
+
+    log.send({ embeds: [logEmbed] });
+  }
 }
 
 // ====================== HANDLER ======================
 async function handle(interaction) {
   try {
-    // SELECT MENU
-    if (interaction.isStringSelectMenu() && interaction.customId === "ticket_select") {
+    if (!interaction.isStringSelectMenu()) return;
+
+    if (interaction.customId === "clan_ticket_select") {
       const value = interaction.values[0];
       return createTicket(interaction, value);
     }
