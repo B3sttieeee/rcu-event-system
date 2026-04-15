@@ -16,7 +16,6 @@ const CONFIG = {
   LOG_CHANNEL_ID: "1494072832827850953",
   CATEGORY_ID: "1475985874385899530",
   ADMIN_ROLE: "1475998527191519302",
-  VERIFY_ROLE: "1475998527191519302",
 
   PREFIXES: ["ticket-", "v2rn-"],
 
@@ -27,19 +26,18 @@ const CONFIG = {
 // ====================== AI BRAIN ======================
 function aiBrain(text, lang = "pl") {
   const msg = text.toLowerCase();
-
   const isEN = lang === "en";
 
-  if (msg.includes("cześć") || msg.includes("hej") || msg.includes("hello")) {
+  if (msg.includes("hej") || msg.includes("cześć") || msg.includes("hello")) {
     return isEN
-      ? "👋 Hi! I'm VYRN AI Support. I can help you with recruitment."
+      ? "👋 Hi! I'm VYRN AI Support. I will help you with recruitment."
       : "👋 Hej! Jestem VYRN AI Support. Pomogę Ci z rekrutacją.";
   }
 
   if (msg.includes("ile") && msg.includes("czek") || msg.includes("how long")) {
     return isEN
-      ? "⏳ Response time is up to **24h**. Staff manually reviews applications."
-      : "⏳ Czas odpowiedzi to do **24h**. Administracja sprawdza zgłoszenia ręcznie.";
+      ? "⏳ Response time is up to 24h. Staff checks applications manually."
+      : "⏳ Czas odpowiedzi to do 24h. Administracja sprawdza zgłoszenia ręcznie.";
   }
 
   if (msg.includes("rekrut")) {
@@ -57,22 +55,27 @@ function aiBrain(text, lang = "pl") {
   return null;
 }
 
+// ====================== LANGUAGE DETECTOR ======================
+function detectLang(content) {
+  const pl = ["hej", "cześć", "siema", "rekrutacja", "status"];
+  return pl.some(w => content.toLowerCase().includes(w)) ? "pl" : "en";
+}
+
 // ====================== PANEL ======================
 async function createTicketPanel(client) {
-  const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID);
+  const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
   if (!channel) return;
 
   const embed = new EmbedBuilder()
     .setColor("#ff6600")
     .setTitle("📌 VYRN Recruitment System")
     .setDescription(
-      `🎫 **Choose your application type**\n\n` +
+      `🎫 Wybierz typ rekrutacji\n\n` +
       `🔥 VYRN Main Clan\n` +
       `🛡️ V2RN Academy\n\n` +
-      `⏳ Response time: up to 24h`
+      `⏳ Odpowiedź: do 24h`
     )
     .setImage(CONFIG.IMAGE)
-    .setFooter({ text: "VYRN Recruitment System" })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
@@ -87,8 +90,9 @@ async function createTicketPanel(client) {
       .setStyle(ButtonStyle.Success)
   );
 
-  const msgs = await channel.messages.fetch({ limit: 10 });
-  const existing = msgs.find(m =>
+  const msgs = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+
+  const existing = msgs?.find(m =>
     m.embeds?.[0]?.title?.includes("Recruitment")
   );
 
@@ -104,9 +108,7 @@ async function openTicket(interaction, type) {
   const prefix = type === "v2rn" ? "v2rn-" : "ticket-";
 
   const existing = interaction.guild.channels.cache.find(
-    c =>
-      c.topic === interaction.user.id &&
-      c.name.startsWith(prefix)
+    c => c.topic === interaction.user.id && c.name.startsWith(prefix)
   );
 
   if (existing) {
@@ -186,9 +188,8 @@ async function createTicketChannel(interaction, type) {
       `👤 User: ${interaction.user}\n` +
       `📝 Nick: ${nick}\n` +
       `🌍 Lang: ${lang}\n\n` +
-      `⏳ Response time: up to 24h`
+      `⏳ Response: up to 24h`
     )
-    .setFooter({ text: "VYRN Ticket System" })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
@@ -232,7 +233,7 @@ async function closeTicket(interaction) {
   }, 3000);
 }
 
-// ====================== AI + LOG SYSTEM ======================
+// ====================== AI HANDLER (FIXED) ======================
 async function handleAI(message, client) {
   if (message.author.bot) return;
 
@@ -242,31 +243,41 @@ async function handleAI(message, client) {
 
   if (!isTicket) return;
 
-  const lang = message.content.toLowerCase().includes("hej") ? "pl" : "en";
-
+  const lang = detectLang(message.content);
   const response = aiBrain(message.content, lang);
+
   if (!response) return;
 
-  await message.reply({ content: response });
+  try {
+    await message.reply({ content: response });
+  } catch (e) {
+    console.log("AI reply error:", e.message);
+  }
 
-  // LOG
-  const logChannel = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID);
+  // SAFE LOG
+  try {
+    const logChannel = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID).catch(() => null);
+    if (!logChannel) return;
 
-  const embed = new EmbedBuilder()
-    .setColor("#f59e0b")
-    .setTitle("📩 AI Ticket Log")
-    .addFields(
-      { name: "User", value: `${message.author.tag}` },
-      { name: "Channel", value: `${message.channel.name}` },
-      { name: "Message", value: message.content },
-      { name: "AI Response", value: response }
-    )
-    .setTimestamp();
+    const embed = new EmbedBuilder()
+      .setColor("#f59e0b")
+      .setTitle("📩 AI Ticket Log")
+      .addFields(
+        { name: "User", value: message.author.tag },
+        { name: "Channel", value: message.channel.name },
+        { name: "Message", value: message.content },
+        { name: "AI Response", value: response }
+      )
+      .setTimestamp();
 
-  logChannel.send({ embeds: [embed] });
+    await logChannel.send({ embeds: [embed] });
+
+  } catch (e) {
+    console.log("LOG ERROR:", e.message);
+  }
 }
 
-// ====================== HANDLER ======================
+// ====================== MAIN HANDLER ======================
 async function handle(interaction, client) {
   try {
     if (interaction.isButton()) {
