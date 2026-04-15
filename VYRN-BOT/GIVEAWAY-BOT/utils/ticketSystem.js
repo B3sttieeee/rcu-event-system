@@ -15,183 +15,162 @@ const CONFIG = {
   ADMIN_ROLE: "1475998527191519302",
   PANEL_CHANNEL_ID: "1475558248487583805",
   TICKET_CATEGORY_ID: "1475985874385899530",
-  VERIFY_ROLE: "1475998527191519302",        // rola która NIE widzi ticketów
-  TICKET_PREFIX: "ticket-",
-  V2RN_PREFIX: "v2rn-"
+  VERIFY_ROLE: "1475998527191519302",
+
+  PREFIX_VYRN: "vyrn-",
+  PREFIX_V2RN: "v2rn-",
+
+  DELETE_AFTER_CLOSE: 5000
 };
 
-// ====================== CREATE TICKET PANEL ======================
+// ====================== PANEL ======================
 async function createTicketPanel(client) {
   try {
     const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID);
-    if (!channel?.isTextBased()) {
-      return console.error("❌ Ticket panel channel not found or is not text-based.");
-    }
+    if (!channel?.isTextBased()) return;
 
     const embed = new EmbedBuilder()
       .setColor("#ff6600")
-      .setTitle("📌 Clan VYRN • Ticket System")
+      .setTitle("🎫 VYRN Support & Recruitment Center")
       .setDescription(
-        `📩 **Wybierz rodzaj zgłoszenia**\n` +
-        `━━━━━━━━━━━━━━━━━━\n\n` +
-        `**🔥 VYRN — Główny Klan**\n` +
-        `**Wymagania:**\n` +
-        `• **3MN+ Rebirthy**\n` +
-        `• **15M+ Jajek**\n` +
-        `• Dobry Team\n` +
-        `• Dobre Game Passy (szczególnie pod jajka)\n\n` +
-        `**🛡️ V2RN — Akademia**\n` +
-        `**Wymagania:**\n` +
-        `• **150 O+**\n` +
-        `• Dobry Team\n\n` +
+        `📌 **Wybierz typ aplikacji**\n\n` +
+
+        `🔥 **VYRN MAIN CLAN**\n` +
+        `• 3MN+ Rebirthy\n• 15M+ Jajek\n• Dobry team\n\n` +
+
+        `🛡️ **V2RN ACADEMY**\n` +
+        `• 150 O+\n• Starter friendly\n\n` +
+
         `━━━━━━━━━━━━━━━━━━\n` +
-        `Kliknij odpowiedni przycisk poniżej, aby utworzyć ticket.`
+        `Kliknij przycisk aby rozpocząć aplikację`
       )
-      .setImage("https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif")
-      .setFooter({ text: "VYRN • Recruitment System" })
+      .setFooter({ text: "VYRN Recruitment System" })
       .setTimestamp();
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
-        .setCustomId("open_ticket_vyrn")
-        .setLabel("🔥 VYRN Main Clan")
+        .setCustomId("ticket_vyrn")
+        .setLabel("🔥 VYRN Clan")
         .setStyle(ButtonStyle.Primary)
         .setEmoji("🎫"),
 
       new ButtonBuilder()
-        .setCustomId("open_ticket_v2rn")
+        .setCustomId("ticket_v2rn")
         .setLabel("🛡️ V2RN Academy")
         .setStyle(ButtonStyle.Success)
         .setEmoji("🛡️")
     );
 
-    // Sprawdź czy panel już istnieje
-    const messages = await channel.messages.fetch({ limit: 10 });
-    const existingPanel = messages.find(msg =>
-      msg.author.id === client.user.id &&
-      msg.embeds.length > 0 &&
-      msg.embeds[0].title?.includes("Ticket System")
+    const messages = await channel.messages.fetch({ limit: 20 });
+
+    const existing = messages.find(m =>
+      m.author.id === client.user.id &&
+      m.embeds[0]?.title?.includes("Support & Recruitment")
     );
 
-    if (existingPanel) {
-      await existingPanel.edit({ embeds: [embed], components: [row] });
-      console.log("✅ Ticket panel updated successfully.");
+    if (existing) {
+      await existing.edit({ embeds: [embed], components: [row] });
     } else {
       await channel.send({ embeds: [embed], components: [row] });
-      console.log("✅ Ticket panel created successfully.");
     }
+
   } catch (err) {
-    console.error("❌ Failed to create/update ticket panel:", err);
+    console.error("Ticket panel error:", err);
   }
 }
 
-// ====================== MAIN HANDLER ======================
-async function handle(interaction, client) {
+// ====================== HANDLER ======================
+async function handle(interaction) {
   try {
-    if (interaction.isButton() && interaction.customId === "open_ticket_vyrn") {
-      return await handleOpenTicket(interaction, "vyrn");
+    if (interaction.isButton()) {
+      if (interaction.customId === "ticket_vyrn")
+        return openTicketModal(interaction, "vyrn");
+
+      if (interaction.customId === "ticket_v2rn")
+        return openTicketModal(interaction, "v2rn");
+
+      if (interaction.customId === "close_ticket")
+        return closeTicket(interaction);
     }
 
-    if (interaction.isButton() && interaction.customId === "open_ticket_v2rn") {
-      return await handleOpenTicket(interaction, "v2rn");
-    }
-
-    if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket_modal_")) {
-      return await handleModalSubmit(interaction);
-    }
-
-    if (interaction.isButton() && interaction.customId === "close_ticket") {
-      return await handleCloseTicket(interaction);
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith("ticket_modal_"))
+        return createTicket(interaction);
     }
 
   } catch (err) {
-    console.error("❌ Ticket System Error:", err);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: "❌ Wystąpił błąd w systemie ticketów. Zgłoś to administratorowi.",
-        ephemeral: true
-      }).catch(() => {});
-    }
+    console.error("Ticket system error:", err);
   }
 }
 
-// ====================== OPEN TICKET ======================
-async function handleOpenTicket(interaction, type) {
-  const isV2RN = type === "v2rn";
-  const prefix = isV2RN ? CONFIG.V2RN_PREFIX : CONFIG.TICKET_PREFIX;
-
-  const existingTicket = interaction.guild.channels.cache.find(
-    ch => ch.topic === interaction.user.id && ch.name.startsWith(prefix)
-  );
-
-  if (existingTicket) {
-    return interaction.reply({
-      content: `❌ Masz już otwarty ticket: ${existingTicket}`,
-      ephemeral: true
-    });
-  }
-
+// ====================== OPEN MODAL ======================
+async function openTicketModal(interaction, type) {
   const modal = new ModalBuilder()
     .setCustomId(`ticket_modal_${type}`)
-    .setTitle(isV2RN ? "🛡️ V2RN Academy Application" : "🔥 VYRN Main Clan Application");
+    .setTitle(type === "vyrn" ? "🔥 VYRN Application" : "🛡️ V2RN Application");
 
-  const nickInput = new TextInputBuilder()
+  const nick = new TextInputBuilder()
     .setCustomId("nick")
-    .setLabel("Nickname w grze")
+    .setLabel("Nickname")
     .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setMinLength(3)
-    .setMaxLength(32);
+    .setRequired(true);
 
-  const langInput = new TextInputBuilder()
+  const lang = new TextInputBuilder()
     .setCustomId("lang")
-    .setLabel("Język (pl / en)")
+    .setLabel("Language (pl/en)")
     .setStyle(TextInputStyle.Short)
-    .setRequired(true)
-    .setMaxLength(2);
+    .setRequired(true);
 
   modal.addComponents(
-    new ActionRowBuilder().addComponents(nickInput),
-    new ActionRowBuilder().addComponents(langInput)
+    new ActionRowBuilder().addComponents(nick),
+    new ActionRowBuilder().addComponents(lang)
   );
 
   await interaction.showModal(modal);
 }
 
-// ====================== MODAL SUBMIT ======================
-async function handleModalSubmit(interaction) {
-  const nick = interaction.fields.getTextInputValue("nick").trim();
-  const langInput = interaction.fields.getTextInputValue("lang").toLowerCase().trim();
-  const isPolish = langInput === "pl";
-
-  const isV2RN = interaction.customId === "ticket_modal_v2rn";
-  const prefix = isV2RN ? CONFIG.V2RN_PREFIX : CONFIG.TICKET_PREFIX;
-
+// ====================== CREATE TICKET ======================
+async function createTicket(interaction) {
   await interaction.deferReply({ ephemeral: true });
 
-  const ticketChannel = await interaction.guild.channels.create({
+  const type = interaction.customId.split("_")[2];
+  const prefix = type === "v2rn" ? CONFIG.PREFIX_V2RN : CONFIG.PREFIX_VYRN;
+
+  const nick = interaction.fields.getTextInputValue("nick");
+  const lang = interaction.fields.getTextInputValue("lang");
+
+  // 🔥 anti duplicate
+  const existing = interaction.guild.channels.cache.find(c =>
+    c.topic === interaction.user.id && c.name.startsWith(prefix)
+  );
+
+  if (existing) {
+    return interaction.editReply("❌ Masz już aktywny ticket.");
+  }
+
+  const channel = await interaction.guild.channels.create({
     name: `${prefix}${interaction.user.username}`.toLowerCase(),
-    type: ChannelType.GuildText,
     topic: interaction.user.id,
+    type: ChannelType.GuildText,
     parent: CONFIG.TICKET_CATEGORY_ID,
+
     permissionOverwrites: [
-      { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+      {
+        id: interaction.guild.id,
+        deny: [PermissionsBitField.Flags.ViewChannel]
+      },
       {
         id: interaction.user.id,
         allow: [
           PermissionsBitField.Flags.ViewChannel,
           PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory,
-          PermissionsBitField.Flags.AttachFiles,
-          PermissionsBitField.Flags.EmbedLinks
+          PermissionsBitField.Flags.ReadMessageHistory
         ]
       },
       {
         id: CONFIG.ADMIN_ROLE,
         allow: [
           PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ReadMessageHistory,
           PermissionsBitField.Flags.ManageMessages
         ]
       },
@@ -204,66 +183,52 @@ async function handleModalSubmit(interaction) {
 
   const embed = new EmbedBuilder()
     .setColor("#22c55e")
-    .setTitle(isV2RN ? "🛡️ V2RN Academy Ticket" : "🔥 VYRN Main Clan Ticket")
-    .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+    .setTitle("🎫 New Ticket Created")
     .setDescription(
-      isPolish
-        ? `👤 **Użytkownik:** ${interaction.user}\n📝 **Nick:** ${nick}\n\n` +
-          (isV2RN 
-            ? `**Wymagania do V2RN Academy:**\n• Minimum **150 O+**\n• Dobry Team`
-            : `**Wymagania do głównego klanu VYRN:**\n• Minimum **3MN+ Rebirthy**\n• Minimum **15M+ Jajek**\n• Dobry Team\n• Dobre Game Passy (szczególnie pod jajka)`)
-        : `👤 **User:** ${interaction.user}\n📝 **Nickname:** ${nick}\n\n` +
-          (isV2RN 
-            ? `**Requirements for V2RN Academy:**\n• Minimum **150 O+**\n• Good Team`
-            : `**Requirements for VYRN Main Clan:**\n• Minimum **3MN+ Rebirths**\n• Minimum **15M+ Eggs**\n• Good Team\n• Good Game Passes (especially egg related)`)
+      `👤 User: ${interaction.user}\n` +
+      `📝 Nick: **${nick}**\n` +
+      `🌍 Language: **${lang}**\n\n` +
+      `📌 Staff will assist you soon.`
     )
-    .setFooter({ text: isV2RN ? "VYRN • V2RN Academy" : "VYRN • Main Clan Recruitment" })
     .setTimestamp();
 
-  const closeRow = new ActionRowBuilder().addComponents(
+  const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("close_ticket")
-      .setLabel("🔒 Close Ticket")
+      .setLabel("Close Ticket")
       .setStyle(ButtonStyle.Danger)
-      .setEmoji("🗑️")
+      .setEmoji("🔒")
   );
 
-  await ticketChannel.send({
+  await channel.send({
     content: `${interaction.user}`,
     embeds: [embed],
-    components: [closeRow]
+    components: [row]
   });
 
-  await interaction.editReply({
-    content: `✅ Twój ticket został utworzony: ${ticketChannel}`
-  });
+  await interaction.editReply(`✅ Ticket created: ${channel}`);
 }
 
-// ====================== CLOSE TICKET ======================
-async function handleCloseTicket(interaction) {
-  const isAdmin = 
-    interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE) ||
-    interaction.member.permissions.has(PermissionsBitField.Flags.Administrator);
-
-  if (!isAdmin) {
+// ====================== CLOSE ======================
+async function closeTicket(interaction) {
+  if (
+    !interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) &&
+    !interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE)
+  ) {
     return interaction.reply({
-      content: "❌ Tylko administrator może zamknąć ticket.",
+      content: "❌ No permission.",
       ephemeral: true
     });
   }
 
   await interaction.reply({
-    content: "🗑️ Ticket zostanie zamknięty za 3 sekundy...",
+    content: "🔒 Closing ticket...",
     ephemeral: true
   });
 
-  setTimeout(async () => {
-    try {
-      await interaction.channel.delete();
-    } catch (err) {
-      console.error("❌ Nie udało się usunąć ticketa:", err);
-    }
-  }, 3000);
+  setTimeout(() => {
+    interaction.channel.delete().catch(() => {});
+  }, CONFIG.DELETE_AFTER_CLOSE);
 }
 
 // ====================== EXPORT ======================
