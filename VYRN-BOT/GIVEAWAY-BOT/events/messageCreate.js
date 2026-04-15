@@ -1,185 +1,213 @@
 const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
 
-// ====================== IMPORTY ======================
-const { addXP, loadConfig } = require("../utils/levelSystem");
+// ====================== SYSTEMY ======================
+const { addXP, loadConfig, loadDB } = require("../utils/levelSystem");
 const { addMessage, isDailyReady } = require("../utils/profileSystem");
 const { getConfig } = require("../utils/configSystem");
 const { addCoins } = require("../utils/economySystem");
 const { checkDailyDM } = require("../utils/dailySystem");
 const { getCurrentBoost } = require("../utils/boostSystem");
 
-// ====================== COOLDOWNS ======================
+// 👉 AI (opcjonalnie — nie crashuje jeśli brak)
+let ticketAI = null;
+try {
+  ticketAI = require("../utils/ticketAI").handleTicketAI;
+} catch (e) {
+  console.log("⚠️ ticketAI nie załadowany");
+}
+
+// ====================== COOLDOWN ======================
 const xpCooldown = new Map();
-const messageCoinCooldown = new Map();
+const coinCooldown = new Map();
 
 // ====================== CONFIG ======================
 const LEVEL_CHANNEL_ID = "1475999590716018719";
 
-// ====================== EVENT ======================
+// ====================== MAIN EVENT ======================
 module.exports = {
   name: Events.MessageCreate,
+
   async execute(message) {
     if (!message.guild || message.author.bot) return;
 
     try {
-      const config = await getConfig(message.guild.id) || {};
-      const PREFIX = config.prefix || ".";
+      const config = await getConfig(message.guild.id).catch(() => ({}));
+      const PREFIX = config?.prefix || ".";
 
+      // ====================== PREFIX COMMANDS ======================
       if (message.content.startsWith(PREFIX)) {
-        await handleCommands(message, PREFIX);
-        return;
+        return await handleCommands(message, PREFIX);
       }
 
-      await handleXPSystem(message);
+      // ====================== AI (TICKET) ======================
+      if (ticketAI) {
+        await ticketAI(message, message.client);
+      }
+
+      // ====================== XP SYSTEM ======================
+      await handleXP(message);
+
     } catch (err) {
-      console.error("❌ Błąd w messageCreate:", err);
+      console.error("❌ MessageCreate error:", err);
     }
   }
 };
 
-// ====================== GŁÓWNY SYSTEM ======================
-async function handleXPSystem(message) {
+// ====================== XP SYSTEM ======================
+async function handleXP(message) {
   const now = Date.now();
   const userId = message.author.id;
 
-  // Cooldown na XP (2 sekundy)
-  if (xpCooldown.has(userId) && now - xpCooldown.get(userId) < 2000) return;
+  // anti spam XP
+  const lastXP = xpCooldown.get(userId) || 0;
+  if (now - lastXP < 2000) return;
   xpCooldown.set(userId, now);
 
   if (message.content.length < 3) return;
 
   const cfg = loadConfig();
 
-  // === MONETY ZA WIADOMOŚĆ (3 co 12 sekund) ===
-  if (!messageCoinCooldown.has(userId) || now - messageCoinCooldown.get(userId) > 12000) {
+  // ====================== COINS ======================
+  const lastCoin = coinCooldown.get(userId) || 0;
+  if (now - lastCoin > 12000) {
     addCoins(userId, 3);
-    messageCoinCooldown.set(userId, now);
+    coinCooldown.set(userId, now);
   }
 
-  // === BOOST + XP ===
-  const currentMultiplier = getCurrentBoost(userId);
+  // ====================== XP ======================
+  const boost = getCurrentBoost(userId);
+
   const result = await addXP(
     message.member,
-    Math.floor(cfg.messageXP * currentMultiplier),
+    Math.floor((cfg.messageXP || 10) * boost),
     message.content.length
   );
 
-  // === DAILY SYSTEM ===
+  // ====================== DAILY ======================
   addMessage(userId);
+
   if (isDailyReady(userId)) {
     await checkDailyDM(message.member);
   }
 
-  // === LEVEL UP ===
+  // ====================== LEVEL UP ======================
   if (result?.leveledUp) {
-    console.log(`🎉 ${message.author.tag} wbija level ${result.level}!`);
-    await sendLevelUpMessage(message, result);
+    await sendLevelUp(message, result);
 
     try {
-      const levelUpEmbed = new EmbedBuilder()
-        .setColor("#b8a672")
-        .setTitle(`🎉 Gratulacje! Osiągnąłeś poziom ${result.level}!`)
-        .setDescription(`**+50** <:CASHH:1491180511308157041> zostało dodane do Twojego konta!`)
-        .setFooter({ text: "VYRN • Level System" })
-        .setTimestamp();
+      await message.author.send({
+        embeds: [
+          new EmbedBuilder()
+            .setColor("#b8a672")
+            .setTitle(`🎉 Level UP! ${result.level}`)
+            .setDescription(`+50 coins nagrody`)
+            .setTimestamp()
+        ]
+      });
 
-      await message.author.send({ embeds: [levelUpEmbed] });
       addCoins(userId, 50);
-    } catch (e) {
-      // DM zablokowane - ignorujemy
-    }
+    } catch {}
   }
-};
+}
 
-// ====================== LEVEL UP MESSAGE ======================
-async function sendLevelUpMessage(message, result) {
-  const levelUpChannel = message.guild.channels.cache.get(LEVEL_CHANNEL_ID);
-  if (!levelUpChannel?.isTextBased()) return;
+// ====================== LEVEL UP ======================
+async function sendLevelUp(message, result) {
+  const channel = message.guild.channels.cache.get(LEVEL_CHANNEL_ID);
+  if (!channel?.isTextBased()) return;
 
   const embed = new EmbedBuilder()
     .setColor("#b8a672")
-    .setTitle(`🏆 ${message.author.username} awansował na Level ${result.level}!`)
-    .setDescription(`Zdobyto: \`+${result.gained} XP\``)
+    .setTitle(`🏆 Level UP ${message.author.username}`)
+    .setDescription(`Nowy poziom: **${result.level}**`)
     .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
     .setTimestamp();
 
-  await levelUpChannel.send({
+  channel.send({
     content: `🎉 ${message.author}`,
-    embeds: [embed]
+    embeds: [embed],
   }).catch(() => {});
-};
+}
 
-// ====================== KOMENDY PREFIXOWE ======================
+// ====================== COMMANDS ======================
 async function handleCommands(message, PREFIX) {
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
   const cmd = args.shift()?.toLowerCase();
   if (!cmd) return;
 
+  // public rank
   if (cmd === "rank" || cmd === "r") {
-    await showRank(message);
-    return;
+    return showRank(message);
   }
 
   if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) return;
 
   switch (cmd) {
-    case "setxp": await setMessageXP(message, args); break;
-    case "setvcxp": await setVoiceXP(message, args); break;
-    case "setlengthbonus": await setLengthBonus(message, args); break;
-    case "multixp": await setGlobalMultiplier(message, args); break;
+    case "setxp":
+      return setMessageXP(message, args);
+
+    case "setvcxp":
+      return setVoiceXP(message, args);
+
+    case "setlengthbonus":
+      return setLengthBonus(message, args);
+
+    case "multixp":
+      return setGlobalMultiplier(message, args);
   }
-};
+}
 
 // ====================== RANK ======================
 async function showRank(message) {
-  const { loadDB } = require("../utils/levelSystem");
   const db = loadDB();
-  const userData = db.xp?.[message.author.id] || { xp: 0, level: 0 };
-  const needed = Math.floor(100 * Math.pow(userData.level, 1.5));
-  const progress = needed > 0 ? Math.min(100, Math.floor((userData.xp / needed) * 100)) : 0;
+  const user = db.xp?.[message.author.id] || { xp: 0, level: 0 };
+
+  const needed = Math.floor(100 * Math.pow(user.level, 1.5));
+  const percent = needed ? Math.floor((user.xp / needed) * 100) : 0;
 
   const embed = new EmbedBuilder()
     .setColor("#0f172a")
     .setAuthor({
       name: message.author.username,
-      iconURL: message.author.displayAvatarURL({ dynamic: true })
+      iconURL: message.author.displayAvatarURL({ dynamic: true }),
     })
     .setDescription(
-      `🏆 **LEVEL ${userData.level}**\n\n` +
-      `<a:XP:1488763317857161377> \`${userData.xp} / ${needed} XP\` **(${progress}%)**`
+      `🏆 Level: **${user.level}**\n` +
+      `XP: \`${user.xp}/${needed}\` (${percent}%)`
     )
-    .setThumbnail(message.author.displayAvatarURL({ dynamic: true }))
-    .setFooter({ text: "VYRN • Level System" })
-    .setTimestamp();
+    .setThumbnail(message.author.displayAvatarURL({ dynamic: true }));
 
-  await message.reply({ embeds: [embed] }).catch(() => {});
-};
+  message.reply({ embeds: [embed] }).catch(() => {});
+}
 
-// ====================== ADMIN COMMANDS ======================
-async function setMessageXP(message, args) {
+// ====================== ADMIN ======================
+function setMessageXP(message, args) {
   const val = parseInt(args[0]);
-  if (isNaN(val) || val < 1) return message.reply("❌ Poprawne użycie: `.setxp <liczba>`");
+  if (!val) return message.reply("❌ `.setxp <liczba>`");
+
   require("../utils/levelSystem").setMessageXP(val);
-  await message.reply(`✅ Message XP ustawione na **${val}**`);
+  message.reply(`✅ Message XP = ${val}`);
 }
 
-async function setVoiceXP(message, args) {
+function setVoiceXP(message, args) {
   const val = parseInt(args[0]);
-  if (isNaN(val) || val < 1) return message.reply("❌ Poprawne użycie: `.setvcxp <liczba>`");
+  if (!val) return message.reply("❌ `.setvcxp <liczba>`");
+
   require("../utils/levelSystem").setVoiceXP(val);
-  await message.reply(`✅ Voice XP ustawione na **${val}**`);
+  message.reply(`✅ Voice XP = ${val}`);
 }
 
-async function setLengthBonus(message, args) {
+function setLengthBonus(message, args) {
   const val = parseFloat(args[0]);
-  if (isNaN(val)) return message.reply("❌ Poprawne użycie: `.setlengthbonus <liczba>`");
+  if (!val) return message.reply("❌ `.setlengthbonus <liczba>`");
+
   require("../utils/levelSystem").setLengthBonus(val);
-  await message.reply(`✅ Length Bonus ustawiony na **${val}**`);
+  message.reply(`✅ Length bonus = ${val}`);
 }
 
-async function setGlobalMultiplier(message, args) {
+function setGlobalMultiplier(message, args) {
   const val = parseFloat(args[0]);
-  if (isNaN(val) || val < 0.1) return message.reply("❌ Poprawne użycie: `.multixp <liczba>`");
+  if (!val) return message.reply("❌ `.multixp <liczba>`");
+
   require("../utils/levelSystem").setGlobalMultiplier(val);
-  await message.reply(`🔥 Global Multiplier ustawiony na **${val}x**`);
+  message.reply(`🔥 Multiplier = ${val}x`);
 }
