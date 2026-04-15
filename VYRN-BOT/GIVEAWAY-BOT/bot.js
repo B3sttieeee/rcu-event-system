@@ -3,7 +3,7 @@ require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 
-// ====================== TWORZENIE KLIENTA ======================
+// ====================== CLIENT ======================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -16,170 +16,164 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// ====================== RATE LIMIT HANDLER ======================
+// ====================== RATE LIMIT ======================
 client.rest.on("rateLimited", (info) => {
-  console.warn(`[RATE LIMIT] ${info.method} ${info.url} — Retry after: ${info.timeToReset}ms`);
+  console.warn(`[RATE LIMIT] ${info.method} ${info.url} — ${info.timeToReset}ms`);
 });
 
-// ====================== ŁADOWANIE KOMEND (z podfolderami) ======================
+// ====================== COMMANDS ======================
 function loadCommands() {
   const commandsPath = path.join(__dirname, "commands");
-  if (!fs.existsSync(commandsPath)) {
-    console.warn("⚠️ Folder 'commands' nie istnieje!");
-    return;
-  }
+  if (!fs.existsSync(commandsPath)) return console.warn("⚠️ commands folder missing");
 
   let loaded = 0;
-  const items = fs.readdirSync(commandsPath);
 
+  const items = fs.readdirSync(commandsPath);
   for (const item of items) {
     const itemPath = path.join(commandsPath, item);
     const stat = fs.statSync(itemPath);
 
     if (stat.isDirectory()) {
-      // Podfolder (levels/, economy/, giveaway/ itp.)
-      const commandFiles = fs.readdirSync(itemPath).filter(file => file.endsWith(".js"));
+      const files = fs.readdirSync(itemPath).filter(f => f.endsWith(".js"));
 
-      for (const file of commandFiles) {
+      for (const file of files) {
         try {
-          const command = require(path.join(itemPath, file));
-          if (command?.data?.name && typeof command.execute === "function") {
-            client.commands.set(command.data.name, command);
-            console.log(`✅ Załadowano komendę: /${command.data.name} (z ${item}/)`);
+          const cmd = require(path.join(itemPath, file));
+          if (cmd?.data?.name && typeof cmd.execute === "function") {
+            client.commands.set(cmd.data.name, cmd);
+            console.log(`✅ /${cmd.data.name}`);
             loaded++;
-          } else {
-            console.warn(`⚠️ Nieprawidłowa struktura komendy: ${item}/${file}`);
           }
-        } catch (err) {
-          console.error(`❌ Błąd ładowania ${item}/${file}:`, err.message);
+        } catch (e) {
+          console.error(`❌ CMD ERROR ${file}:`, e.message);
         }
       }
-    } 
-    else if (stat.isFile() && item.endsWith(".js")) {
-      // Stare komendy bezpośrednio w commands/
+    } else if (item.endsWith(".js")) {
       try {
-        const command = require(itemPath);
-        if (command?.data?.name && typeof command.execute === "function") {
-          client.commands.set(command.data.name, command);
-          console.log(`✅ Załadowano komendę: /${command.data.name}`);
+        const cmd = require(itemPath);
+        if (cmd?.data?.name) {
+          client.commands.set(cmd.data.name, cmd);
+          console.log(`✅ /${cmd.data.name}`);
           loaded++;
         }
-      } catch (err) {
-        console.error(`❌ Błąd ładowania ${item}:`, err.message);
+      } catch (e) {
+        console.error(`❌ CMD ERROR ${item}:`, e.message);
       }
     }
   }
 
-  console.log(`📊 Załadowano łącznie ${loaded} komend slash.`);
+  console.log(`📊 Commands loaded: ${loaded}`);
 }
 
-// ====================== ŁADOWANIE EVENTÓW ======================
+// ====================== EVENTS ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
-  if (!fs.existsSync(eventsPath)) {
-    console.warn("⚠️ Folder 'events' nie istnieje!");
-    return;
-  }
+  if (!fs.existsSync(eventsPath)) return console.warn("⚠️ events folder missing");
 
-  const eventFiles = fs.readdirSync(eventsPath).filter(file => file.endsWith(".js"));
+  const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let loaded = 0;
 
-  for (const file of eventFiles) {
+  for (const file of files) {
     try {
       const event = require(path.join(eventsPath, file));
-      if (!event.name || typeof event.execute !== "function") {
-        console.warn(`⚠️ Nieprawidłowy event: ${file}`);
-        continue;
-      }
+      if (!event.name || !event.execute) continue;
 
-      if (event.once) {
-        client.once(event.name, (...args) => event.execute(...args, client));
-      } else {
-        client.on(event.name, (...args) => event.execute(...args, client));
-      }
+      const runner = (...args) => {
+        try {
+          event.execute(...args, client);
+        } catch (err) {
+          console.error(`❌ EVENT ERROR ${event.name}:`, err);
+        }
+      };
 
-      console.log(`✅ Załadowano event: ${event.name}`);
+      if (event.once) client.once(event.name, runner);
+      else client.on(event.name, runner);
+
+      console.log(`✅ event: ${event.name}`);
       loaded++;
-    } catch (err) {
-      console.error(`❌ Błąd podczas ładowania eventu ${file}:`, err.message);
+    } catch (e) {
+      console.error(`❌ EVENT LOAD ERROR ${file}:`, e.message);
     }
   }
 
-  console.log(`📊 Załadowano łącznie ${loaded} eventów.`);
+  console.log(`📊 Events loaded: ${loaded}`);
 }
 
-// ====================== READY EVENT ======================
-client.once("ready", async () => {
-  console.log("========================================");
-  console.log(`🔥 Bot zalogowany jako: ${client.user.tag}`);
-  console.log(`📊 Serwery: ${client.guilds.cache.size}`);
-  console.log(`👥 Użytkownicy: ${client.users.cache.size}`);
-  console.log(`⏰ Czas uruchomienia: ${new Date().toLocaleString("pl-PL")}`);
-  console.log("========================================");
+// ====================== SAFE SYSTEM LOADER ======================
+async function loadSystems() {
+  console.log("🚀 Loading systems...");
 
-  // Ładowanie komend i eventów
-  loadCommands();
-  loadEvents();
-
-  // ====================== URUCHOMIENIE SYSTEMÓW ======================
   try {
-    console.log("🚀 Uruchamianie systemów...");
-
-    // Level System + Voice XP
     const levelSystem = require("./utils/levelSystem");
     levelSystem.startVoiceXP(client);
+  } catch (e) {
+    console.error("❌ LevelSystem error:", e.message);
+  }
 
-    // Daily System
+  try {
     const { startDailyReset } = require("./utils/profileSystem");
-    if (typeof startDailyReset === "function") startDailyReset();
+    if (startDailyReset) startDailyReset();
+  } catch (e) {
+    console.error("❌ DailySystem error:", e.message);
+  }
 
-    // Clan System
+  try {
     const { startClanSystem } = require("./utils/clanSystem");
-    if (typeof startClanSystem === "function") startClanSystem(client);
+    if (startClanSystem) startClanSystem(client);
+  } catch (e) {
+    console.error("❌ ClanSystem error:", e.message);
+  }
 
-    // Economy + Boost System
+  try {
     const { loadCoins } = require("./utils/economySystem");
     const { loadBoosts } = require("./utils/boostSystem");
-
     loadCoins();
     loadBoosts();
+  } catch (e) {
+    console.error("❌ Economy/Boost error:", e.message);
+  }
 
-    console.log("💰 Economy system załadowany");
-    console.log("🚀 Boost system załadowany");
-
-    // Ticket Panel z opóźnieniem
-    setTimeout(async () => {
-      try {
-        const { createTicketPanel } = require("./utils/ticketSystem");
+  // ticket system (IMPORTANT FIX)
+  setTimeout(async () => {
+    try {
+      const { createTicketPanel } = require("./utils/ticketSystem");
+      if (createTicketPanel) {
         await createTicketPanel(client);
         console.log("🎟 Ticket system ready");
-      } catch (err) {
-        console.error("❌ Ticket system failed:", err.message);
       }
-    }, 8000);
+    } catch (e) {
+      console.error("❌ Ticket system failed:", e.message);
+    }
+  }, 5000);
+}
 
-    console.log("✅ Wszystkie systemy uruchomione pomyślnie.");
-  } catch (err) {
-    console.error("❌ Błąd podczas uruchamiania systemów:", err);
-  }
+// ====================== READY ======================
+client.once("ready", async () => {
+  console.log("========================================");
+  console.log(`🔥 Logged as ${client.user.tag}`);
+  console.log(`📊 Guilds: ${client.guilds.cache.size}`);
+  console.log("========================================");
+
+  loadCommands();
+  loadEvents();
+  await loadSystems();
+
+  console.log("✅ BOT FULLY READY");
 });
 
-// ====================== GLOBAL ERROR HANDLING ======================
+// ====================== GLOBAL ERRORS ======================
 process.on("unhandledRejection", (err) => {
-  console.error("❌ Unhandled Rejection:", err);
+  console.error("❌ UNHANDLED:", err);
 });
 
 process.on("uncaughtException", (err) => {
-  console.error("❌ Uncaught Exception:", err);
-  console.error(err.stack);
+  console.error("❌ CRASH:", err);
 });
 
 // ====================== LOGIN ======================
 client.login(process.env.TOKEN)
-  .then(() => {
-    console.log("🔑 Token zaakceptowany – bot się uruchamia...");
-  })
+  .then(() => console.log("🔑 Token OK"))
   .catch(err => {
-    console.error("❌ Nie udało się zalogować bota:", err.message);
+    console.error("❌ LOGIN ERROR:", err.message);
     process.exit(1);
   });
