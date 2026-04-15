@@ -17,27 +17,41 @@ const CONFIG = {
   CATEGORY_ID: "1475985874385899530",
   ADMIN_ROLE: "1475998527191519302",
   VERIFY_ROLE: "1475998527191519302",
-  PREFIXES: ["ticket-", "v2rn-"]
+
+  PREFIXES: ["ticket-", "v2rn-"],
+
+  IMAGE:
+    "https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif"
 };
 
 // ====================== AI BRAIN ======================
-function aiBrain(text) {
+function aiBrain(text, lang = "pl") {
   const msg = text.toLowerCase();
 
-  if (msg.includes("cześć") || msg.includes("hej")) {
-    return "👋 Hej! Jestem VYRN AI Support. Pomogę Ci z rekrutacją.";
+  const isEN = lang === "en";
+
+  if (msg.includes("cześć") || msg.includes("hej") || msg.includes("hello")) {
+    return isEN
+      ? "👋 Hi! I'm VYRN AI Support. I can help you with recruitment."
+      : "👋 Hej! Jestem VYRN AI Support. Pomogę Ci z rekrutacją.";
   }
 
-  if (msg.includes("ile") && msg.includes("czek")) {
-    return "⏳ Czas odpowiedzi to do **24h**. Administracja sprawdza zgłoszenia ręcznie.";
+  if (msg.includes("ile") && msg.includes("czek") || msg.includes("how long")) {
+    return isEN
+      ? "⏳ Response time is up to **24h**. Staff manually reviews applications."
+      : "⏳ Czas odpowiedzi to do **24h**. Administracja sprawdza zgłoszenia ręcznie.";
   }
 
   if (msg.includes("rekrut")) {
-    return "📌 Rekrutacja trwa do 24h. Czekaj na decyzję staffu.";
+    return isEN
+      ? "📌 Recruitment takes up to 24h. Please wait for staff decision."
+      : "📌 Rekrutacja trwa do 24h. Czekaj na decyzję staffu.";
   }
 
   if (msg.includes("status")) {
-    return "📊 Twój ticket jest aktywny i oczekuje na odpowiedź.";
+    return isEN
+      ? "📊 Your ticket is active and waiting for response."
+      : "📊 Twój ticket jest aktywny i oczekuje na odpowiedź.";
   }
 
   return null;
@@ -46,18 +60,20 @@ function aiBrain(text) {
 // ====================== PANEL ======================
 async function createTicketPanel(client) {
   const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID);
+  if (!channel) return;
 
   const embed = new EmbedBuilder()
     .setColor("#ff6600")
-    .setTitle("📌 VYRN Ticket System")
+    .setTitle("📌 VYRN Recruitment System")
     .setDescription(
-      `🎫 Wybierz rekrutację:\n\n` +
-      `🔥 **VYRN Main Clan**\n` +
-      `🛡️ **V2RN Academy**\n\n` +
-      `⏳ Odpowiedź do 24h`
+      `🎫 **Choose your application type**\n\n` +
+      `🔥 VYRN Main Clan\n` +
+      `🛡️ V2RN Academy\n\n` +
+      `⏳ Response time: up to 24h`
     )
-    .setImage("https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif")
-    .setFooter({ text: "VYRN Recruitment System" });
+    .setImage(CONFIG.IMAGE)
+    .setFooter({ text: "VYRN Recruitment System" })
+    .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -72,7 +88,9 @@ async function createTicketPanel(client) {
   );
 
   const msgs = await channel.messages.fetch({ limit: 10 });
-  const existing = msgs.find(m => m.embeds.length > 0 && m.embeds[0].title?.includes("Ticket"));
+  const existing = msgs.find(m =>
+    m.embeds?.[0]?.title?.includes("Recruitment")
+  );
 
   if (existing) {
     await existing.edit({ embeds: [embed], components: [row] });
@@ -86,7 +104,9 @@ async function openTicket(interaction, type) {
   const prefix = type === "v2rn" ? "v2rn-" : "ticket-";
 
   const existing = interaction.guild.channels.cache.find(
-    c => c.topic === interaction.user.id && c.name.startsWith(prefix)
+    c =>
+      c.topic === interaction.user.id &&
+      c.name.startsWith(prefix)
   );
 
   if (existing) {
@@ -98,7 +118,7 @@ async function openTicket(interaction, type) {
 
   const modal = new ModalBuilder()
     .setCustomId(`ticket_modal_${type}`)
-    .setTitle("🎫 Ticket Form");
+    .setTitle("🎫 Application Form");
 
   const nick = new TextInputBuilder()
     .setCustomId("nick")
@@ -161,38 +181,58 @@ async function createTicketChannel(interaction, type) {
   const embed = new EmbedBuilder()
     .setColor("#22c55e")
     .setTitle("🎫 Ticket Opened")
+    .setThumbnail(interaction.user.displayAvatarURL())
     .setDescription(
       `👤 User: ${interaction.user}\n` +
       `📝 Nick: ${nick}\n` +
       `🌍 Lang: ${lang}\n\n` +
-      `⏳ Odpowiedź do 24h`
+      `⏳ Response time: up to 24h`
     )
-    .setFooter({ text: "VYRN Ticket System" });
+    .setFooter({ text: "VYRN Ticket System" })
+    .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("close_ticket")
-      .setLabel("🔒 Close")
+      .setLabel("🔒 Close Ticket")
       .setStyle(ButtonStyle.Danger)
   );
 
-  await channel.send({ embeds: [embed], components: [row] });
+  await channel.send({
+    content: `${interaction.user}`,
+    embeds: [embed],
+    components: [row]
+  });
 
   await interaction.editReply({
-    content: `✅ Ticket utworzony: ${channel}`
+    content: `✅ Ticket created: ${channel}`
   });
 }
 
 // ====================== CLOSE ======================
 async function closeTicket(interaction) {
-  await interaction.reply({ content: "🗑️ Zamykam ticket...", ephemeral: true });
+  const isAdmin =
+    interaction.member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+    interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE);
+
+  if (!isAdmin) {
+    return interaction.reply({
+      content: "❌ Brak uprawnień.",
+      ephemeral: true
+    });
+  }
+
+  await interaction.reply({
+    content: "🗑️ Closing ticket...",
+    ephemeral: true
+  });
 
   setTimeout(() => {
     interaction.channel.delete().catch(() => {});
   }, 3000);
 }
 
-// ====================== AI HANDLER ======================
+// ====================== AI + LOG SYSTEM ======================
 async function handleAI(message, client) {
   if (message.author.bot) return;
 
@@ -202,30 +242,31 @@ async function handleAI(message, client) {
 
   if (!isTicket) return;
 
-  const ai = aiBrain(message.content);
+  const lang = message.content.toLowerCase().includes("hej") ? "pl" : "en";
 
-  if (!ai) return;
+  const response = aiBrain(message.content, lang);
+  if (!response) return;
 
-  await message.reply({ content: ai });
+  await message.reply({ content: response });
 
   // LOG
-  const log = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID);
+  const logChannel = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID);
 
   const embed = new EmbedBuilder()
     .setColor("#f59e0b")
-    .setTitle("📩 Ticket AI Log")
+    .setTitle("📩 AI Ticket Log")
     .addFields(
-      { name: "User", value: message.author.tag },
-      { name: "Channel", value: message.channel.name },
+      { name: "User", value: `${message.author.tag}` },
+      { name: "Channel", value: `${message.channel.name}` },
       { name: "Message", value: message.content },
-      { name: "AI", value: ai }
+      { name: "AI Response", value: response }
     )
     .setTimestamp();
 
-  log.send({ embeds: [embed] });
+  logChannel.send({ embeds: [embed] });
 }
 
-// ====================== MAIN HANDLER ======================
+// ====================== HANDLER ======================
 async function handle(interaction, client) {
   try {
     if (interaction.isButton()) {
@@ -246,7 +287,6 @@ async function handle(interaction, client) {
       if (interaction.customId === "ticket_modal_v2rn")
         return createTicketChannel(interaction, "v2rn");
     }
-
   } catch (err) {
     console.error("Ticket error:", err);
   }
