@@ -13,6 +13,7 @@ module.exports = {
 
   async execute(interaction, client) {
     const cid = interaction.customId;
+
     const type =
       interaction.isChatInputCommand()
         ? "SLASH"
@@ -35,7 +36,7 @@ module.exports = {
       }
 
       // =====================================================
-      // 2. EVENT SYSTEM
+      // 2. EVENT SYSTEM (BUTTONS + SELECTS FIXED)
       // =====================================================
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
 
@@ -65,7 +66,7 @@ module.exports = {
       }
 
       // =====================================================
-      // 5. TICKETS (🔥 FIXED SAFE ROUTE)
+      // 5. TICKETS
       // =====================================================
       const ticketIds = [
         "open_ticket_vyrn",
@@ -76,10 +77,7 @@ module.exports = {
       ];
 
       if (
-        (
-          interaction.isButton() ||
-          interaction.isModalSubmit()
-        ) &&
+        (interaction.isButton() || interaction.isModalSubmit()) &&
         ticketIds.includes(cid)
       ) {
         return await ticketSystem.handle(interaction, client);
