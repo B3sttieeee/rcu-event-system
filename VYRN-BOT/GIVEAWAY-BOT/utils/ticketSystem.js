@@ -17,38 +17,58 @@ const CONFIG = {
   LOG_CHANNEL_ID: "1494072832827850953",
   CATEGORY_ID: "1475985874385899530",
   ADMIN_ROLE: "1475998527191519302",
-  PREFIX: "ticket-"
+  PREFIX_VYRN: "ticket-",
+  PREFIX_V2RN: "v2rn-"
 };
 
-// ====================== PANEL (ENGLISH + SELECT) ======================
+// ====================== PANEL (CLEAN CLAN STYLE) ======================
 async function createTicketPanel(client) {
   const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
   if (!channel) return;
 
   const embed = new EmbedBuilder()
     .setColor("#ff6600")
-    .setTitle("🎫 Recruitment Center")
+    .setTitle("⚔️ VYRN CLAN RECRUITMENT")
     .setDescription(
-      `Welcome to the **VYRN Recruitment System**\n\n` +
-      `Please select the application type below.\n\n` +
-      `⚡ Response time: up to 24h\n` +
-      `📌 All applications are reviewed manually`
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `🔥 **ELITE APPLICATION SYSTEM**\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━\n\n` +
+
+      `Select your recruitment path:\n\n` +
+
+      `🔥 **VYRN MAIN CLAN**\n` +
+      `• 3MN+ Rebirths required\n` +
+      `• 15M+ Eggs minimum\n` +
+      `• High activity & teamwork\n\n` +
+
+      `🛡️ **V2RN ACADEMY**\n` +
+      `• 150 O+ requirement\n` +
+      `• Training division\n` +
+      `• Path to main clan\n\n` +
+
+      `━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `⏳ Response time: up to 24h\n` +
+      `📌 Only serious applicants`
     )
+    .setImage(
+      "https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif"
+    )
+    .setFooter({ text: "VYRN • Elite Recruitment System" })
     .setTimestamp();
 
   const select = new StringSelectMenuBuilder()
     .setCustomId("ticket_select")
-    .setPlaceholder("Select application type...")
+    .setPlaceholder("⚔️ Select your application path...")
     .addOptions(
       {
         label: "VYRN Main Clan",
-        description: "High requirements recruitment",
+        description: "High tier competitive recruitment",
         value: "vyrn",
         emoji: "🔥"
       },
       {
         label: "V2RN Academy",
-        description: "Beginner / training clan",
+        description: "Training & entry division",
         value: "v2rn",
         emoji: "🛡️"
       }
@@ -56,8 +76,11 @@ async function createTicketPanel(client) {
 
   const row = new ActionRowBuilder().addComponents(select);
 
-  const msg = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-  const existing = msg?.find(m => m.embeds?.[0]?.title?.includes("Recruitment"));
+  const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+
+  const existing = messages?.find(m =>
+    m.embeds?.[0]?.title?.includes("VYRN CLAN RECRUITMENT")
+  );
 
   if (existing) {
     await existing.edit({ embeds: [embed], components: [row] });
@@ -80,7 +103,7 @@ async function openModal(interaction, type) {
 
   const lang = new TextInputBuilder()
     .setCustomId("lang")
-    .setLabel("Language (pl/en)")
+    .setLabel("Language (pl / en)")
     .setStyle(TextInputStyle.Short)
     .setRequired(true);
 
@@ -97,7 +120,7 @@ async function createTicket(interaction, type) {
   const nick = interaction.fields.getTextInputValue("nick");
   const lang = interaction.fields.getTextInputValue("lang");
 
-  const prefix = type === "v2rn" ? "v2rn-" : "ticket-";
+  const prefix = type === "v2rn" ? CONFIG.PREFIX_V2RN : CONFIG.PREFIX_VYRN;
 
   await interaction.deferReply({ ephemeral: true });
 
@@ -132,13 +155,13 @@ async function createTicket(interaction, type) {
 
   const embed = new EmbedBuilder()
     .setColor("#22c55e")
-    .setTitle("🎫 Ticket Opened")
+    .setTitle(type === "v2rn" ? "🛡️ V2RN Academy Ticket" : "🔥 VYRN Main Clan Ticket")
     .setDescription(
       `👤 User: ${interaction.user}\n` +
       `📝 Nick: ${nick}\n` +
       `🌍 Language: ${lang}\n\n` +
       `📌 Type: ${type.toUpperCase()}\n` +
-      `⏳ Response time: up to 24h`
+      `⏳ Awaiting staff response...`
     )
     .setTimestamp();
 
@@ -172,14 +195,14 @@ async function createTicket(interaction, type) {
             { name: "User", value: interaction.user.tag },
             { name: "Type", value: type },
             { name: "Nick", value: nick },
-            { name: "Lang", value: lang }
+            { name: "Language", value: lang }
           )
       ]
     });
   }
 }
 
-// ====================== CLOSE + TRANSCRIPT (SIMPLE) ======================
+// ====================== CLOSE + TRANSCRIPT ======================
 async function closeTicket(interaction) {
   if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
     return interaction.reply({ content: "❌ No permission", ephemeral: true });
@@ -193,7 +216,6 @@ async function closeTicket(interaction) {
     .join("\n");
 
   const userId = interaction.channel.topic;
-
   const user = await interaction.client.users.fetch(userId).catch(() => null);
 
   if (user) {
@@ -206,12 +228,17 @@ async function closeTicket(interaction) {
     }).catch(() => {});
   }
 
-  await interaction.reply({ content: "🗑 Closing ticket...", ephemeral: true });
+  await interaction.reply({
+    content: "🗑 Closing ticket...",
+    ephemeral: true
+  });
 
-  setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
+  setTimeout(() => {
+    interaction.channel.delete().catch(() => {});
+  }, 3000);
 }
 
-// ====================== MAIN INTERACTION ======================
+// ====================== MAIN HANDLER ======================
 async function handle(interaction) {
   if (interaction.isStringSelectMenu()) {
     if (interaction.customId === "ticket_select") {
