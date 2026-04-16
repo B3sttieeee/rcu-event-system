@@ -1,5 +1,5 @@
 const { Events, EmbedBuilder } = require("discord.js");
-const { LOGS, formatTime, sendLog } = require("./logSystem");
+const { LOGS, formatTime, sendLog } = require("../utils/logSystem");
 
 module.exports = {
   name: Events.GuildMemberAdd,
