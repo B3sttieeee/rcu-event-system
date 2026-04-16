@@ -16,10 +16,12 @@ const CONFIG = {
   PANEL_CHANNEL_ID: "1475558248487583805",
   LOG_CHANNEL_ID: "1494072832827850953",
   CATEGORY_ID: "1475985874385899530",
-  ADMIN_ROLE: "1475998527191519302"
+  ADMIN_ROLE: "1475998527191519302",
+
+  IMAGE: "https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif"
 };
 
-// ================= TYPE HELPER =================
+// ================= TYPE =================
 const getTypeLabel = (type) => {
   if (type === "staff") {
     return {
@@ -52,7 +54,10 @@ async function createTicketPanel(client) {
         "⚙️ Staff Support",
         "```"
       ].join("\n")
-    );
+    )
+    .setImage(CONFIG.IMAGE)
+    .setFooter({ text: "Clan System • Recruitment" })
+    .setTimestamp();
 
   const menu = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -71,14 +76,12 @@ async function createTicketPanel(client) {
 // ================= HANDLER =================
 async function handle(interaction, client) {
   try {
-    // SELECT
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId === "clan_ticket_select") {
         return openModal(interaction, interaction.values[0]);
       }
     }
 
-    // MODAL
     if (interaction.isModalSubmit()) {
       if (interaction.customId.startsWith("ticket_modal_")) {
         const type = interaction.customId.split("_")[2];
@@ -86,7 +89,6 @@ async function handle(interaction, client) {
       }
     }
 
-    // BUTTON
     if (interaction.isButton()) {
       if (interaction.customId === "close_ticket") {
         return closeTicket(interaction, client);
@@ -180,6 +182,8 @@ async function createTicket(interaction, client, type) {
       { name: "Nickname", value: nick, inline: true },
       { name: "Language", value: lang, inline: true }
     )
+    .setImage(CONFIG.IMAGE)
+    .setFooter({ text: "Clan System • Ticket" })
     .setTimestamp();
 
   const row = new ActionRowBuilder().addComponents(
