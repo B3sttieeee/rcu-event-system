@@ -1,0 +1,40 @@
+const { Events, EmbedBuilder } = require("discord.js");
+const { LOGS, formatTime, sendLog } = require("../logSystem");
+
+module.exports = {
+  name: Events.GuildMemberAdd,
+
+  async execute(member) {
+    if (member.user.bot) return;
+
+    const embed = new EmbedBuilder()
+      .setColor("#22c55e")
+      .setAuthor({
+        name: member.user.tag,
+        iconURL: member.user.displayAvatarURL({ dynamic: true })
+      })
+      .setTitle("📥 Member Joined")
+
+      .addFields(
+        { name: "👤 User", value: `${member}`, inline: true },
+        { name: "🆔 ID", value: member.id, inline: true },
+        {
+          name: "📅 Account Created",
+          value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`
+        },
+        {
+          name: "📊 Account Age",
+          value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:R>`
+        },
+        {
+          name: "👥 Members",
+          value: `${member.guild.memberCount}`
+        }
+      )
+
+      .setFooter({ text: `Time: ${formatTime()}` })
+      .setTimestamp();
+
+    sendLog(member.guild, LOGS.JOIN_LEAVE, embed);
+  }
+};
