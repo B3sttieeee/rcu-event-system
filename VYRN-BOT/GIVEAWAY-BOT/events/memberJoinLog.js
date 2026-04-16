@@ -11,10 +11,9 @@ module.exports = {
       .setColor("#22c55e")
       .setAuthor({
         name: member.user.tag,
-        iconURL: member.user.displayAvatarURL({ dynamic: true })
+        iconURL: member.user.displayAvatarURL()
       })
       .setTitle("📥 Member Joined")
-
       .addFields(
         { name: "👤 User", value: `${member}`, inline: true },
         { name: "🆔 ID", value: member.id, inline: true },
@@ -28,13 +27,13 @@ module.exports = {
         },
         {
           name: "👥 Members",
-          value: `${member.guild.memberCount}`
+          value: `${member.guild.memberCount}`,
+          inline: true
         }
       )
-
       .setFooter({ text: `Time: ${formatTime()}` })
       .setTimestamp();
 
-    sendLog(member.guild, LOGS.JOIN_LEAVE, embed);
+    await sendLog(member.guild, LOGS.JOIN_LEAVE, embed);
   }
 };
