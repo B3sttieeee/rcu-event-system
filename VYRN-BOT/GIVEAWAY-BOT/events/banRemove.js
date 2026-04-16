@@ -6,7 +6,7 @@ const {
   findAuditEntry,
   formatExecutor,
   clampText
-} = require("./logSystem");
+} = require("../utils/logSystem");
 
 module.exports = {
   name: Events.GuildBanRemove,
