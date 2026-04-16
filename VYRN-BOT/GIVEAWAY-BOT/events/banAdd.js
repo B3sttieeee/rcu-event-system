@@ -1,28 +1,23 @@
 const { Events, EmbedBuilder, AuditLogEvent } = require("discord.js");
-const { LOGS, formatTime, sendLog } = require("../logSystem");
+const {
+  LOGS,
+  formatTime,
+  sendLog,
+  findAuditEntry,
+  formatExecutor,
+  clampText
+} = require("./logSystem");
 
 module.exports = {
   name: Events.GuildBanAdd,
 
   async execute(ban) {
-    let executor = "Unknown";
+    const auditEntry = await findAuditEntry(ban.guild, {
+      type: AuditLogEvent.MemberBanAdd,
+      match: (entry) => entry.target?.id === ban.user.id
+    });
 
-    try {
-      const logs = await ban.guild.fetchAuditLogs({
-        limit: 5,
-        type: AuditLogEvent.MemberBanAdd
-      });
-
-      const entry = logs.entries.find(
-        (log) =>
-          log.target?.id === ban.user.id &&
-          Date.now() - log.createdTimestamp < 15000
-      );
-
-      if (entry?.executor) {
-        executor = `<@${entry.executor.id}>`;
-      }
-    } catch {}
+    const reason = ban.reason || auditEntry?.reason || null;
 
     const embed = new EmbedBuilder()
       .setColor("#ef4444")
@@ -34,10 +29,17 @@ module.exports = {
       .addFields(
         { name: "👤 User", value: `<@${ban.user.id}>`, inline: true },
         { name: "🆔 ID", value: ban.user.id, inline: true },
-        { name: "🛠 By", value: executor }
+        { name: "🛠 By", value: formatExecutor(auditEntry) }
       )
       .setFooter({ text: `Time: ${formatTime()}` })
       .setTimestamp();
+
+    if (reason) {
+      embed.addFields({
+        name: "📝 Reason",
+        value: clampText(reason, 1024, "No reason")
+      });
+    }
 
     await sendLog(ban.guild, LOGS.SYSTEM, embed);
   }
