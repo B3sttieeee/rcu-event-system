@@ -1,32 +1,32 @@
 const { Events, EmbedBuilder, AuditLogEvent } = require("discord.js");
-const { LOGS, formatTime, sendLog } = require("../logSystem");
+const {
+  LOGS,
+  formatTime,
+  sendLog,
+  findAuditEntry,
+  formatExecutor,
+  clampText
+} = require("./logSystem");
 
 module.exports = {
   name: Events.GuildMemberRemove,
 
   async execute(member) {
-    if (member.user.bot) return;
+    const kickEntry = await findAuditEntry(member.guild, {
+      type: AuditLogEvent.MemberKick,
+      match: (entry) => entry.target?.id === member.id
+    });
 
-    let title = "📤 Member Left";
-    let executor = "Unknown";
+    const title = kickEntry
+      ? "👢 Member Kicked"
+      : member.user.bot
+        ? "🤖 Bot Removed"
+        : "📤 Member Left";
 
-    try {
-      const logs = await member.guild.fetchAuditLogs({
-        limit: 5,
-        type: AuditLogEvent.MemberKick
-      });
-
-      const entry = logs.entries.find(
-        (log) =>
-          log.target?.id === member.id &&
-          Date.now() - log.createdTimestamp < 15000
-      );
-
-      if (entry?.executor) {
-        title = "👢 Member Kicked";
-        executor = `<@${entry.executor.id}>`;
-      }
-    } catch {}
+    const actor = kickEntry ? formatExecutor(kickEntry) : "User left on their own";
+    const reason = kickEntry?.reason
+      ? clampText(kickEntry.reason, 1024, null)
+      : null;
 
     const embed = new EmbedBuilder()
       .setColor("#ef4444")
@@ -38,10 +38,14 @@ module.exports = {
       .addFields(
         { name: "👤 User", value: `<@${member.id}>`, inline: true },
         { name: "🆔 ID", value: member.id, inline: true },
-        { name: "🛠 By", value: executor }
+        { name: "🛠 By", value: actor }
       )
       .setFooter({ text: `Time: ${formatTime()}` })
       .setTimestamp();
+
+    if (reason) {
+      embed.addFields({ name: "📝 Reason", value: reason });
+    }
 
     await sendLog(member.guild, LOGS.JOIN_LEAVE, embed);
   }
