@@ -2,22 +2,39 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   ChannelType,
-  PermissionsBitField
+  PermissionsBitField,
+  ButtonBuilder,
+  ButtonStyle
 } = require("discord.js");
 
-// ====================== CONFIG ======================
+// ================= CONFIG =================
 const CONFIG = {
   PANEL_CHANNEL_ID: "1475558248487583805",
   LOG_CHANNEL_ID: "1494072832827850953",
   CATEGORY_ID: "1475985874385899530",
-  ADMIN_ROLE: "1475998527191519302",
-
-  IMAGE:
-    "https://cdn.discordapp.com/attachments/1475993709240778904/1488949259209281556/ezgif.com-video-to-gif-converter.gif"
+  ADMIN_ROLE: "1475998527191519302"
 };
 
-// ====================== PANEL (OLD CLEAN STYLE RESTORED) ======================
+// ================= TYPE HELPER =================
+const getTypeLabel = (type) => {
+  if (type === "staff") {
+    return {
+      name: "Staff Support",
+      field: "Department"
+    };
+  }
+
+  return {
+    name: type.toUpperCase(),
+    field: "Clan"
+  };
+};
+
+// ================= PANEL =================
 async function createTicketPanel(client) {
   const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
   if (!channel) return;
@@ -27,82 +44,108 @@ async function createTicketPanel(client) {
     .setTitle("🎫 Clan Recruitment")
     .setDescription(
       [
-        "**Select the clan you want to join:**",
+        "**Select what you need:**",
         "",
         "```",
         "🔥 VYRN Main Clan",
         "🛡️ V2RN Academy",
-        "⚙️ Staff Recruitment",
-        "```",
-        "",
-        "⚠️ Make sure your application is serious and complete.",
-        "⏳ Response time: up to 24h"
+        "⚙️ Staff Support",
+        "```"
       ].join("\n")
-    )
-    .setImage(CONFIG.IMAGE)
-    .setFooter({ text: "Clan System • Recruitment Panel" })
-    .setTimestamp();
+    );
 
   const menu = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("clan_ticket_select")
-      .setPlaceholder("Select recruitment type...")
+      .setPlaceholder("Select option...")
       .addOptions([
-        {
-          label: "VYRN Main Clan",
-          description: "High-tier competitive clan",
-          value: "vyrn",
-          emoji: "🔥"
-        },
-        {
-          label: "V2RN Academy",
-          description: "Training / entry level clan",
-          value: "v2rn",
-          emoji: "🛡️"
-        },
-        {
-          label: "Staff Recruitment",
-          description: "Moderator / admin applications",
-          value: "staff",
-          emoji: "⚙️"
-        }
+        { label: "VYRN Main Clan", value: "vyrn", emoji: "🔥" },
+        { label: "V2RN Academy", value: "v2rn", emoji: "🛡️" },
+        { label: "Staff Support", value: "staff", emoji: "⚙️" }
       ])
   );
 
-  const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
+  await channel.send({ embeds: [embed], components: [menu] });
+}
 
-  const existing = messages?.find(m =>
-    m.embeds?.[0]?.title?.includes("Clan Recruitment")
-  );
+// ================= HANDLER =================
+async function handle(interaction, client) {
+  try {
+    // SELECT
+    if (interaction.isStringSelectMenu()) {
+      if (interaction.customId === "clan_ticket_select") {
+        return openModal(interaction, interaction.values[0]);
+      }
+    }
 
-  if (existing) {
-    await existing.edit({ embeds: [embed], components: [menu] });
-  } else {
-    await channel.send({ embeds: [embed], components: [menu] });
+    // MODAL
+    if (interaction.isModalSubmit()) {
+      if (interaction.customId.startsWith("ticket_modal_")) {
+        const type = interaction.customId.split("_")[2];
+        return createTicket(interaction, client, type);
+      }
+    }
+
+    // BUTTON
+    if (interaction.isButton()) {
+      if (interaction.customId === "close_ticket") {
+        return closeTicket(interaction, client);
+      }
+    }
+
+  } catch (err) {
+    console.error("Ticket error:", err);
   }
 }
 
-// ====================== CREATE TICKET ======================
-async function createTicket(interaction, type) {
-  const user = interaction.user;
+// ================= MODAL =================
+async function openModal(interaction, type) {
+  const modal = new ModalBuilder()
+    .setCustomId(`ticket_modal_${type}`)
+    .setTitle("Application Form");
+
+  const nick = new TextInputBuilder()
+    .setCustomId("nick")
+    .setLabel("Nickname")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  const lang = new TextInputBuilder()
+    .setCustomId("lang")
+    .setLabel("Language (Polish/English)")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(nick),
+    new ActionRowBuilder().addComponents(lang)
+  );
+
+  return interaction.showModal(modal);
+}
+
+// ================= CREATE =================
+async function createTicket(interaction, client, type) {
+  const nick = interaction.fields.getTextInputValue("nick");
+  const lang = interaction.fields.getTextInputValue("lang");
 
   const existing = interaction.guild.channels.cache.find(
-    c => c.topic === user.id
+    c => c.topic === interaction.user.id
   );
 
   if (existing) {
     return interaction.reply({
-      content: `❌ You already have an active ticket: ${existing}`,
+      content: `❌ You already have a ticket: ${existing}`,
       ephemeral: true
     });
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  const typeData = getTypeLabel(type);
 
   const channel = await interaction.guild.channels.create({
-    name: `apply-${type}-${user.username}`.toLowerCase(),
+    name: `apply-${type}-${interaction.user.username}`.toLowerCase(),
     type: ChannelType.GuildText,
-    topic: user.id,
+    topic: interaction.user.id,
     parent: CONFIG.CATEGORY_ID,
     permissionOverwrites: [
       {
@@ -110,7 +153,7 @@ async function createTicket(interaction, type) {
         deny: [PermissionsBitField.Flags.ViewChannel]
       },
       {
-        id: user.id,
+        id: interaction.user.id,
         allow: [
           PermissionsBitField.Flags.ViewChannel,
           PermissionsBitField.Flags.SendMessages,
@@ -129,60 +172,93 @@ async function createTicket(interaction, type) {
   });
 
   const embed = new EmbedBuilder()
-    .setColor("#57F287")
-    .setTitle("🎫 Application Ticket")
-    .setDescription(
-      [
-        `**Clan:** \`${type.toUpperCase()}\``,
-        `**User:** ${user}`,
-        "",
-        "Please send your application:",
-        "• In-game nickname",
-        "• Experience",
-        "• Why do you want to join"
-      ].join("\n")
+    .setColor("#2b2d31")
+    .setTitle("🎫 Ticket Opened")
+    .addFields(
+      { name: "User", value: interaction.user.tag, inline: true },
+      { name: typeData.field, value: typeData.name, inline: true },
+      { name: "Nickname", value: nick, inline: true },
+      { name: "Language", value: lang, inline: true }
     )
     .setTimestamp();
 
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId("close_ticket")
+      .setLabel("Close")
+      .setStyle(ButtonStyle.Danger)
+  );
+
   await channel.send({
-    content: `${user}`,
-    embeds: [embed]
+    content: `<@${interaction.user.id}>`,
+    embeds: [embed],
+    components: [row]
   });
 
-  await interaction.editReply({
-    content: `✅ Ticket created: ${channel}`
+  await interaction.reply({
+    content: `✅ Ticket created: ${channel}`,
+    ephemeral: true
   });
 
-  // ================= LOG =================
-  const log = await interaction.client.channels.fetch(CONFIG.LOG_CHANNEL_ID).catch(() => null);
+  // LOG
+  const logChannel = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID).catch(() => null);
 
-  if (log) {
+  if (logChannel) {
     const logEmbed = new EmbedBuilder()
-      .setColor("#f59e0b")
-      .setTitle("📩 New Clan Ticket")
+      .setColor("#2b2d31")
+      .setTitle("📩 New Ticket")
       .addFields(
-        { name: "User", value: user.tag },
-        { name: "Clan", value: type },
-        { name: "Channel", value: channel.name }
+        { name: "User", value: interaction.user.tag },
+        { name: typeData.field, value: typeData.name },
+        { name: "Nickname", value: nick },
+        { name: "Language", value: lang },
+        { name: "Channel", value: `${channel}` }
       )
       .setTimestamp();
 
-    log.send({ embeds: [logEmbed] });
+    logChannel.send({ embeds: [logEmbed] });
   }
 }
 
-// ====================== HANDLER ======================
-async function handle(interaction) {
-  try {
-    if (!interaction.isStringSelectMenu()) return;
+// ================= TRANSCRIPT =================
+async function generateTranscript(channel) {
+  const messages = await channel.messages.fetch({ limit: 100 });
 
-    if (interaction.customId === "clan_ticket_select") {
-      const value = interaction.values[0];
-      return createTicket(interaction, value);
-    }
-  } catch (err) {
-    console.error("Ticket error:", err);
+  return messages
+    .reverse()
+    .map(m => `[${m.author.tag}]: ${m.content}`)
+    .join("\n");
+}
+
+// ================= CLOSE =================
+async function closeTicket(interaction, client) {
+  const channel = interaction.channel;
+
+  const transcript = await generateTranscript(channel);
+
+  const logChannel = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID).catch(() => null);
+
+  if (logChannel) {
+    const embed = new EmbedBuilder()
+      .setColor("#ef4444")
+      .setTitle("📁 Ticket Closed")
+      .addFields(
+        { name: "Channel", value: channel.name },
+        { name: "Closed by", value: interaction.user.tag }
+      );
+
+    await logChannel.send({
+      embeds: [embed],
+      files: [{
+        attachment: Buffer.from(transcript, "utf-8"),
+        name: `transcript-${channel.name}.txt`
+      }]
+    });
   }
+
+  await interaction.reply({ content: "Closing ticket...", ephemeral: true });
+
+  setTimeout(() => channel.delete().catch(() => {}), 2000);
 }
 
 module.exports = {
