@@ -1,37 +1,63 @@
 const { ChannelType } = require("discord.js");
 const { DateTime } = require("luxon");
 
-// =====================================================
-// LOG CHANNELS
-// =====================================================
 const LOGS = {
   JOIN_LEAVE: "1475992846912721018",
   SYSTEM: "1475993709240778904",
   CHAT: "1475992778554216448"
 };
 
-// =====================================================
-// TIME FORMAT
-// =====================================================
+const TIME_ZONE = "Europe/Warsaw";
+const AUDIT_MAX_AGE = 15_000;
+
 const formatTime = () =>
   DateTime.now()
-    .setZone("Europe/Warsaw")
+    .setZone(TIME_ZONE)
     .toFormat("dd.LL.yyyy • HH:mm:ss");
 
-// =====================================================
-// SEND LOG EMBED
-// =====================================================
+const clampText = (value, max = 1024, fallback = "None") => {
+  if (value === null || value === undefined) return fallback;
+
+  const text = String(value).trim();
+  if (!text) return fallback;
+
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
+};
+
+const formatAttachments = (attachments, max = 1024) => {
+  if (!attachments?.size) return null;
+
+  const lines = [...attachments.values()].map((attachment) => attachment.url);
+  return clampText(lines.join("\n"), max, null);
+};
+
+const formatRoleList = (roles, max = 1024) => {
+  if (!roles?.size) return "None";
+
+  const text = [...roles.values()]
+    .map((role) => `<@&${role.id}>`)
+    .join(", ");
+
+  return clampText(text, max, "None");
+};
+
+const resolveLogChannel = async (guild, channelId) => {
+  let channel = guild.channels.cache.get(channelId);
+
+  if (!channel) {
+    channel = await guild.channels.fetch(channelId).catch(() => null);
+  }
+
+  if (!channel || !channel.isTextBased()) return null;
+  if (channel.type === ChannelType.GuildForum) return null;
+
+  return channel;
+};
+
 const sendLog = async (guild, channelId, embed) => {
   try {
-    let channel = guild.channels.cache.get(channelId);
-
-    if (!channel) {
-      channel = await guild.channels.fetch(channelId).catch(() => null);
-    }
-
+    const channel = await resolveLogChannel(guild, channelId);
     if (!channel) return false;
-    if (!channel.isTextBased()) return false;
-    if (channel.type === ChannelType.GuildForum) return false;
 
     await channel.send({ embeds: [embed] });
     return true;
@@ -40,8 +66,43 @@ const sendLog = async (guild, channelId, embed) => {
   }
 };
 
+const findAuditEntry = async (
+  guild,
+  {
+    type,
+    limit = 6,
+    maxAge = AUDIT_MAX_AGE,
+    match = () => true
+  }
+) => {
+  try {
+    const logs = await guild.fetchAuditLogs({ type, limit });
+
+    return (
+      logs.entries.find((entry) => {
+        const isFresh = Date.now() - entry.createdTimestamp <= maxAge;
+        return isFresh && match(entry);
+      }) || null
+    );
+  } catch {
+    return null;
+  }
+};
+
+const formatExecutor = (entry) => {
+  if (!entry?.executor) return "Unknown";
+  return `<@${entry.executor.id}>`;
+};
+
 module.exports = {
   LOGS,
+  AUDIT_MAX_AGE,
   formatTime,
-  sendLog
+  clampText,
+  formatAttachments,
+  formatRoleList,
+  resolveLogChannel,
+  sendLog,
+  findAuditEntry,
+  formatExecutor
 };
