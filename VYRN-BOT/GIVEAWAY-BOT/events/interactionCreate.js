@@ -1,55 +1,101 @@
 const { EmbedBuilder, Events } = require("discord.js");
 
-// ====================== SYSTEMS ======================
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleExpeditionSelect } = require("../commands/expedition");
 const { isDailyReady, claimDaily } = require("../utils/profileSystem");
+const { handleEmbedInteraction } = require("./modalSumbit");
 
-// ====================== MAIN ======================
+async function handleDaily(interaction) {
+  const userId = interaction.user.id;
+
+  if (!isDailyReady(userId)) {
+    return interaction.followUp({
+      content: "Daily nie jest jeszcze gotowe do odebrania.",
+      ephemeral: true
+    });
+  }
+
+  const result = await claimDaily(userId, interaction.member);
+  const rewardLines = [];
+
+  if (typeof result === "number") {
+    rewardLines.push(`Nagroda: \`${result}\``);
+  }
+
+  if (result && typeof result === "object") {
+    if (Number.isFinite(result.coins)) {
+      rewardLines.push(`Monety: \`${result.coins}\``);
+    }
+
+    if (Number.isFinite(result.xp)) {
+      rewardLines.push(`XP: \`${result.xp}\``);
+    }
+
+    if (Number.isFinite(result.streak)) {
+      rewardLines.push(`Streak: \`${result.streak}\``);
+    }
+
+    if (typeof result.message === "string" && result.message.trim()) {
+      rewardLines.push(result.message.trim());
+    }
+  }
+
+  const embed = new EmbedBuilder()
+    .setColor("#22c55e")
+    .setTitle("Daily odebrane")
+    .setDescription(
+      rewardLines.length
+        ? rewardLines.join("\n")
+        : "Nagroda za daily zostala odebrana pomyslnie."
+    )
+    .setTimestamp();
+
+  return interaction.followUp({
+    embeds: [embed],
+    ephemeral: true
+  });
+}
+
 module.exports = {
   name: Events.InteractionCreate,
 
   async execute(interaction, client) {
-    const cid = interaction.customId;
+    const cid = interaction.customId ?? null;
 
-    const type =
-      interaction.isChatInputCommand()
-        ? "SLASH"
-        : interaction.isButton()
+    const type = interaction.isChatInputCommand()
+      ? "SLASH"
+      : interaction.isButton()
         ? `BUTTON:${cid}`
         : interaction.isStringSelectMenu()
-        ? `SELECT:${cid}`
-        : interaction.isModalSubmit()
-        ? `MODAL:${cid}`
-        : "UNKNOWN";
+          ? `SELECT:${cid}`
+          : interaction.isModalSubmit()
+            ? `MODAL:${cid}`
+            : "UNKNOWN";
 
     try {
-      console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
+      console.log(
+        `[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`
+      );
 
-      // =====================================================
-      // 1. GIVEAWAY
-      // =====================================================
+      if (await handleEmbedInteraction(interaction)) {
+        return;
+      }
+
       if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
 
-      // =====================================================
-      // 2. EVENT SYSTEM
-      // =====================================================
-      const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
+      const eventIds = new Set(["refresh", "roles", "dm", "role_menu", "dm_menu"]);
 
       if (
         (interaction.isButton() || interaction.isStringSelectMenu()) &&
-        eventIds.includes(cid)
+        eventIds.has(cid)
       ) {
         return await handleEventInteraction(interaction);
       }
 
-      // =====================================================
-      // 3. EXPEDITION
-      // =====================================================
       if (
         interaction.isStringSelectMenu() &&
         cid === "expedition_time_select"
@@ -57,34 +103,26 @@ module.exports = {
         return await handleExpeditionSelect(interaction);
       }
 
-      // =====================================================
-      // 4. DAILY
-      // =====================================================
       if (interaction.isButton() && cid === "daily_claim") {
         await interaction.deferUpdate().catch(() => {});
-        return handleDaily(interaction);
+        return await handleDaily(interaction);
       }
 
-      // =====================================================
-      // 5. TICKETS (FIX 🔥 ADD SELECT SUPPORT)
-      // =====================================================
-      const ticketIds = [
+      const ticketButtonAndModalIds = new Set([
         "open_ticket_vyrn",
         "open_ticket_v2rn",
         "close_ticket",
         "ticket_modal_vyrn",
-        "ticket_modal_v2rn",
-        "clan_ticket_select" // 🔥 FIX HERE
-      ];
+        "ticket_modal_v2rn"
+      ]);
 
       if (
         (interaction.isButton() || interaction.isModalSubmit()) &&
-        ticketIds.includes(cid)
+        ticketButtonAndModalIds.has(cid)
       ) {
         return await ticketSystem.handle(interaction, client);
       }
 
-      // 🔥 EXTRA FIX FOR SELECT MENU (IMPORTANT)
       if (
         interaction.isStringSelectMenu() &&
         cid === "clan_ticket_select"
@@ -92,15 +130,12 @@ module.exports = {
         return await ticketSystem.handle(interaction, client);
       }
 
-      // =====================================================
-      // 6. SLASH COMMANDS
-      // =====================================================
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
 
         if (!cmd) {
           return interaction.reply({
-            content: "❌ Command not found.",
+            content: "Command not found.",
             ephemeral: true
           });
         }
@@ -108,16 +143,12 @@ module.exports = {
         return await cmd.execute(interaction, client);
       }
 
-      // =====================================================
-      // FALLBACK
-      // =====================================================
-      console.log(`[UNHANDLED] ${type} | ${cid}`);
-
+      console.log(`[UNHANDLED] ${type} | ${cid ?? "NONE"}`);
     } catch (err) {
-      console.error("❌ INTERACTION ERROR:", err);
+      console.error("[INTERACTION ERROR]", err);
 
       const payload = {
-        content: "❌ System error occurred.",
+        content: "System error occurred.",
         ephemeral: true
       };
 
@@ -127,7 +158,7 @@ module.exports = {
         } else {
           await interaction.reply(payload);
         }
-      } catch (_) {}
+      } catch {}
     }
   }
 };
