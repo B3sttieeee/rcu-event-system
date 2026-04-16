@@ -1,182 +1,121 @@
-const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  ChannelType,
-  PermissionsBitField
-} = require("discord.js");
+const { Events, EmbedBuilder } = require("discord.js");
+const { handleMessageXP, neededXP } = require("../utils/levelSystem");
 
-// ================= CONFIG =================
-const CONFIG = {
-  PANEL_CHANNEL_ID: "1475558248487583805",
-  LOG_CHANNEL_ID: "1494072832827850953",
-  CATEGORY_ID: "1475985874385899530",
-  ADMIN_ROLE: "1475998527191519302"
+const LEVEL_CHANNEL_ID = "1475999590716018719";
+const BLOCKED_PREFIXES = ["?", "!", ".", "$"];
+
+// =====================================================
+// HELPERS
+// =====================================================
+const clampText = (value, max = 220, fallback = "Brak treści") => {
+  if (value === null || value === undefined) return fallback;
+
+  const text = String(value).trim();
+  if (!text) return fallback;
+
+  return text.length > max ? `${text.slice(0, max - 3)}...` : text;
 };
 
-// ================= AI =================
-function aiBrain(text) {
-  const msg = text.toLowerCase();
-
-  if (msg.includes("hej") || msg.includes("cześć")) {
-    return "👋 Hej! Jestem AI Support.";
+const createProgressBar = (current, required, size = 10) => {
+  if (!required || required <= 0) {
+    return "▱".repeat(size);
   }
 
-  if (msg.includes("ile") && msg.includes("czek")) {
-    return "⏳ Do 24h odpowiedzi.";
+  const percent = Math.max(0, Math.min(100, Math.floor((current / required) * 100)));
+  const filled = Math.round((percent / 100) * size);
+
+  return "▰".repeat(filled) + "▱".repeat(size - filled);
+};
+
+const resolveLevelChannel = async (guild) => {
+  let channel = guild.channels.cache.get(LEVEL_CHANNEL_ID);
+
+  if (!channel) {
+    channel = await guild.channels.fetch(LEVEL_CHANNEL_ID).catch(() => null);
   }
 
-  if (msg.includes("rekrut")) {
-    return "📌 Rekrutacja trwa do 24h.";
-  }
+  if (!channel || !channel.isTextBased()) return null;
+  return channel;
+};
 
-  return null;
-}
+const buildLevelUpEmbed = (member, message, result) => {
+  const requiredXP = neededXP(result.level);
+  const progressPercent = requiredXP > 0
+    ? Math.floor((result.xp / requiredXP) * 100)
+    : 0;
 
-// ================= HANDLE =================
-async function handle(interaction, client) {
-
-  // ===== BUTTONS =====
-  if (interaction.isButton()) {
-
-    if (interaction.customId === "ticket_vyrn") {
-      return openTicket(interaction, "vyrn");
-    }
-
-    if (interaction.customId === "ticket_v2rn") {
-      return openTicket(interaction, "v2rn");
-    }
-
-    if (interaction.customId === "close_ticket") {
-      return closeTicket(interaction);
-    }
-  }
-
-  // ===== MODAL =====
-  if (interaction.isModalSubmit()) {
-
-    if (interaction.customId === "ticket_modal_vyrn") {
-      return createTicket(interaction, "vyrn");
-    }
-
-    if (interaction.customId === "ticket_modal_v2rn") {
-      return createTicket(interaction, "v2rn");
-    }
-  }
-}
-
-// ================= OPEN =================
-async function openTicket(interaction, type) {
-
-  const modal = new ModalBuilder()
-    .setCustomId(`ticket_modal_${type}`)
-    .setTitle("Ticket Form");
-
-  const nick = new TextInputBuilder()
-    .setCustomId("nick")
-    .setLabel("Nick")
-    .setStyle(TextInputStyle.Short);
-
-  const lang = new TextInputBuilder()
-    .setCustomId("lang")
-    .setLabel("Lang (pl/en)")
-    .setStyle(TextInputStyle.Short);
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(nick),
-    new ActionRowBuilder().addComponents(lang)
-  );
-
-  await interaction.showModal(modal);
-}
-
-// ================= CREATE =================
-async function createTicket(interaction, type) {
-
-  const nick = interaction.fields.getTextInputValue("nick");
-  const lang = interaction.fields.getTextInputValue("lang");
-
-  const channel = await interaction.guild.channels.create({
-    name: `${type}-${interaction.user.username}`,
-    type: ChannelType.GuildText,
-    topic: interaction.user.id,
-    parent: CONFIG.CATEGORY_ID,
-    permissionOverwrites: [
-      {
-        id: interaction.guild.id,
-        deny: [PermissionsBitField.Flags.ViewChannel]
-      },
-      {
-        id: interaction.user.id,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages
-        ]
-      },
-      {
-        id: CONFIG.ADMIN_ROLE,
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages
-        ]
-      }
-    ]
-  });
+  const progressBar = createProgressBar(result.xp, requiredXP);
 
   const embed = new EmbedBuilder()
-    .setTitle("🎫 Ticket opened")
-    .setDescription(`Nick: ${nick}\nLang: ${lang}`)
-    .setColor("Green");
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId("close_ticket")
-      .setLabel("Close")
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  await channel.send({ embeds: [embed], components: [row] });
-
-  await interaction.reply({
-    content: `Ticket created: ${channel}`,
-    ephemeral: true
-  });
-}
-
-// ================= CLOSE =================
-async function closeTicket(interaction) {
-  await interaction.reply({ content: "Closing...", ephemeral: true });
-  setTimeout(() => interaction.channel.delete().catch(() => {}), 2000);
-}
-
-// ================= AI + LOGS =================
-async function handleAI(message, client) {
-
-  const response = aiBrain(message.content);
-  if (!response) return;
-
-  await message.reply(response);
-
-  const log = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID);
-
-  const embed = new EmbedBuilder()
-    .setTitle("AI LOG")
-    .addFields(
-      { name: "User", value: message.author.tag },
-      { name: "Channel", value: message.channel.name },
-      { name: "Msg", value: message.content },
-      { name: "AI", value: response }
+    .setColor("#f59e0b")
+    .setAuthor({
+      name: member.user.tag,
+      iconURL: member.user.displayAvatarURL()
+    })
+    .setTitle("🏆 Level Up")
+    .setDescription(
+      [
+        `**${member} wbił poziom \`${result.level}\`**`,
+        "",
+        "━━━━━━━━━━━━━━━━━━",
+        "",
+        `✨ **Zdobyte XP:** \`${result.gained}\``,
+        `📊 **Aktualne XP:** \`${result.xp} / ${requiredXP}\``,
+        `📈 **Postęp:** ${progressBar} \`${progressPercent}%\``,
+        `💬 **Kanał:** <#${message.channel.id}>`
+      ].join("\n")
     )
-    .setColor("Orange");
+    .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
+    .setFooter({
+      text: "VYRN • Level System"
+    })
+    .setTimestamp();
 
-  log.send({ embeds: [embed] });
-}
+  if (message.content?.trim()) {
+    embed.addFields({
+      name: "📝 Ostatnia wiadomość",
+      value: clampText(message.content, 256, "Brak treści")
+    });
+  }
 
+  return embed;
+};
+
+// =====================================================
+// EVENT
+// =====================================================
 module.exports = {
-  handle,
-  handleAI
+  name: Events.MessageCreate,
+
+  async execute(message) {
+    if (!message.guild) return;
+    if (!message.author || message.author.bot) return;
+    if (message.system || message.webhookId) return;
+
+    const content = (message.content || "").trim();
+
+    if (!content && !message.attachments?.size) return;
+
+    if (content && BLOCKED_PREFIXES.some((prefix) => content.startsWith(prefix))) {
+      return;
+    }
+
+    const member =
+      message.member ||
+      (await message.guild.members.fetch(message.author.id).catch(() => null));
+
+    if (!member) return;
+
+    const result = await handleMessageXP(member, content);
+    if (!result?.leveledUp) return;
+
+    const levelChannel = await resolveLevelChannel(message.guild);
+    if (!levelChannel) return;
+
+    const embed = buildLevelUpEmbed(member, message, result);
+
+    await levelChannel.send({
+      embeds: [embed]
+    }).catch(() => {});
+  }
 };
