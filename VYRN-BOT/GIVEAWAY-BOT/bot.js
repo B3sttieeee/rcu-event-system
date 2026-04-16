@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Collection } = require("discord.js");
+const { Client, GatewayIntentBits, Collection, Partials } = require("discord.js");
 require("dotenv").config();
 
 const fs = require("fs");
@@ -12,20 +12,31 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
-  ]
+    GatewayIntentBits.GuildModeration,
+  ],
+  partials: [
+    Partials.Message,
+    Partials.Channel,
+    Partials.Reaction,
+  ],
 });
 
 client.commands = new Collection();
 
 // ====================== RATE LIMIT ======================
 client.rest.on("rateLimited", (info) => {
-  console.warn(`[RATE LIMIT] ${info.method} ${info.url} — ${info.timeToReset}ms`);
+  console.warn(
+    `[RATE LIMIT] ${info.method} ${info.url} — ${info.timeToReset}ms`
+  );
 });
 
 // ====================== LOAD COMMANDS ======================
 function loadCommands() {
   const commandsPath = path.join(__dirname, "commands");
-  if (!fs.existsSync(commandsPath)) return console.warn("⚠️ commands missing");
+  if (!fs.existsSync(commandsPath)) {
+    console.warn("⚠️ commands folder missing");
+    return;
+  }
 
   let loaded = 0;
 
@@ -38,39 +49,44 @@ function loadCommands() {
     const loadFile = (filePath) => {
       try {
         const cmd = require(filePath);
+
         if (cmd?.data?.name && typeof cmd.execute === "function") {
           client.commands.set(cmd.data.name, cmd);
           console.log(`✅ /${cmd.data.name}`);
           loaded++;
         }
       } catch (e) {
-        console.error("CMD ERROR:", e.message);
+        console.error("❌ CMD ERROR:", e.message);
       }
     };
 
     if (stat.isDirectory()) {
       fs.readdirSync(itemPath)
-        .filter(f => f.endsWith(".js"))
-        .forEach(f => loadFile(path.join(itemPath, f)));
+        .filter((f) => f.endsWith(".js"))
+        .forEach((f) => loadFile(path.join(itemPath, f)));
     } else if (item.endsWith(".js")) {
       loadFile(itemPath);
     }
   }
 
-  console.log(`📊 Commands: ${loaded}`);
+  console.log(`📊 Commands loaded: ${loaded}`);
 }
 
 // ====================== LOAD EVENTS ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
-  if (!fs.existsSync(eventsPath)) return console.warn("⚠️ events missing");
+  if (!fs.existsSync(eventsPath)) {
+    console.warn("⚠️ events folder missing");
+    return;
+  }
 
-  const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
+  const files = fs.readdirSync(eventsPath).filter((f) => f.endsWith(".js"));
   let loaded = 0;
 
   for (const file of files) {
     try {
       const event = require(path.join(eventsPath, file));
+
       if (!event?.name || !event?.execute) continue;
 
       const runner = (...args) => event.execute(...args, client);
@@ -78,69 +94,67 @@ function loadEvents() {
       if (event.once) client.once(event.name, runner);
       else client.on(event.name, runner);
 
-      console.log(`✅ event: ${event.name}`);
+      console.log(`✅ event loaded: ${event.name}`);
       loaded++;
     } catch (e) {
-      console.error("EVENT ERROR:", e.message);
+      console.error("❌ EVENT ERROR:", e.message);
     }
   }
 
-  console.log(`📊 Events: ${loaded}`);
+  console.log(`📊 Events loaded: ${loaded}`);
 }
 
 // ====================== SYSTEMS ======================
 async function loadSystems() {
   console.log("🚀 Loading systems...");
 
+  // LEVEL SYSTEM
   try {
     const levelSystem = require("./utils/levelSystem");
     levelSystem.startVoiceXP(client);
   } catch (e) {
-    console.error("Level error:", e.message);
+    console.error("Level system error:", e.message);
   }
 
+  // DAILY SYSTEM
   try {
     const { startDailyReset } = require("./utils/profileSystem");
     startDailyReset?.();
   } catch (e) {}
 
+  // CLAN SYSTEM
   try {
     const { startClanSystem } = require("./utils/clanSystem");
     startClanSystem?.(client);
   } catch (e) {}
 
+  // ECONOMY / BOOST
   try {
     const { loadCoins } = require("./utils/economySystem");
     const { loadBoosts } = require("./utils/boostSystem");
+
     loadCoins?.();
     loadBoosts?.();
   } catch (e) {}
 
-  // ticket panel
+  // TICKET PANEL
   setTimeout(async () => {
     try {
       const { createTicketPanel } = require("./utils/ticketSystem");
       await createTicketPanel(client);
-      console.log("🎟 Ticket panel ready");
+      console.log("🎟 Ticket panel loaded");
     } catch (e) {
-      console.error("Ticket error:", e.message);
+      console.error("Ticket system error:", e.message);
     }
   }, 5000);
 
-  // 🕒 VOICE CLOCK START
-  try {
-    const voiceClock = require("./utils/voiceClock");
-    voiceClock.start(client);
-    console.log("🕒 Voice clock started");
-  } catch (e) {
-    console.error("Clock error:", e.message);
-  }
+  console.log("✅ Systems loaded");
 }
 
 // ====================== READY ======================
 client.once("ready", async () => {
   console.log("================================");
-  console.log(`🔥 Logged: ${client.user.tag}`);
+  console.log(`🔥 Logged as: ${client.user.tag}`);
   console.log(`📊 Guilds: ${client.guilds.cache.size}`);
   console.log("================================");
 
@@ -157,8 +171,8 @@ process.on("uncaughtException", console.error);
 
 // ====================== LOGIN ======================
 client.login(process.env.TOKEN)
-  .then(() => console.log("🔑 LOGIN OK"))
-  .catch(err => {
-    console.error("LOGIN ERROR:", err.message);
+  .then(() => console.log("🔑 LOGIN SUCCESS"))
+  .catch((err) => {
+    console.error("❌ LOGIN ERROR:", err.message);
     process.exit(1);
   });
