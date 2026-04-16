@@ -5,20 +5,26 @@ module.exports = {
   name: Events.GuildMemberRemove,
 
   async execute(member) {
-    let type = "📤 Member Left";
+    if (member.user.bot) return;
+
+    let title = "📤 Member Left";
     let executor = "Unknown";
 
     try {
       const logs = await member.guild.fetchAuditLogs({
-        limit: 1,
+        limit: 5,
         type: AuditLogEvent.MemberKick
       });
 
-      const log = logs.entries.first();
+      const entry = logs.entries.find(
+        (log) =>
+          log.target?.id === member.id &&
+          Date.now() - log.createdTimestamp < 15000
+      );
 
-      if (log && log.target.id === member.id) {
-        type = "👢 Member Kicked";
-        executor = `<@${log.executor.id}>`;
+      if (entry?.executor) {
+        title = "👢 Member Kicked";
+        executor = `<@${entry.executor.id}>`;
       }
     } catch {}
 
@@ -26,19 +32,17 @@ module.exports = {
       .setColor("#ef4444")
       .setAuthor({
         name: member.user.tag,
-        iconURL: member.user.displayAvatarURL({ dynamic: true })
+        iconURL: member.user.displayAvatarURL()
       })
-      .setTitle(type)
-
+      .setTitle(title)
       .addFields(
-        { name: "👤 User", value: `<@${member.id}>` },
-        { name: "🆔 ID", value: member.id },
+        { name: "👤 User", value: `<@${member.id}>`, inline: true },
+        { name: "🆔 ID", value: member.id, inline: true },
         { name: "🛠 By", value: executor }
       )
-
       .setFooter({ text: `Time: ${formatTime()}` })
       .setTimestamp();
 
-    sendLog(member.guild, LOGS.JOIN_LEAVE, embed);
+    await sendLog(member.guild, LOGS.JOIN_LEAVE, embed);
   }
 };
