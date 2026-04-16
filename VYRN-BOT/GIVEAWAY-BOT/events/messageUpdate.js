@@ -4,7 +4,7 @@ const {
   formatTime,
   sendLog,
   clampText
-} = require("./logSystem");
+} = require("../utils/logSystem");
 
 module.exports = {
   name: Events.MessageUpdate,
