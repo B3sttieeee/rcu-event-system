@@ -7,7 +7,7 @@ const {
   formatExecutor,
   clampText,
   formatAttachments
-} = require("./logSystem");
+} = require("../utils/logSystem");
 
 const getDeletedContent = (message) => {
   if (message.content) {
@@ -57,9 +57,7 @@ module.exports = {
 
     const authorTag = message.author?.tag || "Unknown User";
     const authorId = message.author?.id || "Unknown";
-    const authorMention = message.author?.id
-      ? `<@${message.author.id}>`
-      : "Unknown";
+    const authorMention = message.author?.id ? `<@${message.author.id}>` : "Unknown";
 
     const embed = new EmbedBuilder()
       .setColor("#ef4444")
