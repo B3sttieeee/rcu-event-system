@@ -6,7 +6,7 @@ const {
   findAuditEntry,
   formatExecutor,
   formatRoleList
-} = require("./logSystem");
+} = require("../utils/logSystem");
 
 module.exports = {
   name: Events.GuildMemberUpdate,
