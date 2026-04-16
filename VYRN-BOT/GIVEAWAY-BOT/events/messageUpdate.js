@@ -1,10 +1,10 @@
 const { Events, EmbedBuilder } = require("discord.js");
-const { LOGS, formatTime, sendLog } = require("../logSystem");
-
-const trimText = (text, limit = 500) => {
-  if (!text) return "None";
-  return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
-};
+const {
+  LOGS,
+  formatTime,
+  sendLog,
+  clampText
+} = require("./logSystem");
 
 module.exports = {
   name: Events.MessageUpdate,
@@ -15,38 +15,53 @@ module.exports = {
     if (oldMsg.partial) {
       try {
         await oldMsg.fetch();
-      } catch {
-        return;
-      }
+      } catch {}
     }
 
     if (newMsg.partial) {
       try {
         await newMsg.fetch();
-      } catch {
-        return;
-      }
+      } catch {}
     }
 
-    if (!oldMsg.author || oldMsg.author.bot) return;
-    if (oldMsg.content === newMsg.content) return;
+    if (oldMsg.author?.bot) return;
+
+    const before = clampText(oldMsg.content, 500, "None");
+    const after = clampText(newMsg.content, 500, "None");
+
+    if (before === after) return;
 
     const embed = new EmbedBuilder()
       .setColor("#f59e0b")
       .setAuthor({
-        name: oldMsg.author.tag,
-        iconURL: oldMsg.author.displayAvatarURL()
+        name: oldMsg.author?.tag || "Unknown User",
+        iconURL: oldMsg.author?.displayAvatarURL() || null
       })
       .setTitle("✏️ Message Edited")
       .addFields(
-        { name: "👤 User", value: `<@${oldMsg.author.id}>`, inline: true },
-        { name: "🆔 ID", value: oldMsg.author.id, inline: true },
-        { name: "📍 Channel", value: `<#${oldMsg.channel.id}>` },
-        { name: "Before", value: trimText(oldMsg.content) },
-        { name: "After", value: trimText(newMsg.content) }
+        {
+          name: "👤 User",
+          value: oldMsg.author?.id ? `<@${oldMsg.author.id}>` : "Unknown",
+          inline: true
+        },
+        {
+          name: "🆔 ID",
+          value: oldMsg.author?.id || "Unknown",
+          inline: true
+        },
+        {
+          name: "📍 Channel",
+          value: oldMsg.channel?.id ? `<#${oldMsg.channel.id}>` : "Unknown"
+        },
+        { name: "Before", value: before },
+        { name: "After", value: after }
       )
       .setFooter({ text: `Time: ${formatTime()}` })
       .setTimestamp();
+
+    if (newMsg.url) {
+      embed.addFields({ name: "🔗 Jump", value: newMsg.url });
+    }
 
     await sendLog(oldMsg.guild, LOGS.CHAT, embed);
   }
