@@ -6,7 +6,7 @@ const {
   findAuditEntry,
   formatExecutor,
   clampText
-} = require("./logSystem");
+} = require("../utils/logSystem");
 
 module.exports = {
   name: Events.MessageBulkDelete,
@@ -22,7 +22,14 @@ module.exports = {
 
     const auditEntry = await findAuditEntry(guild, {
       type: AuditLogEvent.MessageBulkDelete,
-      match: (entry) => entry.extra?.channel?.id === channel.id
+      match: (entry) => {
+        const sameChannel = entry.extra?.channel?.id === channel.id;
+        const countMatches = typeof entry.extra?.count === "number"
+          ? entry.extra.count >= messages.size
+          : true;
+
+        return sameChannel && countMatches;
+      }
     });
 
     const previewLines = [...messages.values()]
