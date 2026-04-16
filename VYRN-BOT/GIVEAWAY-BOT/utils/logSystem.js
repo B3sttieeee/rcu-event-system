@@ -1,5 +1,4 @@
 const { ChannelType } = require("discord.js");
-const { DateTime } = require("luxon");
 
 const LOGS = {
   JOIN_LEAVE: "1475992846912721018",
@@ -10,10 +9,20 @@ const LOGS = {
 const TIME_ZONE = "Europe/Warsaw";
 const AUDIT_MAX_AGE = 15_000;
 
-const formatTime = () =>
-  DateTime.now()
-    .setZone(TIME_ZONE)
-    .toFormat("dd.LL.yyyy • HH:mm:ss");
+const formatTime = () => {
+  return new Intl.DateTimeFormat("pl-PL", {
+    timeZone: TIME_ZONE,
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23"
+  })
+    .format(new Date())
+    .replace(",", " •");
+};
 
 const clampText = (value, max = 1024, fallback = "None") => {
   if (value === null || value === undefined) return fallback;
