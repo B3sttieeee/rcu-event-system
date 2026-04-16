@@ -38,7 +38,7 @@ module.exports = {
         (await member.guild.members.fetchMe().catch(() => null));
 
       if (!me) {
-        console.warn(`[JOIN] Missing guild bot member cache for ${member.guild.id}`);
+        console.warn(`[JOIN] Missing bot member in guild ${member.guild.id}`);
         return;
       }
 
@@ -47,7 +47,7 @@ module.exports = {
       if (!role) {
         console.warn(`[JOIN] Auto-role not found: ${AUTO_ROLE_ID}`);
       } else if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-        console.warn(`[JOIN] Missing ManageRoles permission`);
+        console.warn("[JOIN] Missing ManageRoles permission");
       } else if (me.roles.highest.comparePositionTo(role) <= 0) {
         console.warn(
           `[JOIN] Cannot assign role "${role.name}" because it is above or equal to bot's highest role`
@@ -58,29 +58,27 @@ module.exports = {
         await member.roles.add(role).then(() => {
           console.log(`[JOIN] Auto-role assigned: ${role.name} -> ${member.user.tag}`);
         }).catch((error) => {
-          console.error(
-            `[JOIN] Auto-role failed for ${member.user.tag}: ${error.message}`
-          );
+          console.error(`[JOIN] Auto-role failed for ${member.user.tag}: ${error.message}`);
         });
       }
 
       const channel = await resolveChannel(member.guild, WELCOME_CHANNEL_ID);
 
       if (!channel || !channel.isTextBased()) {
-        console.warn(`[JOIN] Welcome channel not found or not text-based: ${WELCOME_CHANNEL_ID}`);
+        console.warn(`[JOIN] Welcome channel not found: ${WELCOME_CHANNEL_ID}`);
         return;
       }
 
-      const channelPerms = channel.permissionsFor(me);
+      const permissions = channel.permissionsFor(me);
       if (
-        !channelPerms?.has([
+        !permissions?.has([
           PermissionFlagsBits.ViewChannel,
           PermissionFlagsBits.SendMessages,
           PermissionFlagsBits.EmbedLinks
         ])
       ) {
         console.warn(
-          `[JOIN] Missing channel permissions in ${WELCOME_CHANNEL_ID} (ViewChannel/SendMessages/EmbedLinks)`
+          `[JOIN] Missing permissions in welcome channel ${WELCOME_CHANNEL_ID}`
         );
         return;
       }
@@ -115,17 +113,13 @@ module.exports = {
           ].join("\n")
         )
         .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-        .setImage(
-          "https://media.discordapp.net/attachments/1475993709240778904/1486898592491896882/ezgif.com-video-to-gif-converter.gif"
-        )
+        .setImage("https://media.discordapp.net/attachments/1475993709240778904/1486898592491896882/ezgif.com-video-to-gif-converter.gif")
         .setFooter({
           text: `Member #${member.guild.memberCount} • VYRN`
         })
         .setTimestamp();
 
-      await channel.send({
-        embeds: [embed]
-      });
+      await channel.send({ embeds: [embed] });
 
       console.log(`[JOIN] Welcome embed sent -> ${member.user.tag}`);
     } catch (error) {
