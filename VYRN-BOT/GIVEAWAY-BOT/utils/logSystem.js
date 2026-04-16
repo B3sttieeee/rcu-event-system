@@ -41,14 +41,15 @@ const formatRoleList = (roles, max = 1024) => {
   return clampText(text, max, "None");
 };
 
-const resolveLogChannel = async (guild, channelId) => {
+const resolveTextChannel = async (guild, channelId) => {
   let channel = guild.channels.cache.get(channelId);
 
   if (!channel) {
     channel = await guild.channels.fetch(channelId).catch(() => null);
   }
 
-  if (!channel || !channel.isTextBased()) return null;
+  if (!channel) return null;
+  if (!channel.isTextBased()) return null;
   if (channel.type === ChannelType.GuildForum) return null;
 
   return channel;
@@ -56,7 +57,7 @@ const resolveLogChannel = async (guild, channelId) => {
 
 const sendLog = async (guild, channelId, embed) => {
   try {
-    const channel = await resolveLogChannel(guild, channelId);
+    const channel = await resolveTextChannel(guild, channelId);
     if (!channel) return false;
 
     await channel.send({ embeds: [embed] });
@@ -101,7 +102,7 @@ module.exports = {
   clampText,
   formatAttachments,
   formatRoleList,
-  resolveLogChannel,
+  resolveTextChannel,
   sendLog,
   findAuditEntry,
   formatExecutor
