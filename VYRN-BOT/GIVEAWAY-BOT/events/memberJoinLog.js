@@ -1,22 +1,21 @@
 const { Events, EmbedBuilder } = require("discord.js");
-const { LOGS, formatTime, sendLog } = require("../logSystem");
+const { LOGS, formatTime, sendLog } = require("./logSystem");
 
 module.exports = {
   name: Events.GuildMemberAdd,
 
   async execute(member) {
-    if (member.user.bot) return;
-
     const embed = new EmbedBuilder()
       .setColor("#22c55e")
       .setAuthor({
         name: member.user.tag,
         iconURL: member.user.displayAvatarURL()
       })
-      .setTitle("📥 Member Joined")
+      .setTitle(member.user.bot ? "🤖 Bot Joined" : "📥 Member Joined")
       .addFields(
-        { name: "👤 User", value: `${member}`, inline: true },
+        { name: "👤 User", value: `<@${member.id}>`, inline: true },
         { name: "🆔 ID", value: member.id, inline: true },
+        { name: "🤖 Bot", value: member.user.bot ? "Yes" : "No", inline: true },
         {
           name: "📅 Account Created",
           value: `<t:${Math.floor(member.user.createdTimestamp / 1000)}:F>`
@@ -27,7 +26,7 @@ module.exports = {
         },
         {
           name: "👥 Members",
-          value: `${member.guild.memberCount}`,
+          value: String(member.guild.memberCount),
           inline: true
         }
       )
