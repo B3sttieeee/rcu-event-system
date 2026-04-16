@@ -1,19 +1,32 @@
 const { Events, EmbedBuilder, AuditLogEvent } = require("discord.js");
-const { LOGS, formatTime, sendLog } = require("../logSystem");
+const {
+  LOGS,
+  formatTime,
+  sendLog,
+  findAuditEntry,
+  formatExecutor,
+  clampText,
+  formatAttachments
+} = require("./logSystem");
 
-const trimText = (text, limit = 1000) => {
-  if (!text) return null;
-  return text.length > limit ? `${text.slice(0, limit - 3)}...` : text;
-};
+const getDeletedContent = (message) => {
+  if (message.content) {
+    return clampText(message.content, 1000, "No content");
+  }
 
-const formatAttachments = (message) => {
-  if (!message.attachments?.size) return null;
+  if (message.attachments?.size) {
+    return "Attachment only";
+  }
 
-  const text = [...message.attachments.values()]
-    .map((attachment) => attachment.url)
-    .join("\n");
+  if (message.embeds?.length) {
+    return `Embed only (${message.embeds.length})`;
+  }
 
-  return trimText(text, 1000);
+  if (message.stickers?.size) {
+    return `Sticker only (${message.stickers.size})`;
+  }
+
+  return "Unavailable (message not cached)";
 };
 
 module.exports = {
@@ -25,54 +38,59 @@ module.exports = {
     if (message.partial) {
       try {
         await message.fetch();
-      } catch {
-        return;
-      }
+      } catch {}
     }
 
-    if (!message.author || message.author.bot) return;
+    if (message.author?.bot) return;
 
-    let executor = "Unknown";
+    const auditEntry = await findAuditEntry(message.guild, {
+      type: AuditLogEvent.MessageDelete,
+      match: (entry) => {
+        if (!message.author?.id) return false;
 
-    try {
-      const logs = await message.guild.fetchAuditLogs({
-        limit: 5,
-        type: AuditLogEvent.MessageDelete
-      });
-
-      const entry = logs.entries.find(
-        (log) =>
-          log.target?.id === message.author.id &&
-          log.extra?.channel?.id === message.channel.id &&
-          Date.now() - log.createdTimestamp < 15000
-      );
-
-      if (entry?.executor) {
-        executor = `<@${entry.executor.id}>`;
+        return (
+          entry.target?.id === message.author.id &&
+          entry.extra?.channel?.id === message.channel?.id
+        );
       }
-    } catch {}
+    });
 
-    const content = trimText(message.content, 1000) || "No content";
-    const attachments = formatAttachments(message);
+    const authorTag = message.author?.tag || "Unknown User";
+    const authorId = message.author?.id || "Unknown";
+    const authorMention = message.author?.id
+      ? `<@${message.author.id}>`
+      : "Unknown";
 
     const embed = new EmbedBuilder()
       .setColor("#ef4444")
       .setAuthor({
-        name: message.author.tag,
-        iconURL: message.author.displayAvatarURL()
+        name: authorTag,
+        iconURL: message.author?.displayAvatarURL() || null
       })
       .setTitle("🗑 Message Deleted")
       .addFields(
-        { name: "👤 User", value: `<@${message.author.id}>`, inline: true },
-        { name: "🛠 Deleted By", value: executor, inline: true },
-        { name: "📍 Channel", value: `<#${message.channel.id}>` },
-        { name: "💬 Content", value: content }
+        { name: "👤 User", value: authorMention, inline: true },
+        { name: "🆔 ID", value: authorId, inline: true },
+        { name: "🛠 Deleted By", value: formatExecutor(auditEntry), inline: true },
+        {
+          name: "📍 Channel",
+          value: message.channel?.id ? `<#${message.channel.id}>` : "Unknown"
+        },
+        {
+          name: "💬 Content",
+          value: getDeletedContent(message)
+        }
       )
       .setFooter({ text: `Time: ${formatTime()}` })
       .setTimestamp();
 
+    const attachments = formatAttachments(message.attachments, 1000);
+
     if (attachments) {
-      embed.addFields({ name: "📎 Attachments", value: attachments });
+      embed.addFields({
+        name: "📎 Attachments",
+        value: attachments
+      });
     }
 
     await sendLog(message.guild, LOGS.CHAT, embed);
