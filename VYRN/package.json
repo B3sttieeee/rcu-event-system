@@ -1,1 +1,14 @@
-
+{
+  "name": "discord-bot",
+  "version": "1.0.0",
+  "description": "A Discord bot with events, commands, and music support.",
+  "main": "Bot.js",
+  "scripts": {
+    "start": "node Bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.13.0",
+    "erela.js": "^2.0.0",
+    "dotenv": "^16.3.1"
+  }
+}
