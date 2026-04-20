@@ -6,11 +6,11 @@
     "start": "node bot.js"
   },
   "dependencies": {
-    "@discordjs/builders": "^0.8.0",
-    "@discordjs/rest": "^0.6.0",
-    "discord-api-types": "^10.0.1",
-    "discord.js": "^14.3.0",
-    "dotenv": "^16.0.0",
-    "ytdl-core": "^4.10.0"
+    "@discordjs/builders": "^10.2.0",
+    "@discordjs/rest": "^0.5.0",
+    "discord-api-types": "^10.1.0",
+    "discord.js": "^14.7.0",
+    "dotenv": "^16.0.3",
+    "ytdl-core": "^5.2.0"
   }
 }
