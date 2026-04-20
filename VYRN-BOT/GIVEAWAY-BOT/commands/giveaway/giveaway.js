@@ -3,7 +3,7 @@ const {
   PermissionFlagsBits,
   EmbedBuilder
 } = require("discord.js");
-const { createGiveaway } = require("../../utils/giveawaysystem"); // ✅ Poprawiona ścieżka
+const { createGiveaway } = require("../../utils/giveawaySystem"); // ✅ Poprawiona ścieżka
 
 // ====================== WALIDACJA ======================
 function isValidTime(time) {
