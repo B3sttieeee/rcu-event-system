@@ -76,7 +76,8 @@ function createGiveaway(interaction, options) {
         requiredRole,
         endTime: Date.now() + duration,
         participants: new Set(),
-        creatorId: interaction.user.id
+        creatorId: interaction.user.id,
+        isRerolled: false
       };
 
       giveaways.set(message.id, giveawayData);
@@ -153,7 +154,98 @@ async function endGiveaway(messageId) {
   }
 }
 
+async function reroll(client, messageId) {
+  try {
+    const giveaway = giveaways.get(messageId);
+    if (!giveaway) {
+      return "❌ Nie znaleziono giveawayu o podanym ID.";
+    }
+
+    const channel = await client.channels.fetch(giveaway.channelId);
+    if (!channel) {
+      return "❌ Nie można znaleźć kanału, w którym znajduje się giveaway.";
+    }
+
+    const message = await channel.messages.fetch(messageId);
+    if (!message) {
+      return "❌ Nie można znaleźć wiadomości giveawayu.";
+    }
+
+    // Pobranie uczestników
+    const participants = Array.from(giveaway.participants);
+    
+    if (participants.length === 0) {
+      return "❌ Nikt nie wziął udziału w giveawayie.";
+    }
+
+    // Losowanie nowych zwycięzców
+    let winners = [];
+    if (participants.length >= giveaway.winners) {
+      winners = [...participants]
+        .sort(() => 0.5 - Math.random())
+        .slice(0, giveaway.winners);
+    } else {
+      winners = participants;
+    }
+
+    // Aktualizacja embeda
+    const embed = message.embeds[0].toJSON();
+    
+    // Usunięcie poprzednich zwycięzców
+    embed.fields = embed.fields.filter(field => field.name !== "🎉 Zwycięzcy");
+    
+    // Dodanie nowych zwycięzców
+    embed.fields.push(
+      { name: "🎉 Zwycięzcy (reroll)", value: winners.length > 0 ? winners.map(id => `<@${id}>`).join(", ") : "Nikt nie uczestniczył", inline: false }
+    );
+    
+    // Zaktualizowanie statusu giveawayu
+    giveaway.isRerolled = true;
+
+    await message.edit({ embeds: [embed] });
+
+    // Wysyłanie wiadomości zwycięzcom
+    if (winners.length > 0) {
+      const winnerMessage = winners.map(id => `<@${id}>`).join(", ");
+      await channel.send(`🎉 Gratulacje ${winnerMessage}! Wygraliście **${giveaway.prize}**! 🎉`);
+    }
+
+    return `✅ Reroll zakończony pomyślnie!\nNowi zwycięzcy: ${winners.map(id => `<@${id}>`).join(", ")}`;
+  } catch (error) {
+    console.error("Błąd podczas rerolla:", error);
+    return "❌ Wystąpił błąd podczas rerolla.";
+  }
+}
+
+async function resumeGiveaway(client, messageId) {
+  try {
+    const giveaway = giveaways.get(messageId);
+    if (!giveaway) {
+      return false;
+    }
+
+    // Sprawdzenie czy giveaway już się skończył
+    if (Date.now() > giveaway.endTime) {
+      return false;
+    }
+
+    // Resetowanie timerów dla nowego bota
+    const timeLeft = giveaway.endTime - Date.now();
+    
+    setTimeout(async () => {
+      await endGiveaway(messageId);
+    }, timeLeft);
+
+    return true;
+  } catch (error) {
+    console.error("Błąd podczas wznawiania giveawayu:", error);
+    return false;
+  }
+}
+
 module.exports = {
   createGiveaway,
-  endGiveaway
+  endGiveaway,
+  reroll,
+  resumeGiveaway
 };
