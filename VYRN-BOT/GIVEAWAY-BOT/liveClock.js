@@ -41,7 +41,7 @@ async function startLiveClock(client) {
     
     let lastName = null;
     
-    // Funkcja do aktualizacji czasu natychmiast
+    // Funkcja do aktualizacji czasu
     async function updateClock() {
       try {
         const time = getWarsawTime();
@@ -61,10 +61,15 @@ async function startLiveClock(client) {
     // Natychmiastowa aktualizacja
     await updateClock();
     
-    // Następne aktualizacje co minutę
+    // Aktualizacja co sekundę, ale z kontrolą, żeby nie spamować API
+    let lastUpdate = 0;
     setInterval(async () => {
-      await updateClock();
-    }, 60 * 1000); // co minutę
+      const now = Date.now();
+      if (now - lastUpdate >= 60000) { // Co 60 sekund
+        await updateClock();
+        lastUpdate = now;
+      }
+    }, 1000); // Sprawdzaj co sekundę
     
     console.log("[CLOCK] Live clock uruchomiony pomyślnie");
   } catch (error) {
