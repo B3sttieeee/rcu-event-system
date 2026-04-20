@@ -3,7 +3,7 @@ const {
   PermissionFlagsBits,
   EmbedBuilder
 } = require("discord.js");
-const { reroll } = require("../../utils/giveawaysystem"); // Poprawiona ścieżka
+const { reroll } = require("../../utils/giveawaySystem"); // Poprawiona ścieżka
 
 module.exports = {
   data: new SlashCommandBuilder()
