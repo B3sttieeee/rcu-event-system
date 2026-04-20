@@ -1,21 +1,19 @@
 {
   "name": "discord-music-bot",
   "version": "1.0.0",
-  "description": "Discord Music Bot z wsparciem YouTube (i przyszłym Spotify)",
+  "description": "Discord Music Bot – YouTube",
   "main": "bot.js",
-  "type": "module", 
   "scripts": {
-    "start": "node bot.js",
-    "dev": "node bot.js"
+    "start": "node bot.js"
   },
   "dependencies": {
-    "discord.js": "^14.26.3",
+    "discord.js": "^14.18.0",
     "@discordjs/voice": "^0.19.2",
     "@discordjs/opus": "^0.10.0",
     "ytdl-core": "^4.11.5",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.4.7"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18"
   }
 }
