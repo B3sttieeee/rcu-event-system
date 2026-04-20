@@ -1,17 +1,44 @@
-# Użyj obrazu Node.js jako podstawy
-FROM node:22
+# ========================
+# Stage 1: Builder
+# ========================
+FROM node:22-slim AS builder
 
-# Ustaw katalog roboczy
 WORKDIR /app
 
-# Skopiuj package.json i package-lock.json (jeśli istnieje)
+# Skopiuj pliki package i zainstaluj WSZYSTKIE zależności (w tym dev jeśli potrzebne)
 COPY package*.json ./
+RUN npm ci --include=dev
 
-# Zainstaluj zależności
-RUN npm install --only=production
-
-# Skopiuj resztę plików z projektu
+# Skopiuj resztę kodu
 COPY . .
 
-# Ustaw polecenie startowe
+# ========================
+# Stage 2: Production
+# ========================
+FROM node:22-slim
+
+# Zainstaluj ffmpeg (wymagany do odtwarzania audio w @discordjs/voice)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Skopiuj tylko niezbędne pliki z buildera
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/bot.js ./
+# Jeśli masz inne foldery (np. commands, events) – dodaj je
+# COPY --from=builder /app/ ./
+
+# Zainstaluj tylko produkcyjne zależności
+RUN npm ci --only=production && npm cache clean --force
+
+# Utwórz użytkownika nie-root dla bezpieczeństwa
+RUN useradd -m -u 1001 botuser
+USER botuser
+
+# Zmienne środowiskowe
+ENV NODE_ENV=production
+
+# Uruchom bota
 CMD ["node", "bot.js"]
