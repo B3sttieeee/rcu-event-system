@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
-const { resumeGiveaway } = require("../../utils/giveawaySystem");   // ← POPRAWIONA ŚCIEŻKA
+const { resumeGiveaway } = require("../../utils/giveawaySystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -12,25 +12,19 @@ module.exports = {
         .setRequired(true)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
-
   async execute(interaction) {
     try {
       await interaction.deferReply({ ephemeral: true });
-
       const messageId = interaction.options.getString("message_id");
-
       const result = await resumeGiveaway(interaction.client, messageId);
-
       if (!result) {
         return interaction.editReply({
           content: "❌ Nie znaleziono giveawayu lub nie można go wznowić."
         });
       }
-
       return interaction.editReply({
         content: "✅ Giveaway został pomyślnie wznowiony!"
       });
-
     } catch (err) {
       console.error("❌ Błąd podczas wznawiania giveaway:", err);
       return interaction.editReply({
