@@ -27,7 +27,7 @@ async function startLiveClock(client) {
     async function updateClock() {
       try {
         // Pobierz dane o uczestnikach (np. z `giveawaysystem.js`)
-        const count = await getUserCount(channel, client); // Zaimplementuj tę funkcję
+        const count = await getUserCount(channel, client);
         if (count === lastCount) return;
         
         await channel.setName(formatUserCount(count));
