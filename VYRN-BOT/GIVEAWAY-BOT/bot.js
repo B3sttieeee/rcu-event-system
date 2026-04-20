@@ -8,16 +8,18 @@ const {
 require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
+
 const ROOT_DIR = __dirname;
 const COMMANDS_DIR = path.join(ROOT_DIR, "commands");
 const EVENTS_DIR = path.join(ROOT_DIR, "events");
+
 // =====================================================
 // CLIENT
 // =====================================================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMembers,
+    GatewayIntent_bits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
@@ -32,6 +34,7 @@ const client = new Client({
   ]
 });
 client.commands = new Collection();
+
 // =====================================================
 // HELPERS
 // =====================================================
@@ -43,6 +46,7 @@ const logError = (label, error) => {
   }
   console.error(error);
 };
+
 const getJsFiles = (dirPath) => {
   if (!fs.existsSync(dirPath)) return [];
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -59,7 +63,9 @@ const getJsFiles = (dirPath) => {
   }
   return files;
 };
+
 const relativeFile = (filePath) => path.relative(ROOT_DIR, filePath);
+
 // =====================================================
 // CLIENT / PROCESS ERRORS
 // =====================================================
@@ -71,7 +77,7 @@ client.rest.on("rateLimited", (info) => {
 client.on(Events.Warn, (info) => {
   console.warn(`[DISCORD WARN] ${info}`);
 });
-client.on(Events.Error, (error) => {
+client.on(事件.Error, (error) => {
   logError("Discord client error", error);
 });
 process.on("unhandledRejection", (reason) => {
@@ -80,6 +86,7 @@ process.on("unhandledRejection", (reason) => {
 process.on("uncaughtException", (error) => {
   logError("Uncaught exception", error);
 });
+
 // =====================================================
 // LOAD COMMANDS
 // =====================================================
@@ -113,6 +120,7 @@ const loadCommands = () => {
   console.log(`[COMMAND] Total loaded: ${loaded}`);
   return loaded;
 };
+
 // =====================================================
 // LOAD EVENTS
 // =====================================================
@@ -162,6 +170,7 @@ const loadEvents = () => {
   console.log(`[EVENT] Total loaded: ${loaded}`);
   return loaded;
 };
+
 // =====================================================
 // BOOTSTRAP
 // =====================================================
@@ -172,14 +181,15 @@ const startBot = async () => {
   }
   loadCommands();
   loadEvents();
+
   try {
     await client.login(process.env.TOKEN);
     console.log("[LOGIN] Success");
-    
+
     // Uruchom live clock po zalogowaniu się klienta
     client.once('ready', async () => {
       console.log(`[READY] ${client.user.tag} is online!`);
-      
+
       try {
         const { startLiveClock } = require("./liveClock"); // upewnij się, że ścieżka jest poprawna
         startLiveClock(client);
@@ -192,4 +202,5 @@ const startBot = async () => {
     process.exit(1);
   }
 };
+
 startBot();
