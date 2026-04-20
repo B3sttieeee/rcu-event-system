@@ -1,4 +1,5 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { joinVoiceChannel, createAudioPlayer, createAudioResource, AudioPlayerStatus, VoiceConnectionStatus } = require('@discordjs/voice');
 const ytdl = require('ytdl-core');
 require('dotenv').config();
 
@@ -11,103 +12,183 @@ const client = new Client({
   ],
 });
 
+const queue = new Map(); // guildId => queue object
+
 client.once('ready', () => {
-  console.log(`Logged in as ${client.user.tag}!`);
+  console.log(`✅ Zalogowano jako ${client.user.tag}!`);
 });
 
-const queue = {};
+// Główna funkcja odtwarzania
+const play = async (guild, song) => {
+  const guildQueue = queue.get(guild.id);
+  if (!song) {
+    guildQueue.connection.destroy();
+    queue.delete(guild.id);
+    guildQueue.textChannel.send('🎵 Kolejka się skończyła. Opuściłem kanał głosowy.');
+    return;
+  }
 
+  const stream = ytdl(song.url, {
+    filter: 'audioonly',
+    quality: 'highestaudio',
+    highWaterMark: 1 << 25, // lepsza stabilność
+  });
+
+  const resource = createAudioResource(stream, { inlineVolume: true });
+  guildQueue.player.play(resource);
+
+  const embed = new EmbedBuilder()
+    .setColor(0x00ff00)
+    .setTitle('🎶 Teraz odtwarzam')
+    .setDescription(`**${song.title}**`)
+    .setURL(song.url);
+
+  guildQueue.textChannel.send({ embeds: [embed] });
+};
+
+// Komendy
 client.on('messageCreate', async (message) => {
   if (message.author.bot || message.channel.type === 'dm') return;
 
-  const args = message.content.slice(1).split(/ +/);
+  if (!message.content.startsWith('!')) return;
+
+  const args = message.content.slice(1).trim().split(/ +/);
   const command = args.shift().toLowerCase();
+
+  const guildQueue = queue.get(message.guild.id);
 
   switch (command) {
     case 'join':
-      if (!message.member.voice.channel)
-        return message.reply('Nie jesteś na kanale głosowym!');
-      const connection = await message.member.voice.channel.join();
-      queue[message.guild.id] = { textChannel: message.channel, voiceChannel: message.member.voice.channel, connection, songs: [] };
-      message.reply(`Dołączono do kanału ${message.member.voice.channel.name}!`);
+    case 'j':
+      if (!message.member.voice.channel) {
+        return message.reply('❌ Musisz być na kanale głosowym!');
+      }
+
+      const connection = joinVoiceChannel({
+        channelId: message.member.voice.channel.id,
+        guildId: message.guild.id,
+        adapterCreator: message.guild.voiceAdapterCreator,
+      });
+
+      const player = createAudioPlayer();
+
+      connection.subscribe(player);
+
+      queue.set(message.guild.id, {
+        textChannel: message.channel,
+        voiceChannel: message.member.voice.channel,
+        connection,
+        player,
+        songs: [],
+      });
+
+      message.reply(`✅ Dołączono do **${message.member.voice.channel.name}**!`);
+
+      // Obsługa błędów połączenia
+      connection.on(VoiceConnectionStatus.Disconnected, () => {
+        queue.delete(message.guild.id);
+      });
       break;
+
     case 'play':
-      if (!args.length) return message.reply('Podaj link do utworu!');
-      const songInfo = await ytdl.getInfo(args[0]);
-      const song = {
-        title: songInfo.title,
-        url: songInfo.video_url,
-      };
+    case 'p':
+      if (!args.length) return message.reply('❌ Podaj link do YouTube!');
 
-      if (queue[message.guild.id]) queue[message.guild.id].songs.push(song);
-      else {
-        queue[message.guild.id] = {
-          textChannel: message.channel,
-          voiceChannel: message.member.voice.channel,
-          connection: null,
-          songs: [song],
+      const url = args[0];
+      if (!ytdl.validateURL(url)) {
+        return message.reply('❌ Podaj **poprawny** link YouTube!');
+      }
+
+      try {
+        const songInfo = await ytdl.getInfo(url);
+        const song = {
+          title: songInfo.videoDetails.title,
+          url: songInfo.videoDetails.video_url,
         };
+
+        if (!guildQueue) {
+          // Pierwsza piosenka → dołączamy
+          if (!message.member.voice.channel) {
+            return message.reply('❌ Musisz być na kanale głosowym!');
+          }
+
+          const connection = joinVoiceChannel({
+            channelId: message.member.voice.channel.id,
+            guildId: message.guild.id,
+            adapterCreator: message.guild.voiceAdapterCreator,
+          });
+
+          const player = createAudioPlayer();
+
+          const newQueue = {
+            textChannel: message.channel,
+            voiceChannel: message.member.voice.channel,
+            connection,
+            player,
+            songs: [song],
+          };
+
+          queue.set(message.guild.id, newQueue);
+
+          connection.subscribe(player);
+
+          player.on(AudioPlayerStatus.Idle, () => {
+            const q = queue.get(message.guild.id);
+            if (q) {
+              q.songs.shift();
+              play(message.guild, q.songs[0]);
+            }
+          });
+
+          play(message.guild, song);
+        } else {
+          guildQueue.songs.push(song);
+          message.reply(`✅ Dodano do kolejki: **${song.title}**`);
+        }
+      } catch (error) {
+        console.error(error);
+        message.reply('❌ Wystąpił błąd podczas dodawania utworu.');
+      }
+      break;
+
+    case 'skip':
+    case 's':
+      if (!guildQueue || !guildQueue.songs.length) {
+        return message.reply('❌ Nie ma nic w kolejce!');
+      }
+      guildQueue.songs.shift();
+      play(message.guild, guildQueue.songs[0]);
+      message.reply('⏭ Pominięto utwór!');
+      break;
+
+    case 'queue':
+    case 'q':
+      if (!guildQueue || !guildQueue.songs.length) {
+        return message.reply('❌ Kolejka jest pusta.');
       }
 
-      if (!player(queue[message.guild.id])) return;
-      message.reply(`Dodano do kolejki: **${song.title}**`);
+      let queueMsg = '**📜 Kolejka:**\n';
+      guildQueue.songs.forEach((song, index) => {
+        queueMsg += `${index + 1}. ${song.title}\n`;
+      });
+
+      message.reply(queueMsg);
       break;
+
     case 'leave':
-      if (queue[message.guild.id]) {
-        queue[message.guild.id].connection.disconnect();
-        delete queue[message.guild.id];
-        return message.reply('Opuściłem kanał głosowy!');
+    case 'l':
+      if (guildQueue) {
+        guildQueue.connection.destroy();
+        queue.delete(message.guild.id);
+        message.reply('👋 Opuściłem kanał głosowy.');
+      } else {
+        message.reply('❌ Nie jestem na żadnym kanale głosowym.');
       }
-      return message.reply('Nie jestem na żadnym kanale głosowym!');
-    case 'skip':
-      if (queue[message.guild.id]) {
-        if (queue[message.guild.id].songs.length > 1) {
-          play(queue[message.guild.id]);
-          return message.reply('Pominięto aktualny utwór!');
-        }
-        queue[message.guild.id].connection.disconnect();
-        delete queue[message.guild.id];
-        return message.reply('Nie ma więcej utworów w kolejce.');
-      }
-      return message.reply('Nie jestem na żadnym kanale głosowym!');
-    case 'queue':
-      if (queue[message.guild.id]) {
-        let queueMessage = `**Kolejka:**\n`;
-        queue[message.guild.id].songs.forEach((song, index) => {
-          queueMessage += `${index + 1}. ${song.title}\n`;
-        });
-        return message.reply(queueMessage);
-      }
-      return message.reply('Nie ma żadnych utworów w kolejce.');
+      break;
+
     default:
-      return;
+      break;
   }
 });
-
-const player = (guildQueue) => {
-  if (!guildQueue.songs.length) {
-    guildQueue.voiceChannel.leave();
-    delete queue[guildQueue.guild.id];
-    return false;
-  }
-
-  const dispatcher = guildQueue.connection
-    .play(ytdl(guildQueue.songs[0].url, { filter: 'audioonly' }))
-    .on('finish', () => {
-      guildQueue.songs.shift();
-      player(guildQueue);
-    })
-    .on('error', (err) => console.error(err));
-
-  guildQueue.textChannel.send(`Teraz odtwarzam: **${guildQueue.songs[0].title}**`);
-  return true;
-};
-
-const play = (guildQueue) => {
-  if (!guildQueue.connection) {
-    guildQueue.connection = await guildQueue.voiceChannel.join();
-  }
-  player(guildQueue);
-};
 
 client.login(process.env.TOKEN).catch(console.error);
