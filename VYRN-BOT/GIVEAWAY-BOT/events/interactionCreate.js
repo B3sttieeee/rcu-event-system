@@ -5,7 +5,7 @@ const {
 // ====================== SYSTEMS ======================
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
-const { handleGiveaway } = require("../../utils/giveawaysystem"); // ✅ POPRAWIONA ŚCIEŻKA
+const { handleGiveaway } = require("../../utils/giveawaysystem");
 const { handleExpeditionSelect } = require("../commands/expedition");
 const { isDailyReady, claimDaily } = require("../utils/profileSystem");
 
