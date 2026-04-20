@@ -33,6 +33,7 @@ const client = new Client({
     Partials.GuildMember
   ]
 });
+
 client.commands = new Collection();
 
 // =====================================================
@@ -74,15 +75,19 @@ client.rest.on("rateLimited", (info) => {
     `[RATE LIMIT] ${info.method} ${info.url} | retry in ${info.timeToReset}ms`
   );
 });
+
 client.on(Events.Warn, (info) => {
   console.warn(`[DISCORD WARN] ${info}`);
 });
+
 client.on(Events.Error, (error) => {
   logError("Discord client error", error);
 });
+
 process.on("unhandledRejection", (reason) => {
   logError("Unhandled rejection", reason);
 });
+
 process.on("uncaughtException", (error) => {
   logError("Uncaught exception", error);
 });
@@ -129,7 +134,7 @@ const loadEvents = () => {
     console.warn("[WARN] events folder missing");
     return 0;
   }
-  const files = getJsFiles(EVENT旗下);
+  const files = getJsFiles(EVENTS_DIR); // Poprawiono: EVENT旗下 -> EVENTS_DIR
   const handlersCount = new Map();
   let loaded = 0;
   for (const filePath of files) {
@@ -181,7 +186,6 @@ const startBot = async () => {
   }
   loadCommands();
   loadEvents();
-
   try {
     await client.login(process.env.TOKEN);
     console.log("[LOGIN] Success");
@@ -189,7 +193,6 @@ const startBot = async () => {
     // Uruchom live clock po zalogowaniu się klienta
     client.once('ready', async () => {
       console.log(`[READY] ${client.user.tag} is online!`);
-
       try {
         const { startLiveClock } = require("./liveClock");
         startLiveClock(client);
