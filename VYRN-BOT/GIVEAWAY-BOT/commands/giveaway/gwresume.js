@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require("discord.js");
-const { resumeGiveaway } = require("../../utils/giveawaysystem");
+const { resumeGiveaway } = require("../../utils/giveawaySystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
