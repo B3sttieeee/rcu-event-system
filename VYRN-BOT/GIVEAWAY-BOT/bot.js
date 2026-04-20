@@ -1,21 +1,10 @@
-const {
-  Client,
-  GatewayIntentBits,
-  Collection,
-  Partials,
-  Events
-} = require("discord.js");
+const { Client, GatewayIntentBits, Collection } = require("discord.js");
 require("dotenv").config();
+
 const fs = require("fs");
 const path = require("path");
 
-const ROOT_DIR = __dirname;
-const COMMANDS_DIR = path.join(ROOT_DIR, "commands");
-const EVENTS_DIR = path.join(ROOT_DIR, "events");
-
-// =====================================================
-// CLIENT
-// =====================================================
+// ====================== CLIENT ======================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -23,187 +12,153 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
-    GatewayIntentBits.GuildModeration
-  ],
-  partials: [
-    Partials.Message,
-    Partials.Channel,
-    Partials.Reaction,
-    Partials.User,
-    Partials.GuildMember
   ]
 });
 
 client.commands = new Collection();
 
-// =====================================================
-// HELPERS
-// =====================================================
-const logError = (label, error) => {
-  console.error(`[ERROR] ${label}`);
-  if (error?.stack) {
-    console.error(error.stack);
-    return;
-  }
-  console.error(error);
-};
-
-const getJsFiles = (dirPath) => {
-  if (!fs.existsSync(dirPath)) return [];
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  const files = [];
-  for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...getJsFiles(fullPath));
-      continue;
-    }
-    if (entry.isFile() && entry.name.endsWith(".js")) {
-      files.push(fullPath);
-    }
-  }
-  return files;
-};
-
-const relativeFile = (filePath) => path.relative(ROOT_DIR, filePath);
-
-// =====================================================
-// CLIENT / PROCESS ERRORS
-// =====================================================
+// ====================== RATE LIMIT ======================
 client.rest.on("rateLimited", (info) => {
-  console.warn(
-    `[RATE LIMIT] ${info.method} ${info.url} | retry in ${info.timeToReset}ms`
-  );
+  console.warn(`[RATE LIMIT] ${info.method} ${info.url} — ${info.timeToReset}ms`);
 });
 
-client.on(Events.Warn, (info) => {
-  console.warn(`[DISCORD WARN] ${info}`);
-});
+// ====================== LOAD COMMANDS ======================
+function loadCommands() {
+  const commandsPath = path.join(__dirname, "commands");
+  if (!fs.existsSync(commandsPath)) return console.warn("⚠️ commands missing");
 
-client.on(Events.Error, (error) => {
-  logError("Discord client error", error);
-});
-
-process.on("unhandledRejection", (reason) => {
-  logError("Unhandled rejection", reason);
-});
-
-process.on("uncaughtException", (error) => {
-  logError("Uncaught exception", error);
-});
-
-// =====================================================
-// LOAD COMMANDS
-// =====================================================
-const loadCommands = () => {
-  if (!fs.existsSync(COMMANDS_DIR)) {
-    console.warn("[WARN] commands folder missing");
-    return 0;
-  }
-  const files = getJsFiles(COMMANDS_DIR);
   let loaded = 0;
-  for (const filePath of files) {
-    try {
-      delete require.cache[require.resolve(filePath)];
-      const command = require(filePath);
-      if (!command?.data?.name || typeof command.execute !== "function") {
-        console.warn(`[SKIP] Invalid command export: ${relativeFile(filePath)}`);
-        continue;
-      }
-      if (client.commands.has(command.data.name)) {
-        console.warn(
-          `[WARN] Command "${command.data.name}" already exists. Overwriting with ${relativeFile(filePath)}`
-        );
-      }
-      client.commands.set(command.data.name, command);
-      console.log(`[COMMAND] /${command.data.name} <- ${relativeFile(filePath)}`);
-      loaded++;
-    } catch (error) {
-      logError(`Failed loading command: ${relativeFile(filePath)}`, error);
-    }
-  }
-  console.log(`[COMMAND] Total loaded: ${loaded}`);
-  return loaded;
-};
 
-// =====================================================
-// LOAD EVENTS
-// =====================================================
-const loadEvents = () => {
-  if (!fs.existsSync(EVENTS_DIR)) {
-    console.warn("[WARN] events folder missing");
-    return 0;
-  }
-  const files = getJsFiles(EVENTS_DIR); // Poprawiono: EVENT旗下 -> EVENTS_DIR
-  const handlersCount = new Map();
-  let loaded = 0;
-  for (const filePath of files) {
-    try {
-      delete require.cache[require.resolve(filePath)];
-      const event = require(filePath);
-      if (!event?.name || typeof event.execute !== "function") {
-        console.warn(`[SKIP] Invalid event export: ${relativeFile(filePath)}`);
-        continue;
-      }
-      const runner = async (...args) => {
-        try {
-          await event.execute(...args, client);
-        } catch (error) {
-          logError(
-            `Event "${event.name}" failed in ${relativeFile(filePath)}`,
-            error
-          );
+  const items = fs.readdirSync(commandsPath);
+
+  for (const item of items) {
+    const itemPath = path.join(commandsPath, item);
+    const stat = fs.statSync(itemPath);
+
+    const loadFile = (filePath) => {
+      try {
+        const cmd = require(filePath);
+        if (cmd?.data?.name && typeof cmd.execute === "function") {
+          client.commands.set(cmd.data.name, cmd);
+          console.log(`✅ /${cmd.data.name}`);
+          loaded++;
         }
-      };
-      if (event.once) {
-        client.once(event.name, runner);
-      } else {
-        client.on(event.name, runner);
+      } catch (e) {
+        console.error("CMD ERROR:", e.message);
       }
-      handlersCount.set(event.name, (handlersCount.get(event.name) || 0) + 1);
-      console.log(`[EVENT] ${event.name} <- ${relativeFile(filePath)}`);
-      loaded++;
-    } catch (error) {
-      logError(`Failed loading event: ${relativeFile(filePath)}`, error);
-    }
-  }
-  for (const [eventName, count] of handlersCount.entries()) {
-    if (count > 1) {
-      console.log(`[EVENT] ${eventName} has ${count} handlers attached`);
-    }
-  }
-  console.log(`[EVENT] Total loaded: ${loaded}`);
-  return loaded;
-};
+    };
 
-// =====================================================
-// BOOTSTRAP
-// =====================================================
-const startBot = async () => {
-  if (!process.env.TOKEN) {
-    console.error("[FATAL] Missing TOKEN in .env");
-    process.exit(1);
+    if (stat.isDirectory()) {
+      fs.readdirSync(itemPath)
+        .filter(f => f.endsWith(".js"))
+        .forEach(f => loadFile(path.join(itemPath, f)));
+    } else if (item.endsWith(".js")) {
+      loadFile(itemPath);
+    }
   }
+
+  console.log(`📊 Commands: ${loaded}`);
+}
+
+// ====================== LOAD EVENTS ======================
+function loadEvents() {
+  const eventsPath = path.join(__dirname, "events");
+  if (!fs.existsSync(eventsPath)) return console.warn("⚠️ events missing");
+
+  const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
+  let loaded = 0;
+
+  for (const file of files) {
+    try {
+      const event = require(path.join(eventsPath, file));
+      if (!event?.name || !event?.execute) continue;
+
+      const runner = (...args) => event.execute(...args, client);
+
+      if (event.once) client.once(event.name, runner);
+      else client.on(event.name, runner);
+
+      console.log(`✅ event: ${event.name}`);
+      loaded++;
+    } catch (e) {
+      console.error("EVENT ERROR:", e.message);
+    }
+  }
+
+  console.log(`📊 Events: ${loaded}`);
+}
+
+// ====================== SYSTEMS ======================
+async function loadSystems() {
+  console.log("🚀 Loading systems...");
+
+  try {
+    const levelSystem = require("./utils/levelSystem");
+    levelSystem.startVoiceXP(client);
+  } catch (e) {
+    console.error("Level error:", e.message);
+  }
+
+  try {
+    const { startDailyReset } = require("./utils/profileSystem");
+    startDailyReset?.();
+  } catch (e) {}
+
+  try {
+    const { startClanSystem } = require("./utils/clanSystem");
+    startClanSystem?.(client);
+  } catch (e) {}
+
+  try {
+    const { loadCoins } = require("./utils/economySystem");
+    const { loadBoosts } = require("./utils/boostSystem");
+    loadCoins?.();
+    loadBoosts?.();
+  } catch (e) {}
+
+  // ticket panel
+  setTimeout(async () => {
+    try {
+      const { createTicketPanel } = require("./utils/ticketSystem");
+      await createTicketPanel(client);
+      console.log("🎟 Ticket panel ready");
+    } catch (e) {
+      console.error("Ticket error:", e.message);
+    }
+  }, 5000);
+
+  // 🕒 VOICE CLOCK START
+  try {
+    const voiceClock = require("./utils/voiceClock");
+    voiceClock.start(client);
+    console.log("🕒 Voice clock started");
+  } catch (e) {
+    console.error("Clock error:", e.message);
+  }
+}
+
+// ====================== READY ======================
+client.once("ready", async () => {
+  console.log("================================");
+  console.log(`🔥 Logged: ${client.user.tag}`);
+  console.log(`📊 Guilds: ${client.guilds.cache.size}`);
+  console.log("================================");
+
   loadCommands();
   loadEvents();
-  try {
-    await client.login(process.env.TOKEN);
-    console.log("[LOGIN] Success");
+  await loadSystems();
 
-    // Uruchom live clock po zalogowaniu się klienta
-    client.once('ready', async () => {
-      console.log(`[READY] ${client.user.tag} is online!`);
-      try {
-        const { startLiveClock } = require("./liveClock");
-        startLiveClock(client);
-      } catch (error) {
-        console.error("❌ Błąd podczas uruchamiania live clock:", error.message);
-      }
-    });
-  } catch (error) {
-    logError("Login failed", error);
+  console.log("✅ BOT READY");
+});
+
+// ====================== ERRORS ======================
+process.on("unhandledRejection", console.error);
+process.on("uncaughtException", console.error);
+
+// ====================== LOGIN ======================
+client.login(process.env.TOKEN)
+  .then(() => console.log("🔑 LOGIN OK"))
+  .catch(err => {
+    console.error("LOGIN ERROR:", err.message);
     process.exit(1);
-  }
-};
-
-startBot();
+  });
