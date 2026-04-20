@@ -1,69 +1,70 @@
 const { ChannelType } = require("discord.js");
+
+// Przykładowe ID kanału, który ma pokazywać licznik uczestników
 const CHANNEL_ID = "1494086652522397837";
 
-// Pobierz liczbę użytkowników w kanale głosowym
-function getUserCount(channel) {
-  return channel.members.size;
+function formatUserCount(count) {
+  return `👥-${count}`;
 }
 
-// Formatuj nazwę kanału z licznikiem osób
-function formatChannelName(count) {
-  return `🔊-${count}`;
-}
-
-// Główne funkcje
 async function startLiveClock(client) {
   try {
     const channel = await client.channels.fetch(CHANNEL_ID);
-
+    
     if (!channel) {
       console.log("❌ Kanał nie został znaleziony");
       return;
     }
 
-    console.log(`[DEBUG] Typ kanału: ${channel.type}`);
-    console.log(`[DEBUG] Nazwa kanału: ${channel.name}`);
-
-    // Sprawdź, czy to kanał głosowy
-    if (channel.type !== ChannelType.GuildVoice) {
-      console.log("❌ Kanał nie jest kanałem głosowym");
+    // Sprawdź, czy to kanał tekstowy lub głosowy
+    if (![ChannelType.GuildText, ChannelType.GuildVoice].includes(channel.type)) {
+      console.log("❌ Kanał musi być typu tekstowego lub głosowego");
       return;
     }
+    
+    let lastCount = 0;
 
-    let lastCount = null;
-
-    // Funkcja do aktualizacji licznika
     async function updateClock() {
       try {
-        const currentCount = getUserCount(channel);
-        const newName = formatChannelName(currentCount);
-
-        if (newName === lastCount) return; // Nie aktualizuj, jeśli brak zmian
-
-        await channel.setName(newName);
-        lastCount = newName;
-        console.log(`[COUNT] Zmieniono na ${newName}`);
+        // Pobierz dane o uczestnikach (np. z `giveawaysystem.js`)
+        const count = await getUserCount(channel, client); // Zaimplementuj tę funkcję
+        if (count === lastCount) return;
+        
+        await channel.setName(formatUserCount(count));
+        lastCount = count;
       } catch (err) {
-        console.error("❌ Error updating user count:", err.message);
+        console.error("❌ Błąd podczas aktualizacji licznika:", err.message);
       }
     }
 
-    // Natychmiastowa aktualizacja
+    // Natychmiastowe uaktualnienie
     await updateClock();
 
-    // Aktualizuj co sekundę, ale tylko raz na minutę
-    let lastUpdate = 0;
-    setInterval(async () => {
-      const now = Date.now();
-      if (now - lastUpdate >= 60000) { // Co 60 sekund
-        await updateClock();
-        lastUpdate = now;
-      }
-    }, 1000); // Sprawdzaj co sekundę
+    // Aktualizacja co 10 sekund
+    setInterval(updateClock, 10000);
 
-    console.log("[COUNT] User counter uruchomiony pomyślnie");
+    console.log("[CLOCK] Live clock uruchomiony pomyślnie");
   } catch (error) {
-    console.error("❌ Błąd podczas uruchamiania licznika użytkowników:", error.message);
+    console.error("❌ Błąd podczas uruchamiania live clock:", error.message);
+  }
+}
+
+// Przykładowa funkcja do pobierania liczby uczestników
+async function getUserCount(channel, client) {
+  try {
+    const giveaways = await loadGiveaways(client); // Implementacja w `giveawaysystem.js`
+    let totalUsers = 0;
+
+    for (const giveaway of Object.values(giveaways)) {
+      if (Array.isArray(giveaway.users)) {
+        totalUsers += giveaway.users.length;
+      }
+    }
+
+    return totalUsers;
+  } catch (err) {
+    console.error("❌ Błąd podczas liczenia uczestników:", err.message);
+    return 0;
   }
 }
 
