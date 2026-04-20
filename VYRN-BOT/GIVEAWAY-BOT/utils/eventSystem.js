@@ -15,15 +15,21 @@ const CONFIG = {
 
   ROLES: {
     MERCHANT: "1476000993660502139",
+    EGG: "1489930030166573150",
+    SPRING: "1476000993119568105",
   },
 
   IMAGES: {
     PANEL: "https://imgur.com/AybkuW5.png",
     MERCHANT: "https://imgur.com/7GBAq8Z.png",
+    EGG: "https://imgur.com/xppQUWX.png",
+    SPRING: "https://imgur.com/89tmfpV.png",
   },
 
   EVENTS: {
     merchant: { hours: [2, 5, 8, 11, 14, 17, 20, 23], role: "MERCHANT" },
+    spring: { hours: Array.from({ length: 24 }, (_, i) => i), role: "SPRING" },
+    egg: { hours: [0, 3, 6, 9, 12, 15, 18, 21], role: "EGG" },
   },
 
   REFRESH_INTERVAL: 10_000,
@@ -135,9 +141,11 @@ const roleMenu = () =>
       .setCustomId("role_menu")
       .setPlaceholder("Select event roles")
       .setMinValues(0)
-      .setMaxValues(1)
+      .setMaxValues(3)
       .addOptions([
         { label: "Merchant", value: "merchant", emoji: "🍯" },
+        { label: "Spring", value: "spring", emoji: "🌸" },
+        { label: "Egg", value: "egg", emoji: "🐣" },
       ])
   );
 
@@ -148,13 +156,15 @@ const dmMenu = () =>
       .setCustomId("dm_menu")
       .setPlaceholder("Event notifications DM")
       .setMinValues(0)
-      .setMaxValues(1)
+      .setMaxValues(3)
       .addOptions([
         { label: "Merchant", value: "merchant", emoji: "🍯" },
+        { label: "Spring", value: "spring", emoji: "🌸" },
+        { label: "Egg", value: "egg", emoji: "🐣" },
       ])
   );
 
-// ====================== CORE EVENT ENGINE ======================
+// ====================== CORE EVENT ENGINE (UNCHANGED) ======================
 function registerEvent(client, key, event, hour, roleId, image) {
   const now = getNow();
   const h = now.getHours();
@@ -236,10 +246,11 @@ async function startPanel(client) {
   }, CONFIG.REFRESH_INTERVAL);
 }
 
-// ====================== INTERACTIONS ======================
+// ====================== INTERACTIONS (FULL FIX) ======================
 async function handleEventInteraction(interaction) {
   const id = interaction.customId;
 
+  // REFRESH
   if (id === "refresh") {
     return interaction.update({
       embeds: [panelEmbed()],
@@ -247,6 +258,7 @@ async function handleEventInteraction(interaction) {
     });
   }
 
+  // ROLES MENU
   if (id === "roles") {
     return interaction.reply({
       content: "🎭 Select your roles:",
@@ -255,6 +267,7 @@ async function handleEventInteraction(interaction) {
     });
   }
 
+  // DM MENU
   if (id === "dm") {
     return interaction.reply({
       content: "📩 Select DM notifications:",
@@ -263,11 +276,14 @@ async function handleEventInteraction(interaction) {
     });
   }
 
+  // ROLE APPLY
   if (id === "role_menu") {
     const member = await interaction.guild.members.fetch(interaction.user.id);
 
     const map = {
       merchant: CONFIG.ROLES.MERCHANT,
+      spring: CONFIG.ROLES.SPRING,
+      egg: CONFIG.ROLES.EGG,
     };
 
     for (const r of Object.values(map)) {
@@ -287,6 +303,7 @@ async function handleEventInteraction(interaction) {
     });
   }
 
+  // DM SAVE
   if (id === "dm_menu") {
     const db = loadDB();
     db.dm[interaction.user.id] = interaction.values;
