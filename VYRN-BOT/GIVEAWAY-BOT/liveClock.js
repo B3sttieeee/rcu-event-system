@@ -1,67 +1,57 @@
 const { ChannelType } = require("discord.js");
 const CHANNEL_ID = "1494086652522397837";
 
-// format PL time (Warsaw)
-function getWarsawTime() {
-  return new Intl.DateTimeFormat("pl-PL", {
-    timeZone: "Europe/Warsaw",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date());
+// Pobierz liczbę użytkowników w kanale głosowym
+function getUserCount(channel) {
+  return channel.members.size;
 }
 
-// clean name for Discord channel
-function formatChannelName(time) {
-  return `🕒-${time.replace(":", "-")}`;
+// Formatuj nazwę kanału z licznikiem osób
+function formatChannelName(count) {
+  return `🔊-${count}`;
 }
 
-// main loop
+// Główne funkcje
 async function startLiveClock(client) {
   try {
     const channel = await client.channels.fetch(CHANNEL_ID);
-    
+
     if (!channel) {
       console.log("❌ Kanał nie został znaleziony");
       return;
     }
-    
+
     console.log(`[DEBUG] Typ kanału: ${channel.type}`);
     console.log(`[DEBUG] Nazwa kanału: ${channel.name}`);
-    
-    // Sprawdź czy to kanał głosowy lub tekstowy
-    const validChannelTypes = [
-      ChannelType.GuildVoice,
-      ChannelType.GuildText
-    ];
-    
-    if (!validChannelTypes.includes(channel.type)) {
-      console.log("❌ Kanał nie jest ani głosowy, ani tekstowy");
+
+    // Sprawdź, czy to kanał głosowy
+    if (channel.type !== ChannelType.GuildVoice) {
+      console.log("❌ Kanał nie jest kanałem głosowym");
       return;
     }
-    
-    let lastName = null;
-    
-    // Funkcja do aktualizacji czasu
+
+    let lastCount = null;
+
+    // Funkcja do aktualizacji licznika
     async function updateClock() {
       try {
-        const time = getWarsawTime();
-        const newName = formatChannelName(time);
-        
-        // nie spamujemy API jeśli nazwa taka sama
-        if (newName === lastName) return;
-        
+        const currentCount = getUserCount(channel);
+        const newName = formatChannelName(currentCount);
+
+        if (newName === lastCount) return; // Nie aktualizuj, jeśli brak zmian
+
         await channel.setName(newName);
-        lastName = newName;
-        console.log(`[CLOCK] Zmieniono na ${newName}`);
+        lastCount = newName;
+        console.log(`[COUNT] Zmieniono na ${newName}`);
       } catch (err) {
-        console.error("❌ Clock error:", err.message);
+        console.error("❌ Error updating user count:", err.message);
       }
     }
-    
+
     // Natychmiastowa aktualizacja
     await updateClock();
-    
-    // Aktualizacja co sekundę, ale z kontrolą, żeby nie spamować API
+
+    // Aktualizuj co sekundę, ale tylko raz na minutę
     let lastUpdate = 0;
     setInterval(async () => {
       const now = Date.now();
@@ -70,10 +60,10 @@ async function startLiveClock(client) {
         lastUpdate = now;
       }
     }, 1000); // Sprawdzaj co sekundę
-    
-    console.log("[CLOCK] Live clock uruchomiony pomyślnie");
+
+    console.log("[COUNT] User counter uruchomiony pomyślnie");
   } catch (error) {
-    console.error("❌ Błąd podczas uruchamiania live clock:", error.message);
+    console.error("❌ Błąd podczas uruchamiania licznika użytkowników:", error.message);
   }
 }
 
