@@ -25,17 +25,24 @@ async function startLiveClock(client) {
       return;
     }
     
-    // Sprawdź typ kanału
     console.log(`[DEBUG] Typ kanału: ${channel.type}`);
     console.log(`[DEBUG] Nazwa kanału: ${channel.name}`);
     
-    if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildText) {
+    // Sprawdź czy to kanał głosowy lub tekstowy
+    const validChannelTypes = [
+      ChannelType.GuildVoice,
+      ChannelType.GuildText
+    ];
+    
+    if (!validChannelTypes.includes(channel.type)) {
       console.log("❌ Kanał nie jest ani głosowy, ani tekstowy");
       return;
     }
     
     let lastName = null;
-    setInterval(async () => {
+    
+    // Funkcja do aktualizacji czasu natychmiast
+    async function updateClock() {
       try {
         const time = getWarsawTime();
         const newName = formatChannelName(time);
@@ -49,6 +56,14 @@ async function startLiveClock(client) {
       } catch (err) {
         console.error("❌ Clock error:", err.message);
       }
+    }
+    
+    // Natychmiastowa aktualizacja
+    await updateClock();
+    
+    // Następne aktualizacje co minutę
+    setInterval(async () => {
+      await updateClock();
     }, 60 * 1000); // co minutę
     
     console.log("[CLOCK] Live clock uruchomiony pomyślnie");
