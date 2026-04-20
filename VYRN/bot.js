@@ -1,62 +1,113 @@
-require('dotenv').config(); // Load environment variables from .env file
 const { Client, GatewayIntentBits } = require('discord.js');
-const { ERELA } = require('erela.js');
+const ytdl = require('ytdl-core');
+require('dotenv').config();
 
 const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-    ],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates,
+  ],
 });
 
-const erela = new ERELA(client, {
-    deleteCommandOnCooldown: 3,
-    defaultVolume: 50,
-    leaveOnEmpty: true,
-    leaveOnQueueEnd: false,
-    leaveOnStopCommand: false,
-    messageDeleteDelay: 1000,
+client.once('ready', () => {
+  console.log(`Logged in as ${client.user.tag}!`);
 });
 
-// Read the bot token from environment variables (do NOT commit .env to GitHub!)
-const TOKEN = process.env.TOKEN;
+const queue = {};
 
-if (!TOKEN) {
-    console.error('Error: Bot token is missing. Create a .env file with TOKEN=your_token_here');
-    process.exit(1);
-}
+client.on('messageCreate', async (message) => {
+  if (message.author.bot || message.channel.type === 'dm') return;
 
-client.on('ready', () => {
-    console.log(`Logged in as ${client.user.tag}!`);
-    erela.setHandler(client);
-});
+  const args = message.content.slice(1).split(/ +/);
+  const command = args.shift().toLowerCase();
 
-client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+  switch (command) {
+    case 'join':
+      if (!message.member.voice.channel)
+        return message.reply('Nie jesteś na kanale głosowym!');
+      const connection = await message.member.voice.channel.join();
+      queue[message.guild.id] = { textChannel: message.channel, voiceChannel: message.member.voice.channel, connection, songs: [] };
+      message.reply(`Dołączono do kanału ${message.member.voice.channel.name}!`);
+      break;
+    case 'play':
+      if (!args.length) return message.reply('Podaj link do utworu!');
+      const songInfo = await ytdl.getInfo(args[0]);
+      const song = {
+        title: songInfo.title,
+        url: songInfo.video_url,
+      };
 
-    const { commandName } = interaction;
+      if (queue[message.guild.id]) queue[message.guild.id].songs.push(song);
+      else {
+        queue[message.guild.id] = {
+          textChannel: message.channel,
+          voiceChannel: message.member.voice.channel,
+          connection: null,
+          songs: [song],
+        };
+      }
 
-    if (commandName === 'ping') {
-        await interaction.reply('Pong! 🏓');
-    }
-    else if (commandName === 'play') {
-        // Example: Play a song from YouTube
-        const query = interaction.options.getString('query', true);
-        try {
-            const result = await erela.player.searchTrack(query, interaction.channel, { requestedBy: interaction.user });
-            if (result) {
-                await interaction.reply(`Now playing: **${result.title}** by ${result.author}. 🎵`);
-            } else {
-                await interaction.reply('No results found. Try a different search term! 🔍');
-            }
-        } catch (error) {
-            console.error(error);
-            await interaction.reply('An error occurred while processing your request. 😞');
+      if (!player(queue[message.guild.id])) return;
+      message.reply(`Dodano do kolejki: **${song.title}**`);
+      break;
+    case 'leave':
+      if (queue[message.guild.id]) {
+        queue[message.guild.id].connection.disconnect();
+        delete queue[message.guild.id];
+        return message.reply('Opuściłem kanał głosowy!');
+      }
+      return message.reply('Nie jestem na żadnym kanale głosowym!');
+    case 'skip':
+      if (queue[message.guild.id]) {
+        if (queue[message.guild.id].songs.length > 1) {
+          play(queue[message.guild.id]);
+          return message.reply('Pominięto aktualny utwór!');
         }
-    }
-    // Add more commands here as needed
+        queue[message.guild.id].connection.disconnect();
+        delete queue[message.guild.id];
+        return message.reply('Nie ma więcej utworów w kolejce.');
+      }
+      return message.reply('Nie jestem na żadnym kanale głosowym!');
+    case 'queue':
+      if (queue[message.guild.id]) {
+        let queueMessage = `**Kolejka:**\n`;
+        queue[message.guild.id].songs.forEach((song, index) => {
+          queueMessage += `${index + 1}. ${song.title}\n`;
+        });
+        return message.reply(queueMessage);
+      }
+      return message.reply('Nie ma żadnych utworów w kolejce.');
+    default:
+      return;
+  }
 });
 
-// Register slash commands (you'll need to replace this with your actual command registration logic)
-client.login(TOKEN);
+const player = (guildQueue) => {
+  if (!guildQueue.songs.length) {
+    guildQueue.voiceChannel.leave();
+    delete queue[guildQueue.guild.id];
+    return false;
+  }
+
+  const dispatcher = guildQueue.connection
+    .play(ytdl(guildQueue.songs[0].url, { filter: 'audioonly' }))
+    .on('finish', () => {
+      guildQueue.songs.shift();
+      player(guildQueue);
+    })
+    .on('error', (err) => console.error(err));
+
+  guildQueue.textChannel.send(`Teraz odtwarzam: **${guildQueue.songs[0].title}**`);
+  return true;
+};
+
+const play = (guildQueue) => {
+  if (!guildQueue.connection) {
+    guildQueue.connection = await guildQueue.voiceChannel.join();
+  }
+  player(guildQueue);
+};
+
+client.login(process.env.TOKEN).catch(console.error);
