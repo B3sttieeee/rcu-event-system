@@ -19,7 +19,7 @@ const EVENTS_DIR = path.join(ROOT_DIR, "events");
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntent_bits.GuildMembers,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildVoiceStates,
@@ -77,7 +77,7 @@ client.rest.on("rateLimited", (info) => {
 client.on(Events.Warn, (info) => {
   console.warn(`[DISCORD WARN] ${info}`);
 });
-client.on(事件.Error, (error) => {
+client.on(Events.Error, (error) => {
   logError("Discord client error", error);
 });
 process.on("unhandledRejection", (reason) => {
@@ -129,7 +129,7 @@ const loadEvents = () => {
     console.warn("[WARN] events folder missing");
     return 0;
   }
-  const files = getJsFiles(EVENTS_DIR);
+  const files = getJsFiles(EVENT旗下);
   const handlersCount = new Map();
   let loaded = 0;
   for (const filePath of files) {
@@ -191,7 +191,7 @@ const startBot = async () => {
       console.log(`[READY] ${client.user.tag} is online!`);
 
       try {
-        const { startLiveClock } = require("./liveClock"); // upewnij się, że ścieżka jest poprawna
+        const { startLiveClock } = require("./liveClock");
         startLiveClock(client);
       } catch (error) {
         console.error("❌ Błąd podczas uruchamiania live clock:", error.message);
