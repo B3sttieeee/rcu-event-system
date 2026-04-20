@@ -1,17 +1,12 @@
-// bot.js - wersja ES Modules (import)
-
-import { Client, GatewayIntentBits, EmbedBuilder } from 'discord.js';
-import { 
+const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { 
   joinVoiceChannel, 
   createAudioPlayer, 
   createAudioResource, 
-  AudioPlayerStatus, 
-  VoiceConnectionStatus 
-} from '@discordjs/voice';
-import ytdl from 'ytdl-core';
-import dotenv from 'dotenv';
-
-dotenv.config();
+  AudioPlayerStatus 
+} = require('@discordjs/voice');
+const ytdl = require('ytdl-core');
+require('dotenv').config();
 
 const client = new Client({
   intents: [
@@ -22,7 +17,7 @@ const client = new Client({
   ],
 });
 
-const queue = new Map(); // guildId => queue
+const queue = new Map(); // guildId => queue object
 
 client.once('ready', () => {
   console.log(`✅ Zalogowano jako ${client.user.tag}!`);
@@ -56,13 +51,10 @@ const play = async (guild, song) => {
     guildQueue.textChannel.send({ embeds: [embed] });
   } catch (err) {
     console.error(err);
-    guildQueue.textChannel.send('❌ Błąd podczas odtwarzania utworu.');
+    guildQueue?.textChannel?.send('❌ Błąd podczas odtwarzania.');
   }
 };
 
-// ========================
-// Komendy
-// ========================
 client.on('messageCreate', async (message) => {
   if (message.author.bot || !message.content.startsWith('!')) return;
 
@@ -84,7 +76,6 @@ client.on('messageCreate', async (message) => {
       });
 
       const player = createAudioPlayer();
-
       connection.subscribe(player);
 
       queue.set(message.guild.id, {
@@ -124,6 +115,7 @@ client.on('messageCreate', async (message) => {
           });
 
           const player = createAudioPlayer();
+          connection.subscribe(player);
 
           const newQueue = {
             textChannel: message.channel,
@@ -134,7 +126,6 @@ client.on('messageCreate', async (message) => {
           };
 
           queue.set(message.guild.id, newQueue);
-          connection.subscribe(player);
 
           player.on(AudioPlayerStatus.Idle, () => {
             const q = queue.get(message.guild.id);
@@ -157,9 +148,8 @@ client.on('messageCreate', async (message) => {
 
     case 'skip':
     case 's':
-      if (!guildQueue?.songs?.length) 
+      if (!guildQueue || !guildQueue.songs.length) 
         return message.reply('❌ Nie ma nic w kolejce!');
-
       guildQueue.songs.shift();
       play(message.guild, guildQueue.songs[0]);
       message.reply('⏭ Pominięto utwór!');
@@ -167,13 +157,10 @@ client.on('messageCreate', async (message) => {
 
     case 'queue':
     case 'q':
-      if (!guildQueue?.songs?.length) 
+      if (!guildQueue || !guildQueue.songs.length) 
         return message.reply('❌ Kolejka jest pusta.');
-
       let queueMsg = '**📜 Kolejka:**\n';
-      guildQueue.songs.forEach((song, i) => {
-        queueMsg += `${i + 1}. ${song.title}\n`;
-      });
+      guildQueue.songs.forEach((song, i) => queueMsg += `${i + 1}. ${song.title}\n`);
       message.reply(queueMsg);
       break;
 
