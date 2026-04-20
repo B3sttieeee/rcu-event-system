@@ -3,12 +3,13 @@ const {
   PermissionFlagsBits,
   EmbedBuilder
 } = require("discord.js");
-const { createGiveaway } = require("../../utils/giveawaySystem"); // ✅ POPRAWIONA ŚCIEŻKA
+const { createGiveaway } = require("../../utils/giveawaysystem"); // ✅ Poprawiona ścieżka
 
 // ====================== WALIDACJA ======================
 function isValidTime(time) {
   return /^[0-9]+[smhd]$/.test(time.toLowerCase());
 }
+
 function validatePrize(prize) {
   if (prize.length < 3) return "❌ Nazwa nagrody jest za krótka (minimum 3 znaki).";
   if (prize.length > 100) return "❌ Nazwa nagrody jest za długa (maksymalnie 100 znaków).";
@@ -60,10 +61,11 @@ module.exports = {
         .setRequired(false)
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  
   async execute(interaction) {
     try {
       await interaction.deferReply({ ephemeral: true });
-
+      
       // Pobierz dane z interakcji
       const prize = interaction.options.getString("prize").trim();
       const winners = interaction.options.getInteger("winners");
@@ -71,25 +73,25 @@ module.exports = {
       const description = interaction.options.getString("description")?.trim() || null;
       const attachment = interaction.options.getAttachment("image");
       const requiredRole = interaction.options.getRole("required_role");
-
+      
       // ====================== WALIDACJA ======================
       const prizeError = validatePrize(prize);
       if (prizeError) {
         return await interaction.editReply({ content: prizeError });
       }
-
+      
       if (!isValidTime(time)) {
         return await interaction.editReply({
           content: "❌ **Nieprawidłowy format czasu!**\n\nPoprawne przykłady:\n`30s`, `15m`, `2h`, `1d`, `45m`"
         });
       }
-
+      
       if (winners < 1 || winners > 20) {
         return await interaction.editReply({
           content: "❌ Liczba zwycięzców musi być między 1 a 20."
         });
       }
-
+      
       // ====================== TWORZENIE GIVEAWAYU ======================
       const giveawayOptions = {
         prize,
@@ -99,9 +101,9 @@ module.exports = {
         image: attachment?.url || null,
         requiredRole: requiredRole?.id || null
       };
-
+      
       await createGiveaway(interaction, giveawayOptions);
-
+      
       // ====================== SUKCES ======================
       const successEmbed = new EmbedBuilder()
         .setColor("#22c55e")
@@ -114,7 +116,7 @@ module.exports = {
           ...(requiredRole ? [{ name: "🔒 Wymagana rola", value: `${requiredRole}`, inline: true }] : [])
         )
         .setTimestamp();
-
+      
       await interaction.editReply({ embeds: [successEmbed] });
       console.log(`🎉 Giveaway utworzony przez ${interaction.user.tag} | Nagroda: ${prize}`);
     } catch (err) {
@@ -122,7 +124,7 @@ module.exports = {
       const errorMessage = err.message.includes("Nie masz wystarczających uprawnień")
         ? "❌ Nie masz wymaganej roli do tworzenia giveawayów."
         : "❌ Wystąpił błąd podczas tworzenia giveawayu. Spróbuj ponownie.";
-
+      
       if (interaction.deferred || interaction.replied) {
         await interaction.editReply({ content: errorMessage }).catch(() => {});
       } else {
