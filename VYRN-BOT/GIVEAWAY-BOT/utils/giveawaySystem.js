@@ -67,10 +67,9 @@ function parseTime(timeStr) {
 
 function formatTimeLeft(ms) {
   if (ms <= 0) return "Zakończony";
-  const totalSeconds = Math.floor(ms / 1000);
-  const h = Math.floor(totalSeconds / 3600);
-  const m = Math.floor((totalSeconds % 3600) / 60);
-  const s = totalSeconds % 60;
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor((ms % 3600000) / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
 
   if (h > 0) return `${h}h ${m}m ${s}s`;
   if (m > 0) return `${m}m ${s}s`;
@@ -90,25 +89,26 @@ function buildEmbed(data) {
 
   const bonusText = Object.entries(BONUS_ROLES)
     .map(([roleId, bonus]) => `<@&${roleId}> → **+${bonus}**`)
-    .join("\n");
+    .join("\n") || "Brak bonusów";
 
   return new EmbedBuilder()
-    .setColor("#d4af37")
+    .setColor("#0a0a0a")                    // Ciemny motyw
     .setTitle(`🎉 ${data.prize}`)
-    .setDescription(data.description || "Kliknij przycisk poniżej, aby wziąć udział!")
+    .setDescription(data.description || "Kliknij przycisk poniżej, aby wziąć udział w giveawayu!")
     .addFields(
-      { name: "🏆 Zwycięzców", value: `\`${data.winners}\``, inline: true },
+      { name: "🏆 Liczba zwycięzców", value: `\`${data.winners}\``, inline: true },
       { name: "👥 Uczestników", value: `\`${data.users.length}\``, inline: true },
       { name: "⏳ Czas do końca", value: `\`${formatTimeLeft(timeLeft)}\``, inline: true },
-      { name: "🎟 System Boostów", value: bonusText || "Brak bonusów", inline: false }
+      { name: "🎟 System Boostów", value: bonusText, inline: false }
     )
+    .setImage(data.image || null)           // wsparcie dla obrazka
     .setFooter({ 
       text: `Host: ${data.hostId ? `<@${data.hostId}>` : "Nieznany"} • VYRN Giveaway` 
     })
     .setTimestamp();
 }
 
-// ====================== CREATE ======================
+// ====================== CREATE GIVEAWAY ======================
 async function createGiveaway(interaction, options) {
   const duration = parseTime(options.time);
   if (!duration) throw new Error("Nieprawidłowy format czasu!");
@@ -130,12 +130,17 @@ async function createGiveaway(interaction, options) {
   };
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("gw_join").setLabel("🎟 Dołącz").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("gw_leave").setLabel("❌ Wypisz się").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder()
+      .setCustomId("gw_join")
+      .setLabel("🎟 Dołącz")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId("gw_leave")
+      .setLabel("❌ Wypisz się")
+      .setStyle(ButtonStyle.Secondary)
   );
 
   const embed = buildEmbed(giveawayData);
-  if (giveawayData.image) embed.setImage(giveawayData.image);
 
   const msg = await interaction.channel.send({
     embeds: [embed],
@@ -148,7 +153,10 @@ async function createGiveaway(interaction, options) {
 
   startTimer(msg);
 
-  return msg.id;
+  await interaction.reply({ 
+    content: `✅ **Giveaway został utworzony!**\nID: \`${msg.id}\``, 
+    ephemeral: true 
+  });
 }
 
 // ====================== TIMER ======================
@@ -287,7 +295,10 @@ async function resumeGiveaway(client, messageId) {
 // ====================== EXPORTS ======================
 module.exports = {
   createGiveaway,
-  handleGiveaway: async (interaction) => { /* ... możesz zostawić starą lub przenieść tutaj jeśli chcesz */ },
+  handleGiveaway: async (interaction) => { 
+    // Możesz tu zostawić starą funkcję lub przenieść całą logikę buttonów
+    console.log("[GIVEAWAY] Button clicked");
+  },
   reroll,
   loadGiveaways: (client) => {
     const data = loadDB();
