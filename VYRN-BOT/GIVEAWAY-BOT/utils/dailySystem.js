@@ -33,7 +33,7 @@ function ensureDailyState(user) {
   return d;
 }
 
-function buildDailyEmbed(userId) {   // <-- Usunięto drugi parametr
+function buildDailyEmbed(userId) {
   const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
@@ -86,16 +86,20 @@ async function checkDailyDM(member) {
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
+    // === KLUCZOWA POPRAWKA ===
+    // Zawsze resetuj notified jeśli daily NIE jest gotowy
     if (!ready) {
-      if (daily.notified || daily.lastNotifyAttemptAt > 0) {
+      if (daily.notified) {
         daily.notified = false;
         daily.lastNotifyAttemptAt = 0;
         dmCooldown.delete(userId);
         saveProfile();
+        console.log(`[DAILY] Reset notified - nie gotowy → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
       }
       return false;
     }
 
+    // Już powiadomiony
     if (daily.notified) return false;
 
     const now = Date.now();
@@ -105,6 +109,7 @@ async function checkDailyDM(member) {
 
     if (now - lastAttempt < cooldown) return false;
 
+    // Wysyłamy DM
     daily.lastNotifyAttemptAt = now;
     dmCooldown.set(userId, now);
     saveProfile();
