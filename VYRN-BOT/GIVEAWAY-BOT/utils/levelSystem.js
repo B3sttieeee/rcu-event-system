@@ -35,7 +35,7 @@ let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
-const xpCooldown = new Map(); // cooldown dla wiadomości
+const xpCooldown = new Map(); // cooldown dla wiadomości XP
 
 // =====================================================
 // HELPERS
@@ -188,7 +188,9 @@ async function addXP(member, base = 0, length = 0, options = {}) {
   const db = loadDB();
   const cfg = loadConfig();
 
-  if (!db.xp[member.id]) db.xp[member.id] = normalizeUserXP();
+  if (!db.xp[member.id]) {
+    db.xp[member.id] = normalizeUserXP();
+  }
 
   let gain = safeBase;
   if ((length || 0) >= cfg.lengthThreshold) {
@@ -238,7 +240,7 @@ async function checkRoles(member, level) {
   for (const [reqLevel, roleId] of Object.entries(roles)) {
     if (level >= Number(reqLevel) && !member.roles.cache.has(roleId)) {
       await member.roles.add(roleId).catch(err => 
-        console.error(`[LEVEL] Failed to add role to ${member.user.tag}:`, err.message)
+        console.error(`[LEVEL] Failed to add role ${roleId} to ${member.user.tag}:`, err.message)
       );
     }
   }
@@ -260,33 +262,39 @@ async function handleMessageXP(member, content) {
 }
 
 // =====================================================
-// VOICE XP
+// VOICE XP + PROFILE TRACKER
 // =====================================================
 function startVoiceXP(client) {
-  if (voiceLoopStarted) return;
+  if (voiceLoopStarted) {
+    console.log("🎤 Voice XP already running");
+    return;
+  }
+
   voiceLoopStarted = true;
   console.log("🎤 Voice XP + Profile Voice Tracker started");
 
   setInterval(async () => {
     const cfg = loadConfig();
-    const processed = new Set();
+    const processedUsers = new Set();
 
     for (const guild of client.guilds.cache.values()) {
       for (const channel of guild.channels.cache.values()) {
-        if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) continue;
+        if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) {
+          continue;
+        }
 
         for (const member of channel.members.values()) {
-          if (!isEligibleVoiceMember(member) || processed.has(member.id)) continue;
+          if (!isEligibleVoiceMember(member) || processedUsers.has(member.id)) continue;
 
-          processed.add(member.id);
+          processedUsers.add(member.id);
 
-          addVoiceTime(member.id, 60);
+          addVoiceTime(member.id, 60); // +1 minuta do profilu
           await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => null);
           await triggerDailyCheck(member);
         }
       }
     }
-  }, 60_000);
+  }, 60_000); // co minutę
 }
 
 // =====================================================
@@ -296,14 +304,14 @@ function setMessageXP(value) {
   const cfg = loadConfig();
   cfg.messageXP = Number(value) || DEFAULT_CONFIG.messageXP;
   saveConfig();
-  console.log(`[LEVEL] Message XP set to ${cfg.messageXP}`);
+  console.log(`[LEVEL] Message XP ustawione na ${cfg.messageXP}`);
 }
 
 function setVoiceXP(value) {
   const cfg = loadConfig();
   cfg.voiceXP = Number(value) || DEFAULT_CONFIG.voiceXP;
   saveConfig();
-  console.log(`[LEVEL] Voice XP set to ${cfg.voiceXP}`);
+  console.log(`[LEVEL] Voice XP ustawione na ${cfg.voiceXP}`);
 }
 
 // =====================================================
