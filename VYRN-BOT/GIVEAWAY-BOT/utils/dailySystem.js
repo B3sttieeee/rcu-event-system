@@ -11,20 +11,27 @@ const {
   saveProfile
 } = require("./profileSystem");
 
-const DM_RETRY_COOLDOWN_MS = 30 * 60 * 1000;
+// ================== KONFIGURACJA ==================
+const DM_RETRY_COOLDOWN_MS = 30 * 60 * 1000;      // 30 minut - normalny cooldown
+const DM_FAILED_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 godzin - gdy DM zamknięte
+const DM_LOCK_TIMEOUT_MS = 10 * 1000;             // max czas blokady na użytkownika
+
 const dmLock = new Set();
-const dmCooldown = new Map();
+const dmCooldown = new Map(); // timestamp ostatniej próby
+
+// ================== POMOCNICZE FUNKCJE ==================
 
 function ensureDailyState(user) {
-  user.daily ??= {};
-  user.daily.msgs = Number(user.daily.msgs) || 0;
-  user.daily.vc = Number(user.daily.vc) || 0;
-  user.daily.streak = Number(user.daily.streak) || 0;
-  user.daily.notified = Boolean(user.daily.notified);
-  user.daily.lastNotifyAttemptAt =
-    Number(user.daily.lastNotifyAttemptAt) || 0;
+  if (!user.daily) user.daily = {};
+  
+  const daily = user.daily;
+  daily.msgs = Number(daily.msgs) || 0;
+  daily.vc = Number(daily.vc) || 0;
+  daily.streak = Number(daily.streak) || 0;
+  daily.notified = Boolean(daily.notified);
+  daily.lastNotifyAttemptAt = Number(daily.lastNotifyAttemptAt) || 0;
 
-  return user.daily;
+  return daily;
 }
 
 function buildDailyEmbed(userId, dailyState) {
@@ -40,123 +47,165 @@ function buildDailyEmbed(userId, dailyState) {
   return {
     embed: new EmbedBuilder()
       .setColor(ready ? "#22c55e" : "#1e293b")
-      .setTitle(ready ? "Daily Quest gotowy" : "Postep Daily Quest")
+      .setTitle(ready ? "Daily Quest gotowy!" : "Postęp Daily Quest")
       .setDescription(
-        ready
-          ? "Wymagania zostaly spelnione. Odbierz nagrode przyciskiem ponizej."
-          : "Wbij wymagane progi i wroc po nagrode."
+        ready 
+          ? "Wymagania zostały spełnione.\nKliknij przycisk poniżej, aby odebrać nagrodę."
+          : "Wbij wymagane progi i wróć po nagrodę."
       )
       .addFields(
-        {
-          name: "Wiadomosci",
-          value: `\`${msgs}/50\``,
-          inline: true
-        },
-        {
-          name: "Voice Chat",
-          value: `\`${vcMinutes}/30 min\``,
-          inline: true
-        },
-        {
-          name: "Streak",
-          value: `\`${streak} dni\``,
-          inline: true
-        }
+        { name: "Wiadomości", value: `\`${msgs}/50\``, inline: true },
+        { name: "Voice Chat", value: `\`${vcMinutes}/30 min\``, inline: true },
+        { name: "Streak", value: `\`${streak} dni\``, inline: true }
       )
-      .setFooter({
-        text: ready ? "Nagroda czeka na odbior" : "Daily System"
-      })
+      .setFooter({ text: ready ? "Nagroda czeka na odbiór" : "Daily System" })
       .setTimestamp(),
-
-    components: ready
-      ? [
-          new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-              .setCustomId("daily_claim")
-              .setLabel("Odbierz daily")
-              .setStyle(ButtonStyle.Success)
-          )
-        ]
-      : [],
+    
+    components: ready ? [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("daily_claim")
+          .setLabel("Odbierz daily")
+          .setStyle(ButtonStyle.Success)
+          .setEmoji("🎁")
+      )
+    ] : [],
 
     ready
   };
 }
 
-function resetNotificationState(userId, daily) {
-  const changed = daily.notified || daily.lastNotifyAttemptAt;
-
+function resetNotificationState(daily) {
+  const wasNotified = daily.notified || daily.lastNotifyAttemptAt > 0;
   daily.notified = false;
   daily.lastNotifyAttemptAt = 0;
-  dmCooldown.delete(userId);
-
-  return Boolean(changed);
+  return wasNotified;
 }
 
-function getLastAttempt(userId, daily) {
-  return Math.max(
+function getCooldownRemaining(userId, daily) {
+  const now = Date.now();
+  const lastAttempt = Math.max(
     Number(daily.lastNotifyAttemptAt) || 0,
     dmCooldown.get(userId) || 0
   );
+
+  // Jeśli ostatnio była nieudana próba (długi cooldown)
+  const isFailedAttempt = (now - lastAttempt) < DM_RETRY_COOLDOWN_MS * 2;
+  const cooldownTime = isFailedAttempt ? DM_FAILED_COOLDOWN_MS : DM_RETRY_COOLDOWN_MS;
+
+  return Math.max(0, lastAttempt + cooldownTime - now);
 }
 
+// ================== GŁÓWNA FUNKCJA ==================
+
 async function checkDailyDM(member) {
-  if (!member || member.user?.bot) return false;
+  if (!member?.user || member.user.bot) return false;
 
   const userId = member.id;
 
+  // Zabezpieczenie przed równoległymi wywołaniami
   if (dmLock.has(userId)) return false;
   dmLock.add(userId);
 
   try {
     const db = loadProfile();
     const user = db.users?.[userId];
-
     if (!user) return false;
 
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
+    // Nie jest gotowy → resetujemy status powiadomienia
     if (!ready) {
-      if (resetNotificationState(userId, daily)) {
+      if (resetNotificationState(daily)) {
         saveProfile();
       }
-
       return false;
     }
 
-    const now = Date.now();
-    const lastAttempt = getLastAttempt(userId, daily);
-
+    // Już powiadomiony
     if (daily.notified) return false;
-    if (now - lastAttempt < DM_RETRY_COOLDOWN_MS) return false;
 
+    // Sprawdzamy cooldown
+    const remainingCooldown = getCooldownRemaining(userId, daily);
+    if (remainingCooldown > 0) return false;
+
+    // Przygotowujemy próbę wysłania
+    const now = Date.now();
     daily.lastNotifyAttemptAt = now;
     dmCooldown.set(userId, now);
     saveProfile();
 
     const { embed, components } = buildDailyEmbed(userId, daily);
 
-    await member.send({
-      content: "Twoj Daily Quest jest gotowy do odebrania.",
-      embeds: [embed],
-      components
-    });
+    try {
+      await member.send({
+        content: "Twój **Daily Quest** jest gotowy do odebrania!",
+        embeds: [embed],
+        components
+      });
 
-    daily.notified = true;
-    saveProfile();
+      daily.notified = true;
+      saveProfile();
 
-    console.log(`[DAILY] DM sent -> ${member.user.tag}`);
-    return true;
+      console.log(`[DAILY] DM wysłany pomyślnie → ${member.user.tag}`);
+      return true;
+
+    } catch (sendError) {
+      if (sendError.code === 50007) {
+        // Użytkownik ma zamknięte DM
+        console.log(`[DAILY] Nie można wysłać DM (zamknięte) → ${member.user.tag}`);
+        // Dajemy długi cooldown
+        dmCooldown.set(userId, now + DM_FAILED_COOLDOWN_MS - DM_RETRY_COOLDOWN_MS);
+      } 
+      else if (sendError.code === 50013) {
+        console.log(`[DAILY] Brak uprawnień do wysyłania DM → ${member.user.tag}`);
+      }
+      else {
+        console.error(`[DAILY] Błąd wysyłania DM do ${member.user.tag}:`, sendError.message);
+      }
+      return false;
+    }
+
   } catch (err) {
-    console.log(`[DAILY] DM skipped -> ${member.user?.tag || "unknown"}`);
+    console.error(`[DAILY] Nieoczekiwany błąd w checkDailyDM dla ${userId}:`, err);
     return false;
-  } finally {
-    dmLock.delete(userId);
+  } 
+  finally {
+    // Zabezpieczenie przed zawieszeniem locka
+    setTimeout(() => dmLock.delete(userId), DM_LOCK_TIMEOUT_MS);
+  }
+}
+
+// ================== FUNKCJA DO WYWOŁANIA PO ODEBRANIU NAGRODY ==================
+
+/**
+ * Wywołaj tę funkcję po pomyślnym odebraniu daily (w handlerze przycisku "daily_claim")
+ */
+function onDailyClaimed(userId) {
+  try {
+    const db = loadProfile();
+    const user = db.users?.[userId];
+    if (!user) return;
+
+    const daily = ensureDailyState(user);
+    
+    daily.notified = false;
+    daily.lastNotifyAttemptAt = 0;
+    dmCooldown.delete(userId);
+
+    saveProfile();
+    console.log(`[DAILY] Status powiadomienia zresetowany po odebraniu → ${userId}`);
+  } catch (err) {
+    console.error(`[DAILY] Błąd podczas resetowania stanu po claimie:`, err);
   }
 }
 
 module.exports = {
   buildDailyEmbed,
-  checkDailyDM
+  checkDailyDM,
+  onDailyClaimed,        // ← bardzo ważne!
+  // pomocnicze (opcjonalnie)
+  ensureDailyState,
+  resetNotificationState
 };
