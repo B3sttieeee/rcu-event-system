@@ -86,15 +86,15 @@ async function checkDailyDM(member) {
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
-    // === KLUCZOWA POPRAWKA ===
-    // Zawsze resetuj notified jeśli daily NIE jest gotowy
+    // === NAJWAŻNIEJSZA POPRAWKA ===
+    // Zawsze resetuj powiadomienie, jeśli daily NIE jest gotowy
     if (!ready) {
       if (daily.notified) {
         daily.notified = false;
         daily.lastNotifyAttemptAt = 0;
         dmCooldown.delete(userId);
         saveProfile();
-        console.log(`[DAILY] Reset notified - nie gotowy → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
+        console.log(`[DAILY] Reset notified - nie gotowy → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30 | Streak: ${daily.streak}`);
       }
       return false;
     }
@@ -126,7 +126,7 @@ async function checkDailyDM(member) {
       daily.notified = true;
       saveProfile();
 
-      console.log(`[DAILY] DM wysłany → ${member.user.tag} | Streak: ${daily.streak}`);
+      console.log(`[DAILY] DM wysłany → ${member.user.tag} | Streak: ${daily.streak} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
       return true;
 
     } catch (sendErr) {
