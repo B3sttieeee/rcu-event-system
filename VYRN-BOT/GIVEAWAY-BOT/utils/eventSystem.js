@@ -18,8 +18,8 @@ const CONFIG = {
   },
 
   IMAGES: {
-    PANEL: "https://imgur.com/AybkuW5.png",
-    MERCHANT: "https://imgur.com/7GBAq8Z.png",
+    PANEL: "https://imgur.com/l405BQN.png",
+    MERCHANT: "https://imgur.com/sasz9j4.png",
   },
 
   EVENTS: {
