@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const DATA_DIR = process.env.DATA_DIR || "./data";
+const DATA_DIR = process.env.DATA_DIR || "/data";   // <-- WAŻNE dla Railway
 const COINS_PATH = path.join(DATA_DIR, "userCoins.json");
 const COINS_TMP_PATH = `${COINS_PATH}.tmp`;
 
@@ -111,7 +111,6 @@ function addCoins(userId, amount) {
 
 function spendCoins(userId, amount) {
   if (!userId) return false;
-
   const safeAmount = Math.floor(Math.max(0, Number(amount) || 0));
   if (safeAmount <= 0) return true;
 
@@ -126,11 +125,9 @@ function spendCoins(userId, amount) {
 
 function setCoins(userId, amount) {
   if (!userId) return 0;
-
   const safeAmount = Math.floor(Math.max(0, Number(amount) || 0));
   userCoins.set(userId, safeAmount);
   saveCoins();
-
   return safeAmount;
 }
 
