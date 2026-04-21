@@ -43,7 +43,7 @@ const normalizeDaily = (daily = {}) => ({
 const normalizeUser = (user = {}) => ({
   voice: toSafeNumber(user.voice, 0),
   daily: normalizeDaily(user.daily),
-  // Możesz dodać tutaj więcej statystyk w przyszłości (np. level, coins, etc.)
+  // Poziomy są w osobnym pliku, więc nie trzymamy ich tutaj
 });
 
 const normalizeDb = (db = {}) => {
@@ -157,7 +157,6 @@ function addVoiceTime(userId, seconds) {
 
 function addMessage(userId) {
   if (!userId) return false;
-
   const user = ensureUser(userId);
   if (!user) return false;
 
@@ -207,14 +206,14 @@ async function claimDaily(userId, member = null) {
   }
 
   const now = Date.now();
-  if (now - user.daily.lastClaim < 86_400_000) { // 24 godziny
+  if (now - user.daily.lastClaim < 86_400_000) {
     return { success: false, error: "cooldown", message: "Daily już dzisiaj odebrane." };
   }
 
   user.daily.streak += 1;
   const xp = 150 + Math.floor(Math.random() * 150);
 
-  // Dodaj XP przez levelSystem (jeśli istnieje)
+  // Dodaj XP przez levelSystem
   if (member && !member.user.bot) {
     try {
       const { addXP } = require("./levelSystem");
@@ -226,7 +225,7 @@ async function claimDaily(userId, member = null) {
     }
   }
 
-  // Reset daily counters
+  // Reset daily
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
@@ -279,7 +278,7 @@ function startDailyReset() {
       lastResetDayKey = currentDayKey;
       runDailyReset();
     }
-  }, 60_000); // sprawdzaj co minutę
+  }, 60_000);
 
   console.log(`[PROFILE] Daily reset watcher started (${RESET_TIMEZONE})`);
 }
