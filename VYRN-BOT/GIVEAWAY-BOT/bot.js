@@ -16,7 +16,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// ====================== RATE LIMIT ======================
+// ====================== RATE LIMIT LOGGING ======================
 client.rest.on("rateLimited", (info) => {
   console.warn(`[RATE LIMIT] ${info.method} ${info.url} — ${info.timeToReset}ms`);
 });
@@ -24,7 +24,9 @@ client.rest.on("rateLimited", (info) => {
 // ====================== LOAD COMMANDS ======================
 function loadCommands() {
   const commandsPath = path.join(__dirname, "commands");
-  if (!fs.existsSync(commandsPath)) return console.warn("⚠️ Folder commands nie istnieje!");
+  if (!fs.existsSync(commandsPath)) {
+    return console.warn("⚠️ Folder 'commands' nie istnieje!");
+  }
 
   let loaded = 0;
   const items = fs.readdirSync(commandsPath);
@@ -54,13 +56,16 @@ function loadCommands() {
       loadFile(itemPath);
     }
   }
+
   console.log(`📊 Załadowano ${loaded} komend`);
 }
 
 // ====================== LOAD EVENTS ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
-  if (!fs.existsSync(eventsPath)) return console.warn("⚠️ Folder events nie istnieje!");
+  if (!fs.existsSync(eventsPath)) {
+    return console.warn("⚠️ Folder 'events' nie istnieje!");
+  }
 
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let loaded = 0;
@@ -84,14 +89,15 @@ function loadEvents() {
       console.error(`❌ EVENT ERROR ${file}:`, e.message);
     }
   }
+
   console.log(`📊 Załadowano ${loaded} eventów`);
 }
 
-// ====================== SYSTEMS ======================
+// ====================== LOAD SYSTEMS ======================
 async function loadSystems() {
   console.log("🚀 Ładowanie systemów...");
 
-  // Giveaway System (bardzo ważne!)
+  // Giveaway System
   try {
     const giveawaySystem = require("./utils/giveawaySystem");
     giveawaySystem.loadGiveaways(client);
@@ -138,6 +144,15 @@ async function loadSystems() {
     console.error("EconomySystem error:", e.message);
   }
 
+  // Rules Panel
+  try {
+    const { createRulesPanel } = require("./utils/rulesPanel");
+    await createRulesPanel(client);
+    console.log("📜 Rules panel gotowy");
+  } catch (e) {
+    console.error("RulesPanel error:", e.message);
+  }
+
   // Ticket Panel
   setTimeout(async () => {
     try {
@@ -159,7 +174,7 @@ async function loadSystems() {
   }
 }
 
-// ====================== READY ======================
+// ====================== READY EVENT ======================
 client.once("ready", async () => {
   console.log("================================");
   console.log(`🔥 Bot zalogowany jako: ${client.user.tag}`);
