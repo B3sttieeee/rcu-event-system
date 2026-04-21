@@ -1,14 +1,7 @@
-const { Events } = require("discord.js");
-const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  StringSelectMenuBuilder,
-  PermissionFlagsBits,
-  ChannelType
-} = require("discord.js");
+const { Events, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
 
 const CREATE_CHANNEL_ID = "1496280414237491220";   // Kanał, na który ktoś wchodzi
-const PRIVATE_CATEGORY_ID = "1496281285780574268"; // Twoja kategoria
+const PRIVATE_CATEGORY_ID = "1496281285780574268";
 
 const userChannels = new Map(); // userId => channelId
 
@@ -18,7 +11,7 @@ module.exports = {
     const member = newState.member;
     if (!member || member.user.bot) return;
 
-    // Ktoś dołączył do kanału tworzenia
+    // Ktoś dołączył do kanału tworzenia prywatnego kanału
     if (!oldState.channel && newState.channel && newState.channel.id === CREATE_CHANNEL_ID) {
       await handlePrivateChannelCreation(member);
     }
@@ -29,7 +22,7 @@ module.exports = {
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
-  // Sprawdź czy już ma kanał
+  // Limit 1 kanał na użytkownika
   if (userChannels.has(member.id)) {
     const existing = guild.channels.cache.get(userChannels.get(member.id));
     if (existing) {
@@ -71,9 +64,16 @@ async function handlePrivateChannelCreation(member) {
     userChannels.set(member.id, channel.id);
 
     // Automatyczne przeniesienie na nowy kanał
-    await member.voice.setChannel(channel).catch(() => {});
+    if (member.voice?.channel) {
+      await member.voice.setChannel(channel).catch(() => {});
+    }
 
-    // Wysyłamy panel sterowania
+    // Ping osoby + informacja
+    await channel.send({
+      content: `> **${member}** Twój prywatny kanał został stworzony!`
+    }).catch(() => {});
+
+    // Wysyłamy ładny panel sterowania
     await sendControlPanel(channel, member);
 
     // Watcher usuwania pustego kanału
@@ -84,18 +84,37 @@ async function handlePrivateChannelCreation(member) {
   }
 }
 
-// ====================== PANEL STEROWANIA ======================
+// ====================== ŁADNY PANEL STEROWANIA ======================
 async function sendControlPanel(channel, owner) {
   const embed = new EmbedBuilder()
     .setColor("#0a0a0a")
     .setTitle("🔧 Panel zarządzania kanałem")
-    .setDescription(`**Właściciel:** ${owner}\nZarządzaj swoim prywatnym kanałem.`);
+    .setDescription(
+      `> **Właściciel:** ${owner}\n` +
+      `> **Kanał:** <#${channel.id}>\n\n` +
+      `Zarządzaj swoim prywatnym kanałem za pomocą menu poniżej.`
+    )
+    .addFields(
+      { name: "━━━━━━━━━━━━━━━━━━", value: "**Dostępne akcje:**", inline: false },
+      { name: "✏️ Zmiana nazwy", value: "Zmień nazwę kanału", inline: true },
+      { name: "👥 Limit osób", value: "Ustaw maksymalną liczbę osób", inline: true },
+      { name: "🚪 Wyrzuć", value: "Wyrzuć kogoś z kanału", inline: true },
+      { name: "🔨 Ban", value: "Zbanuj użytkownika", inline: true },
+      { name: "🔓 Unban", value: "Odbanuj użytkownika", inline: true },
+      { name: "🔒 Lock / Unlock", value: "Zablokuj lub odblokuj kanał", inline: true }
+    )
+    .setThumbnail(owner.user.displayAvatarURL({ dynamic: true }))
+    .setFooter({ 
+      text: "VYRN • Private Channel System", 
+      iconURL: owner.guild.iconURL({ dynamic: true }) 
+    })
+    .setTimestamp();
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`private_panel_${channel.id}`)
     .setPlaceholder("Wybierz akcję...")
     .addOptions([
-      { label: "Zmiana nazwy", value: "rename", emoji: "✏️" },
+      { label: "Zmiana nazwy kanału", value: "rename", emoji: "✏️" },
       { label: "Zmiana limitu osób", value: "limit", emoji: "👥" },
       { label: "Wyrzuć użytkownika", value: "kick", emoji: "🚪" },
       { label: "Zbanuj użytkownika", value: "ban", emoji: "🔨" },
@@ -119,10 +138,11 @@ function startEmptyChannelWatcher(channel, ownerId) {
         await freshChannel?.delete().catch(() => {});
         userChannels.delete(ownerId);
         clearInterval(interval);
+        console.log(`[PrivateChannel] Kanał ${channel.name} został usunięty (pusty)`);
       }
     } catch (e) {
       clearInterval(interval);
       userChannels.delete(ownerId);
     }
-  }, 15000);
+  }, 15000); // co 15 sekund
 }
