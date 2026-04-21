@@ -7,14 +7,17 @@ const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleExpeditionSelect } = require("../commands/expedition");
 
 // Daily System
-const { 
-  isDailyReady, 
-  claimDaily, 
-  onDailyClaimed 
+const {
+  isDailyReady,
+  claimDaily,
+  onDailyClaimed
 } = require("../utils/dailySystem");
 
 // Embed Builder
 const embedCommand = require("../commands/embed");
+
+// Private Channel System
+const { handlePrivateChannelCreation, handlePrivatePanel } = require("../utils/privateChannelSystem");
 
 // ====================== MAIN ======================
 module.exports = {
@@ -34,7 +37,6 @@ module.exports = {
       if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
         return await embedCommand.handleModal(interaction);
       }
-
       if (interaction.isButton() && interaction.customId.startsWith("embed_")) {
         return await embedCommand.handleButton(interaction);
       }
@@ -60,7 +62,14 @@ module.exports = {
         return await handleDailyClaim(interaction);
       }
 
-      // ====================== 6. TICKET SYSTEM ======================
+      // ====================== 6. PRIVATE CHANNEL SYSTEM ======================
+      // Tworzenie kanału po wejściu na specjalny kanał (voiceStateUpdate)
+      // Obsługa panelu (Select Menu)
+      if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
+        return await handlePrivatePanel(interaction);
+      }
+
+      // ====================== 7. TICKET SYSTEM ======================
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -79,7 +88,7 @@ module.exports = {
         }
       }
 
-      // ====================== 7. SLASH COMMANDS ======================
+      // ====================== 8. SLASH COMMANDS ======================
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
@@ -98,7 +107,6 @@ module.exports = {
 
     } catch (err) {
       console.error("❌ INTERACTION ERROR:", err);
-
       const payload = {
         content: "❌ Wystąpił błąd systemu. Spróbuj ponownie później.",
         ephemeral: true
@@ -118,7 +126,6 @@ module.exports = {
 // ====================== DAILY CLAIM HANDLER ======================
 async function handleDailyClaim(interaction) {
   const userId = interaction.user.id;
-
   if (interaction.replied || interaction.deferred) return;
   await interaction.deferUpdate().catch(() => {});
 
@@ -139,7 +146,6 @@ async function handleDailyClaim(interaction) {
       });
     }
 
-    // Reset powiadomienia DM
     onDailyClaimed(userId);
 
     const successEmbed = new EmbedBuilder()
