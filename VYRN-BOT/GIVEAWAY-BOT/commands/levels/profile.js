@@ -6,12 +6,12 @@ const { getCurrentBoost } = require("../../utils/boostSystem");
 const { getCoins } = require("../../utils/economySystem");
 
 function getRank(level) {
-  if (level >= 75) return { name: "Legend",    emoji: "<:LegeRank:1488756343190847538>" };
-  if (level >= 60) return { name: "Ruby",      emoji: "<:RubyRank:1488756400514404372>" };
-  if (level >= 45) return { name: "Diamond",   emoji: "<:DiaxRank:1488756482924089404>" };
-  if (level >= 30) return { name: "Platinum",  emoji: "<:PlatRank:1488756557863845958>" };
-  if (level >= 15) return { name: "Gold",      emoji: "<:GoldRank:1488756524854808686>" };
-  if (level >= 5)  return { name: "Bronze",    emoji: "<:BronzeRank:1488756638285565962>" };
+  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
+  if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
+  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
+  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
+  if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
+  if (level >= 5)  return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
   return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
@@ -32,27 +32,26 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // Poprawne ładowanie danych
-      const levelsDB = loadDB();           // zwraca { xp: {} }
-      const profileDB = loadProfile();     // zwraca { users: {} }
+      const levelsDB = loadDB();
+      const profileDB = loadProfile();
       const config = loadConfig();
 
       const lvlData = levelsDB.xp?.[userId] || { xp: 0, level: 0 };
-      const userData = profileDB.users?.[userId] || { 
-        voice: 0, 
-        daily: { msgs: 0, vc: 0, streak: 0 } 
-      };
+      
+      // Bezpieczne pobieranie danych daily
+      const dailyData = profileDB.users?.[userId]?.daily || { msgs: 0, vc: 0, streak: 0 };
+      const userVoice = profileDB.users?.[userId]?.voice || 0;
 
-      const nextLevelXP = neededXP(lvlData.level);           // Poprawne wywołanie
+      const nextLevelXP = neededXP(lvlData.level);
       const progress = nextLevelXP > 0 
         ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100)) 
         : 0;
 
       const xpLeft = Math.max(0, nextLevelXP - lvlData.xp);
 
-      const totalVoiceMin = Math.floor((userData.voice || 0) / 60);
-      const dailyVoiceMin = Math.floor((userData.daily.vc || 0) / 60);
-      const dailyVoiceReq = 30 + ((userData.daily.streak || 0) * 5);
+      const totalVoiceMin = Math.floor(userVoice / 60);
+      const dailyVoiceMin = Math.floor((dailyData.vc || 0) / 60);
+      const dailyVoiceReq = 30 + ((dailyData.streak || 0) * 5);
 
       const currentBoost = getCurrentBoost(userId);
       const rank = getRank(lvlData.level);
@@ -78,8 +77,8 @@ module.exports = {
           `> Daily: **${dailyVoiceMin} / ${dailyVoiceReq}** minut\n\n` +
 
           `**Daily Quest**\n` +
-          `> Messages: **${userData.daily.msgs || 0}**\n` +
-          `> Streak: **${userData.daily.streak || 0}** dni 🔥\n\n` +
+          `> Messages: **${dailyData.msgs || 0}**\n` +
+          `> Streak: **${dailyData.streak || 0}** dni 🔥\n\n` +
 
           `**Economy**\n` +
           `> Monety: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
