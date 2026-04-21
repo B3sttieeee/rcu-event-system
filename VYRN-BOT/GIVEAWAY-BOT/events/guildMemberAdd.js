@@ -51,8 +51,9 @@ module.exports = {
           name: "VYRN CLAN • OFFICIAL",
           iconURL: guild.iconURL({ dynamic: true })
         })
-        .setTitle(`Welcome ${member} to VYRN Clan!`)   // Ping działa tutaj najlepiej
         .setDescription(
+          `**Welcome ${member} to VYRN Clan!**\n\n` +     // ← Ping tutaj (najpewniejsze miejsce)
+
           `**Start Here**\n\n` +
 
           `• **<#1475526080361140344>** • Server Rules\n` +
