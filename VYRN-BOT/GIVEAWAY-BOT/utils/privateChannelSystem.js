@@ -64,9 +64,9 @@ async function handlePrivateChannelCreation(member) {
       await member.voice.setChannel(channel).catch(() => {});
     }
 
-    // Ping + informacja
+    // Ping osoby + informacja
     await channel.send({
-      content: `> **${member}** Twój prywatny kanał został stworzony!`,
+      content: `> **${member}** Twój prywatny kanał został stworzony!`
     }).catch(() => {});
 
     // Wysyłamy ładny panel sterowania
@@ -95,7 +95,7 @@ async function sendControlPanel(channel, owner) {
       { name: "✏️ Zmiana nazwy", value: "Zmień nazwę kanału", inline: true },
       { name: "👥 Limit osób", value: "Ustaw maksymalną liczbę osób", inline: true },
       { name: "🚪 Wyrzuć", value: "Wyrzuć kogoś z kanału", inline: true },
-      { name: "🔨 Ban", value: "Zbanuj kogoś na kanale", inline: true },
+      { name: "🔨 Ban", value: "Zbanuj użytkownika", inline: true },
       { name: "🔓 Unban", value: "Odbanuj użytkownika", inline: true },
       { name: "🔒 Lock / Unlock", value: "Zablokuj lub odblokuj kanał", inline: true }
     )
@@ -140,7 +140,7 @@ function startEmptyChannelWatcher(channel, ownerId) {
       clearInterval(interval);
       userChannels.delete(ownerId);
     }
-  }, 15000); // co 15 sekund
+  }, 15000);
 }
 
 module.exports = {
