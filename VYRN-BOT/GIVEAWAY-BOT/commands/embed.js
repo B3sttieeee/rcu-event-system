@@ -11,7 +11,7 @@ const {
   ChannelType
 } = require("discord.js");
 
-const DEFAULT_COLOR = "#2b2d31";
+const DEFAULT_COLOR = "#0a0a0a";
 
 // ====================== POMOCNICZE ======================
 function createInput({ id, label, style, value = "", placeholder = "", maxLength }) {
@@ -32,6 +32,12 @@ function buildEmbedModal(channelId, existingEmbed = null) {
   const modal = new ModalBuilder()
     .setCustomId(`embedModal_${channelId}`)
     .setTitle(existingEmbed ? "✏️ Edytuj Embed" : "📝 Tworzenie Embeda");
+
+  // Poprawione pole koloru - zawsze max 7 znaków
+  let colorValue = DEFAULT_COLOR;
+  if (existingEmbed?.hexColor) {
+    colorValue = `#${existingEmbed.hexColor.toString(16).padStart(6, '0').slice(-6)}`;
+  }
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(
@@ -57,11 +63,11 @@ function buildEmbedModal(channelId, existingEmbed = null) {
     new ActionRowBuilder().addComponents(
       createInput({
         id: "color",
-        label: "Kolor HEX",
+        label: "Kolor HEX (#rrggbb)",
         style: TextInputStyle.Short,
-        value: existingEmbed?.hexColor ? `#${existingEmbed.hexColor}` : DEFAULT_COLOR,
-        placeholder: "#2b2d31",
-        maxLength: 7
+        value: colorValue,
+        placeholder: "#0a0a0a",
+        maxLength: 7   // KLUCZOWE - ograniczenie do 7 znaków
       })
     ),
     new ActionRowBuilder().addComponents(
@@ -164,7 +170,11 @@ module.exports = {
 
       if (description === ".") description = "";
 
-      if (colorInput && !colorInput.startsWith("#")) colorInput = "#" + colorInput;
+      // === BEZPIECZNA OBSŁUGA KOLORU ===
+      if (colorInput) {
+        if (!colorInput.startsWith("#")) colorInput = "#" + colorInput;
+        colorInput = colorInput.slice(0, 7); // maksymalnie 7 znaków
+      }
       const color = isValidHex(colorInput) ? colorInput : DEFAULT_COLOR;
 
       const embed = new EmbedBuilder().setColor(color);
@@ -177,10 +187,8 @@ module.exports = {
 
       if (image && isValidUrl(image)) embed.setImage(image);
 
-      // Wysyłanie embeda
       const sentMessage = await channel.send({ embeds: [embed] });
 
-      // Przyciski po wysłaniu
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`embed_edit_${sentMessage.id}_${channelId}`)
@@ -198,7 +206,7 @@ module.exports = {
       });
 
     } catch (err) {
-      console.error("[EMBED] Błąd:", err);
+      console.error("[EMBED] Modal Error:", err);
       await interaction.editReply({ content: "❌ Wystąpił błąd podczas tworzenia embeda." });
     }
   },
