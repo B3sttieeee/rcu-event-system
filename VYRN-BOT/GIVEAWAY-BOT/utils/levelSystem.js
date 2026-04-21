@@ -5,7 +5,7 @@ const { ChannelType } = require("discord.js");
 const { getCurrentBoost } = require("./boostSystem");
 const { addVoiceTime, addMessage } = require("./profileSystem");
 
-const DATA_DIR = process.env.DATA_DIR || "./data";
+const DATA_DIR = process.env.DATA_DIR || "/data";   // <-- ważne dla Railway
 const DB_PATH = path.join(DATA_DIR, "levels.json");
 const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 const DB_TMP_PATH = `${DB_PATH}.tmp`;
@@ -35,8 +35,7 @@ let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
-// Cooldown dla wiadomości (zapobiega spamowi XP)
-const xpCooldown = new Map();
+const xpCooldown = new Map(); // cooldown dla wiadomości
 
 // =====================================================
 // HELPERS
@@ -79,6 +78,7 @@ function loadDB() {
     if (!fs.existsSync(DB_PATH)) {
       dbCache = { xp: {} };
       fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+      console.log("[LEVEL] Utworzono nowy levels.json");
       return dbCache;
     }
 
@@ -89,6 +89,8 @@ function loadDB() {
     for (const [userId, userData] of Object.entries(parsed.xp || {})) {
       dbCache.xp[userId] = normalizeUserXP(userData);
     }
+
+    console.log(`[LEVEL] Załadowano poziomy dla ${Object.keys(dbCache.xp).length} użytkowników`);
     return dbCache;
   } catch (error) {
     logError("DB LOAD ERROR", error);
@@ -156,10 +158,8 @@ function getMultiplier(member) {
   const cfg = loadConfig();
   let multiplier = Number(cfg.globalMultiplier) || 1;
 
-  // Boost z boostSystem
   multiplier *= getCurrentBoost(member.id) || 1;
 
-  // Rola boostująca
   if (cfg.boostRole && member.roles?.cache?.has(cfg.boostRole)) {
     multiplier *= 1.75;
   }
@@ -177,7 +177,6 @@ async function addXP(member, base = 0, length = 0, options = {}) {
   const safeBase = Number(base);
   if (!Number.isFinite(safeBase) || safeBase <= 0) return null;
 
-  // Cooldown na wiadomości
   if (useCooldown) {
     const now = Date.now();
     if (xpCooldown.has(member.id) && now - xpCooldown.get(member.id) < 2500) {
@@ -189,24 +188,20 @@ async function addXP(member, base = 0, length = 0, options = {}) {
   const db = loadDB();
   const cfg = loadConfig();
 
-  db.xp[member.id] = normalizeUserXP(db.xp[member.id]);
+  if (!db.xp[member.id]) db.xp[member.id] = normalizeUserXP();
 
   let gain = safeBase;
-
-  // Bonus za długość wiadomości
   if ((length || 0) >= cfg.lengthThreshold) {
     gain *= 1 + cfg.lengthBonus;
   }
 
   gain = Math.floor(gain * getMultiplier(member));
-
   if (gain <= 0) return null;
 
   const user = db.xp[member.id];
   user.xp += gain;
 
   let leveled = false;
-
   while (user.xp >= neededXP(user.level)) {
     user.xp -= neededXP(user.level);
     user.level += 1;
@@ -240,10 +235,10 @@ async function checkRoles(member, level) {
     75: "1476000992351879229"
   };
 
-  for (const [requiredLevel, roleId] of Object.entries(roles)) {
-    if (level >= Number(requiredLevel) && !member.roles.cache.has(roleId)) {
+  for (const [reqLevel, roleId] of Object.entries(roles)) {
+    if (level >= Number(reqLevel) && !member.roles.cache.has(roleId)) {
       await member.roles.add(roleId).catch(err => 
-        console.error(`[LEVEL] Failed to add role ${roleId} to ${member.user.tag}:`, err.message)
+        console.error(`[LEVEL] Failed to add role to ${member.user.tag}:`, err.message)
       );
     }
   }
@@ -255,69 +250,60 @@ async function checkRoles(member, level) {
 async function handleMessageXP(member, content) {
   if (!member || member.user?.bot) return null;
 
-  addMessage(member.id); // Aktualizacja profilu
+  addMessage(member.id);
 
   const cfg = loadConfig();
   const result = await addXP(member, cfg.messageXP, content?.length || 0, { useCooldown: true });
 
   await triggerDailyCheck(member);
-
   return result;
 }
 
 // =====================================================
-// VOICE XP + PROFILE TRACKER
+// VOICE XP
 // =====================================================
 function startVoiceXP(client) {
-  if (voiceLoopStarted) {
-    console.log("🎤 Voice XP already running");
-    return;
-  }
-
+  if (voiceLoopStarted) return;
   voiceLoopStarted = true;
   console.log("🎤 Voice XP + Profile Voice Tracker started");
 
   setInterval(async () => {
     const cfg = loadConfig();
-    const processedUsers = new Set();
+    const processed = new Set();
 
     for (const guild of client.guilds.cache.values()) {
       for (const channel of guild.channels.cache.values()) {
-        if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) {
-          continue;
-        }
+        if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) continue;
 
         for (const member of channel.members.values()) {
-          if (!isEligibleVoiceMember(member) || processedUsers.has(member.id)) continue;
+          if (!isEligibleVoiceMember(member) || processed.has(member.id)) continue;
 
-          processedUsers.add(member.id);
+          processed.add(member.id);
 
-          addVoiceTime(member.id, 60); // +1 minuta do profilu
-
+          addVoiceTime(member.id, 60);
           await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => null);
-
           await triggerDailyCheck(member);
         }
       }
     }
-  }, 60_000); // co minutę
+  }, 60_000);
 }
 
 // =====================================================
-// CONFIG SETTERS (dla komend administracyjnych)
+// CONFIG SETTERS
 // =====================================================
 function setMessageXP(value) {
   const cfg = loadConfig();
   cfg.messageXP = Number(value) || DEFAULT_CONFIG.messageXP;
   saveConfig();
-  console.log(`[LEVEL] Message XP ustawione na ${cfg.messageXP}`);
+  console.log(`[LEVEL] Message XP set to ${cfg.messageXP}`);
 }
 
 function setVoiceXP(value) {
   const cfg = loadConfig();
   cfg.voiceXP = Number(value) || DEFAULT_CONFIG.voiceXP;
   saveConfig();
-  console.log(`[LEVEL] Voice XP ustawione na ${cfg.voiceXP}`);
+  console.log(`[LEVEL] Voice XP set to ${cfg.voiceXP}`);
 }
 
 // =====================================================
