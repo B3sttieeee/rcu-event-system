@@ -7,10 +7,10 @@ const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleExpeditionSelect } = require("../commands/expedition");
 
 // Daily System
-const {
-  isDailyReady,
-  claimDaily,
-  onDailyClaimed
+const { 
+  isDailyReady, 
+  claimDaily, 
+  onDailyClaimed 
 } = require("../utils/dailySystem");
 
 // Embed Builder
@@ -60,7 +60,7 @@ module.exports = {
         return await handleDailyClaim(interaction);
       }
 
-      // ====================== 6. TICKETS ======================
+      // ====================== 6. TICKET SYSTEM ======================
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -68,8 +68,15 @@ module.exports = {
         "ticket_modal_vyrn",
         "ticket_modal_v2rn"
       ];
-      if ((interaction.isButton() || interaction.isModalSubmit()) && ticketIds.includes(cid)) {
-        return await ticketSystem.handle(interaction, client);
+
+      if (
+        interaction.isButton() ||
+        interaction.isModalSubmit() ||
+        interaction.isStringSelectMenu()
+      ) {
+        if (ticketIds.includes(cid) || cid === "clan_ticket_select" || cid?.startsWith("ticket_modal_")) {
+          return await ticketSystem.handle(interaction, client);
+        }
       }
 
       // ====================== 7. SLASH COMMANDS ======================
@@ -123,7 +130,7 @@ async function handleDailyClaim(interaction) {
       });
     }
 
-    const result = claimDaily(userId); // zwraca { success, message, reward?, xp?, streak? }
+    const result = claimDaily(userId);
 
     if (!result?.success) {
       return await interaction.editReply({
@@ -132,7 +139,6 @@ async function handleDailyClaim(interaction) {
       });
     }
 
-    // Reset powiadomienia DM
     onDailyClaimed(userId);
 
     const successEmbed = new EmbedBuilder()
@@ -150,7 +156,7 @@ async function handleDailyClaim(interaction) {
       components: []
     });
 
-    console.log(`[DAILY] Nagroda odebrana przez ${interaction.user.tag} | Streak: ${result.streak}`);
+    console.log(`[DAILY] Nagroda odebrana przez ${interaction.user.tag}`);
 
   } catch (err) {
     console.error(`[DAILY] Błąd claim dla ${userId}:`, err);
