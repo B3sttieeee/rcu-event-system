@@ -4,7 +4,7 @@ const { buyBoost } = require("../../utils/boostSystem");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("buy")
-    .setDescription("Kup boost XP")
+    .setDescription("🛒 Kup boost doświadczenia")
     .addIntegerOption(option =>
       option
         .setName("id")
@@ -31,33 +31,37 @@ module.exports = {
       const minutes = Math.floor(result.boost.duration / 60000);
 
       const embed = new EmbedBuilder()
-        .setColor(0x00ff88)
+        .setColor("#0a0a0a")                    // Ciemny motyw
         .setTitle("✅ Boost zakupiony pomyślnie!")
         .setDescription(`**${result.boost.name}**`)
         .addFields(
-          { 
-            name: "Multiplikator", 
-            value: `**${result.boost.multiplier}x XP**`, 
-            inline: true 
+          {
+            name: "Multiplikator",
+            value: `**${result.boost.multiplier}x XP**`,
+            inline: true
           },
-          { 
-            name: "Czas trwania", 
-            value: `**${minutes} minut**`, 
-            inline: true 
+          {
+            name: "Czas trwania",
+            value: `**${minutes} minut**`,
+            inline: true
           },
-          { 
-            name: "Zużyto", 
-            value: `**${result.boost.price}** <:CASHH:1491180511308157041>`, 
-            inline: true 
+          {
+            name: "Zużyto monet",
+            value: `**${result.boost.price.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`,
+            inline: true
           }
         )
-        .setFooter({ text: "Grinduj szybciej! 🔥" })
+        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .setFooter({
+          text: "Grinduj szybciej! 🔥 • VYRN CLAN",
+          iconURL: interaction.guild.iconURL({ dynamic: true })
+        })
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
-      console.error("❌ Błąd w /buy:", err);
+      console.error("❌ Błąd w komendzie /buy:", err);
       await interaction.editReply({
         content: "❌ Wystąpił niespodziewany błąd podczas kupowania boostu.",
         ephemeral: true
