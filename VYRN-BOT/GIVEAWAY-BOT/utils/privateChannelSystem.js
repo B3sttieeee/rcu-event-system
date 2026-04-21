@@ -11,18 +11,22 @@ const PRIVATE_CATEGORY_ID = "1496281285780574268";
 
 const userChannels = new Map(); // userId => channelId
 
+// ====================== CZYSZCZENIE MAPY PO RESTARCIE ======================
+console.log("[PrivateChannel] System uruchomiony - mapa userChannels wyczyszczona");
+userChannels.clear();
+
 // ====================== AUTOMATYCZNE TWORZENIE KANAŁU ======================
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
-  // Limit 1 kanał na użytkownika
+  // Limit 1 kanał na użytkownika + czyszczenie martwych wpisów
   if (userChannels.has(member.id)) {
     const existing = guild.channels.cache.get(userChannels.get(member.id));
     if (existing) {
       await member.voice.setChannel(existing).catch(() => {});
       return;
     }
-    userChannels.delete(member.id);
+    userChannels.delete(member.id); // Usuwamy martwy wpis
   }
 
   // Czekamy 5 sekund
