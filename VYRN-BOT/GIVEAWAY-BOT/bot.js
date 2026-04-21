@@ -97,7 +97,7 @@ function loadEvents() {
 async function loadSystems() {
   console.log("🚀 Ładowanie systemów...");
 
-  // Giveaway System
+  // 1. Giveaway System
   try {
     const giveawaySystem = require("./utils/giveawaySystem");
     giveawaySystem.loadGiveaways(client);
@@ -106,7 +106,7 @@ async function loadSystems() {
     console.error("❌ GiveawaySystem error:", e.message);
   }
 
-  // Level System
+  // 2. Level System
   try {
     const levelSystem = require("./utils/levelSystem");
     levelSystem.startVoiceXP?.(client);
@@ -115,7 +115,7 @@ async function loadSystems() {
     console.error("LevelSystem error:", e.message);
   }
 
-  // Daily System
+  // 3. Daily System + Profile
   try {
     const { startDailyReset } = require("./utils/profileSystem");
     startDailyReset?.();
@@ -124,7 +124,7 @@ async function loadSystems() {
     console.error("DailySystem error:", e.message);
   }
 
-  // Clan System
+  // 4. Clan System
   try {
     const { startClanSystem } = require("./utils/clanSystem");
     startClanSystem?.(client);
@@ -133,7 +133,7 @@ async function loadSystems() {
     console.error("ClanSystem error:", e.message);
   }
 
-  // Economy + Boosts
+  // 5. Economy + Boosts
   try {
     const { loadCoins } = require("./utils/economySystem");
     const { loadBoosts } = require("./utils/boostSystem");
@@ -144,7 +144,7 @@ async function loadSystems() {
     console.error("EconomySystem error:", e.message);
   }
 
-  // Rules Panel
+  // 6. Rules Panel
   try {
     const { createRulesPanel } = require("./utils/rulesPanel");
     await createRulesPanel(client);
@@ -153,7 +153,7 @@ async function loadSystems() {
     console.error("RulesPanel error:", e.message);
   }
 
-  // Ticket Panel
+  // 7. Ticket Panel
   setTimeout(async () => {
     try {
       const { createTicketPanel } = require("./utils/ticketSystem");
