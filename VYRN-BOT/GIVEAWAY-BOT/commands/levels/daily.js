@@ -3,7 +3,8 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   ButtonBuilder,
-  ButtonStyle
+  ButtonStyle,
+  ComponentType
 } = require("discord.js");
 
 const { 
@@ -33,17 +34,17 @@ async function showDailyPanel(interaction) {
     const userId = interaction.user.id;
     const ready = isDailyReady(userId);
 
-    const { embed, components } = buildDailyEmbed(userId, null); // dailySystem sam pobierze dane
+    const { embed, components } = buildDailyEmbed(userId, null);
 
     await interaction.editReply({
       embeds: [embed],
       components: components
     });
 
-    // Collector na przycisk "Odbierz daily"
-    if (ready) {
+    // Collector tylko jeśli daily jest gotowy
+    if (ready && components.length > 0) {
       const collector = interaction.channel.createMessageComponentCollector({
-        componentType: "Button",
+        componentType: ComponentType.Button,   // Poprawny sposób
         filter: i => i.customId === "daily_claim" && i.user.id === userId,
         time: 120000 // 2 minuty
       });
@@ -58,9 +59,9 @@ async function showDailyPanel(interaction) {
           const { embed: disabledEmbed } = buildDailyEmbed(userId, null);
           await interaction.editReply({
             embeds: [disabledEmbed],
-            components: [] // wyłączamy przycisk
+            components: [] 
           });
-        } catch {}
+        } catch (e) {}
       });
     }
 
