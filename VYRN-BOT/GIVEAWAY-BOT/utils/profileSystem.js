@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const DATA_DIR = process.env.DATA_DIR || "./data";
+const DATA_DIR = process.env.DATA_DIR || "/data";
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
 const PROFILE_TMP_PATH = `${PROFILE_PATH}.tmp`;
 const RESET_TIMEZONE = process.env.RESET_TIMEZONE || "Europe/Warsaw";
@@ -125,9 +125,7 @@ function ensureUser(userId) {
   if (!db.users[userId]) {
     db.users[userId] = normalizeUser();
     saveProfile();
-    console.log(`[PROFILE] New user profile created for ${userId}`);
   } else {
-    // Poprawiona normalizacja istniejącego użytkownika
     db.users[userId] = normalizeUser(db.users[userId]);
   }
 
@@ -148,7 +146,7 @@ function addVoiceTime(userId, seconds) {
   user.daily.vc += amount;
 
   if (DEBUG_PROFILE_VOICE) {
-    console.log(`[PROFILE][VOICE] ${userId} +${amount}s | Total: ${user.voice}s (${Math.floor(user.voice / 60)}m) | Daily: ${user.daily.vc}s`);
+    console.log(`[PROFILE][VOICE] ${userId} +${amount}s | Total: ${user.voice}s | Daily: ${user.daily.vc}s`);
   }
 
   saveProfile();
@@ -262,10 +260,7 @@ function runDailyReset() {
 }
 
 function startDailyReset() {
-  if (resetInterval) {
-    console.log("[PROFILE] Daily reset watcher already running");
-    return;
-  }
+  if (resetInterval) return;
 
   loadProfile();
   lastResetDayKey = getCurrentDayKey();
