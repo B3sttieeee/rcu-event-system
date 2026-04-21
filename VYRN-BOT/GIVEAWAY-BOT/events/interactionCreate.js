@@ -1,4 +1,4 @@
-const { EmbedBuilder, Events } = require("discord.js");
+const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
 
 // ====================== SYSTEMS ======================
 const ticketSystem = require("../utils/ticketSystem");
@@ -16,15 +16,11 @@ const {
 // Embed Builder
 const embedCommand = require("../commands/embed");
 
-// Private Channel System
-const { handlePrivateChannelCreation } = require("../utils/privateChannelSystem");
-
 // ====================== MAIN ======================
 module.exports = {
   name: Events.InteractionCreate,
   async execute(interaction, client) {
     const cid = interaction.customId;
-
     const type = interaction.isChatInputCommand() ? "SLASH" :
                  interaction.isButton() ? `BUTTON:${cid || "NONE"}` :
                  interaction.isStringSelectMenu() ? `SELECT:${cid || "NONE"}` :
@@ -62,12 +58,9 @@ module.exports = {
         return await handleDailyClaim(interaction);
       }
 
-      // ====================== 6. PRIVATE CHANNEL SYSTEM ======================
-      // Obsługa tworzenia prywatnego kanału (z voiceStateUpdate)
-      // Panel zarządzania (Select Menu)
+      // ====================== 6. PRIVATE CHANNEL PANEL ======================
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
-        // Na razie nie mamy jeszcze handlePrivatePanel, więc zostawiamy pustą obsługę
-        // Możesz dodać później
+        return await handlePrivatePanel(interaction);
       }
 
       // ====================== 7. TICKET SYSTEM ======================
@@ -78,15 +71,11 @@ module.exports = {
         "ticket_modal_vyrn",
         "ticket_modal_v2rn"
       ];
-
       if (
-        interaction.isButton() ||
-        interaction.isModalSubmit() ||
-        interaction.isStringSelectMenu()
+        (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()) &&
+        (ticketIds.includes(cid) || cid === "clan_ticket_select" || cid?.startsWith("ticket_modal_"))
       ) {
-        if (ticketIds.includes(cid) || cid === "clan_ticket_select" || cid?.startsWith("ticket_modal_")) {
-          return await ticketSystem.handle(interaction, client);
-        }
+        return await ticketSystem.handle(interaction, client);
       }
 
       // ====================== 8. SLASH COMMANDS ======================
@@ -112,7 +101,6 @@ module.exports = {
         content: "❌ Wystąpił błąd systemu. Spróbuj ponownie później.",
         ephemeral: true
       };
-
       try {
         if (interaction.deferred || interaction.replied) {
           await interaction.followUp(payload).catch(() => {});
@@ -139,7 +127,6 @@ async function handleDailyClaim(interaction) {
     }
 
     const result = claimDaily(userId);
-
     if (!result?.success) {
       return await interaction.editReply({
         content: result?.message || "❌ Nie udało się odebrać daily.",
@@ -165,12 +152,63 @@ async function handleDailyClaim(interaction) {
     });
 
     console.log(`[DAILY] Nagroda odebrana przez ${interaction.user.tag}`);
-
   } catch (err) {
     console.error(`[DAILY] Błąd claim dla ${userId}:`, err);
     await interaction.editReply({
       content: "❌ Wystąpił nieoczekiwany błąd podczas odbierania daily.",
       components: []
+    }).catch(() => {});
+  }
+}
+
+// ====================== PRIVATE CHANNEL PANEL HANDLER ======================
+async function handlePrivatePanel(interaction) {
+  await interaction.deferUpdate().catch(() => {});
+
+  const channelId = interaction.customId.split("_")[2];
+  const action = interaction.values[0];
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) {
+    return interaction.followUp({
+      content: "❌ Kanał nie istnieje lub został już usunięty.",
+      ephemeral: true
+    });
+  }
+
+  // Sprawdzenie czy użytkownik jest właścicielem
+  const isOwner = channel.permissionOverwrites.cache.some(perm =>
+    perm.id === interaction.user.id && perm.allow.has(PermissionFlagsBits.ManageChannels)
+  );
+
+  if (!isOwner) {
+    return interaction.followUp({
+      content: "❌ Nie jesteś właścicielem tego kanału.",
+      ephemeral: true
+    });
+  }
+
+  try {
+    switch (action) {
+      case "delete":
+        await channel.delete().catch(() => {});
+        await interaction.followUp({
+          content: "🗑️ Kanał został pomyślnie usunięty.",
+          ephemeral: true
+        });
+        break;
+
+      default:
+        await interaction.followUp({
+          content: `✅ Wybrano akcję: **${action}**\n\nPełna obsługa tej funkcji zostanie dodana wkrótce.`,
+          ephemeral: true
+        });
+    }
+  } catch (err) {
+    console.error("[PrivatePanel] Błąd:", err);
+    await interaction.followUp({
+      content: "❌ Wystąpił błąd podczas wykonywania akcji.",
+      ephemeral: true
     }).catch(() => {});
   }
 }
