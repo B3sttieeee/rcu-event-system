@@ -1,6 +1,5 @@
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 require("dotenv").config();
-
 const fs = require("fs");
 const path = require("path");
 
@@ -25,10 +24,9 @@ client.rest.on("rateLimited", (info) => {
 // ====================== LOAD COMMANDS ======================
 function loadCommands() {
   const commandsPath = path.join(__dirname, "commands");
-  if (!fs.existsSync(commandsPath)) return console.warn("⚠️ commands missing");
+  if (!fs.existsSync(commandsPath)) return console.warn("⚠️ Folder commands nie istnieje!");
 
   let loaded = 0;
-
   const items = fs.readdirSync(commandsPath);
 
   for (const item of items) {
@@ -40,11 +38,11 @@ function loadCommands() {
         const cmd = require(filePath);
         if (cmd?.data?.name && typeof cmd.execute === "function") {
           client.commands.set(cmd.data.name, cmd);
-          console.log(`✅ /${cmd.data.name}`);
+          console.log(`✅ Loaded command: /${cmd.data.name}`);
           loaded++;
         }
       } catch (e) {
-        console.error("CMD ERROR:", e.message);
+        console.error(`❌ CMD ERROR ${filePath}:`, e.message);
       }
     };
 
@@ -56,14 +54,13 @@ function loadCommands() {
       loadFile(itemPath);
     }
   }
-
-  console.log(`📊 Commands: ${loaded}`);
+  console.log(`📊 Załadowano ${loaded} komend`);
 }
 
 // ====================== LOAD EVENTS ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
-  if (!fs.existsSync(eventsPath)) return console.warn("⚠️ events missing");
+  if (!fs.existsSync(eventsPath)) return console.warn("⚠️ Folder events nie istnieje!");
 
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let loaded = 0;
@@ -75,90 +72,121 @@ function loadEvents() {
 
       const runner = (...args) => event.execute(...args, client);
 
-      if (event.once) client.once(event.name, runner);
-      else client.on(event.name, runner);
+      if (event.once) {
+        client.once(event.name, runner);
+      } else {
+        client.on(event.name, runner);
+      }
 
-      console.log(`✅ event: ${event.name}`);
+      console.log(`✅ Loaded event: ${event.name}`);
       loaded++;
     } catch (e) {
-      console.error("EVENT ERROR:", e.message);
+      console.error(`❌ EVENT ERROR ${file}:`, e.message);
     }
   }
-
-  console.log(`📊 Events: ${loaded}`);
+  console.log(`📊 Załadowano ${loaded} eventów`);
 }
 
 // ====================== SYSTEMS ======================
 async function loadSystems() {
-  console.log("🚀 Loading systems...");
+  console.log("🚀 Ładowanie systemów...");
 
+  // Giveaway System (bardzo ważne!)
   try {
-    const levelSystem = require("./utils/levelSystem");
-    levelSystem.startVoiceXP(client);
+    const giveawaySystem = require("./utils/giveawaySystem");
+    giveawaySystem.loadGiveaways(client);
+    console.log("🎁 Giveaway system załadowany");
   } catch (e) {
-    console.error("Level error:", e.message);
+    console.error("❌ GiveawaySystem error:", e.message);
   }
 
+  // Level System
+  try {
+    const levelSystem = require("./utils/levelSystem");
+    levelSystem.startVoiceXP?.(client);
+    console.log("📈 Level system załadowany");
+  } catch (e) {
+    console.error("LevelSystem error:", e.message);
+  }
+
+  // Daily System
   try {
     const { startDailyReset } = require("./utils/profileSystem");
     startDailyReset?.();
-  } catch (e) {}
+    console.log("📅 Daily system załadowany");
+  } catch (e) {
+    console.error("DailySystem error:", e.message);
+  }
 
+  // Clan System
   try {
     const { startClanSystem } = require("./utils/clanSystem");
     startClanSystem?.(client);
-  } catch (e) {}
+    console.log("🏴 Clan system załadowany");
+  } catch (e) {
+    console.error("ClanSystem error:", e.message);
+  }
 
+  // Economy + Boosts
   try {
     const { loadCoins } = require("./utils/economySystem");
     const { loadBoosts } = require("./utils/boostSystem");
     loadCoins?.();
     loadBoosts?.();
-  } catch (e) {}
+    console.log("💰 Economy & Boosts załadowane");
+  } catch (e) {
+    console.error("EconomySystem error:", e.message);
+  }
 
-  // ticket panel
+  // Ticket Panel
   setTimeout(async () => {
     try {
       const { createTicketPanel } = require("./utils/ticketSystem");
       await createTicketPanel(client);
-      console.log("🎟 Ticket panel ready");
+      console.log("🎟 Ticket panel gotowy");
     } catch (e) {
-      console.error("Ticket error:", e.message);
+      console.error("TicketSystem error:", e.message);
     }
   }, 5000);
 
-  // 🕒 VOICE CLOCK START
+  // Voice Clock
   try {
     const voiceClock = require("./utils/voiceClock");
-    voiceClock.start(client);
+    voiceClock.start?.(client);
     console.log("🕒 Voice clock started");
   } catch (e) {
-    console.error("Clock error:", e.message);
+    console.error("VoiceClock error:", e.message);
   }
 }
 
 // ====================== READY ======================
 client.once("ready", async () => {
   console.log("================================");
-  console.log(`🔥 Logged: ${client.user.tag}`);
-  console.log(`📊 Guilds: ${client.guilds.cache.size}`);
+  console.log(`🔥 Bot zalogowany jako: ${client.user.tag}`);
+  console.log(`📊 Serwery: ${client.guilds.cache.size}`);
   console.log("================================");
 
   loadCommands();
   loadEvents();
   await loadSystems();
 
-  console.log("✅ BOT READY");
+  console.log("✅ BOT GOTOWY DO DZIAŁANIA");
 });
 
-// ====================== ERRORS ======================
-process.on("unhandledRejection", console.error);
-process.on("uncaughtException", console.error);
+// ====================== GLOBAL ERROR HANDLING ======================
+process.on("unhandledRejection", (err) => {
+  console.error("❌ Unhandled Rejection:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ Uncaught Exception:", err);
+  process.exit(1);
+});
 
 // ====================== LOGIN ======================
 client.login(process.env.TOKEN)
-  .then(() => console.log("🔑 LOGIN OK"))
+  .then(() => console.log("🔑 Logowanie zakończone sukcesem"))
   .catch(err => {
-    console.error("LOGIN ERROR:", err.message);
+    console.error("❌ BŁĄD LOGOWANIA:", err.message);
     process.exit(1);
   });
