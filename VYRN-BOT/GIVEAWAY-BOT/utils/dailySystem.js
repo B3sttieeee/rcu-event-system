@@ -8,8 +8,7 @@ const {
 const {
   loadProfile,
   isDailyReady,
-  saveProfile,
-  claimDaily
+  saveProfile
 } = require("./profileSystem");
 
 // ====================== CONFIG ======================
@@ -22,8 +21,8 @@ const dmCooldown = new Map();
 // ====================== POMOCNICZE ======================
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
-
   const d = user.daily;
+
   d.msgs = Number(d.msgs) || 0;
   d.vc = Number(d.vc) || 0;
   d.streak = Number(d.streak) || 0;
@@ -34,7 +33,10 @@ function ensureDailyState(user) {
   return d;
 }
 
-function buildDailyEmbed(userId, daily) {
+function buildDailyEmbed(userId) {   // <-- Usunięto drugi parametr
+  const db = loadProfile();
+  const user = db.users?.[userId] || {};
+  const daily = ensureDailyState(user);
   const ready = isDailyReady(userId);
 
   return {
@@ -84,7 +86,6 @@ async function checkDailyDM(member) {
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
-    // Reset powiadomienia jeśli daily nie jest gotowy
     if (!ready) {
       if (daily.notified || daily.lastNotifyAttemptAt > 0) {
         daily.notified = false;
@@ -95,7 +96,6 @@ async function checkDailyDM(member) {
       return false;
     }
 
-    // Już powiadomiony
     if (daily.notified) return false;
 
     const now = Date.now();
@@ -105,12 +105,11 @@ async function checkDailyDM(member) {
 
     if (now - lastAttempt < cooldown) return false;
 
-    // Przygotowanie do wysłania
     daily.lastNotifyAttemptAt = now;
     dmCooldown.set(userId, now);
     saveProfile();
 
-    const { embed, components } = buildDailyEmbed(userId, daily);
+    const { embed, components } = buildDailyEmbed(userId);
 
     try {
       await member.send({
@@ -134,7 +133,6 @@ async function checkDailyDM(member) {
       }
       return false;
     }
-
   } catch (err) {
     console.error(`[DAILY] Błąd checkDailyDM dla ${userId}:`, err);
     return false;
