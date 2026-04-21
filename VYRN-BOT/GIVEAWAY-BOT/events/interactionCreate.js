@@ -17,10 +17,7 @@ const {
 const embedCommand = require("../commands/embed");
 
 // Private Channel System
-const { 
-  handlePrivateChannelCreation,   // ← do voiceStateUpdate
-  handlePrivatePanel             // ← do Select Menu
-} = require("../utils/privateChannelSystem");
+const { handlePrivateChannelCreation } = require("../utils/privateChannelSystem");   // Tylko to jest potrzebne na razie
 
 // ====================== MAIN ======================
 module.exports = {
@@ -66,9 +63,9 @@ module.exports = {
       }
 
       // ====================== 6. PRIVATE CHANNEL SYSTEM ======================
-      // Obsługa Select Menu z panelu prywatnego kanału
-      if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
-        return await handlePrivatePanel(interaction);
+      // Obsługa przycisku tworzenia kanału (jeśli kiedyś dodasz)
+      if (interaction.isButton() && interaction.customId === "create_private_channel") {
+        // Na razie nie używamy przycisku, ale zostawiamy na przyszłość
       }
 
       // ====================== 7. TICKET SYSTEM ======================
