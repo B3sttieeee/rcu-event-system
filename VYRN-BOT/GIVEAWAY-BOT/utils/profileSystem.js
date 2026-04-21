@@ -12,7 +12,7 @@ const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true";
 // =====================================================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  console.log(`[PROFILE] Data directory ready: ${DATA_DIR}`);
+  console.log(`[PROFILE] Data directory created: ${DATA_DIR}`);
 }
 
 // =====================================================
@@ -42,7 +42,8 @@ const normalizeDaily = (daily = {}) => ({
 
 const normalizeUser = (user = {}) => ({
   voice: toSafeNumber(user.voice, 0),
-  daily: normalizeDaily(user.daily)
+  daily: normalizeDaily(user.daily),
+  // Możesz dodać tutaj więcej statystyk w przyszłości (np. level, coins, etc.)
 });
 
 const normalizeDb = (db = {}) => {
@@ -73,7 +74,7 @@ function loadProfile() {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
       fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
-      console.log(`[PROFILE] Created new database: ${PROFILE_PATH}`);
+      console.log(`[PROFILE] New database created: ${PROFILE_PATH}`);
       return dbCache;
     }
 
@@ -109,27 +110,32 @@ function saveProfile() {
 async function flushProfile() {
   try {
     await writeQueue;
-  } catch (e) {}
+  } catch (e) {
+    console.error("[PROFILE] Flush error:", e.message);
+  }
 }
 
 // =====================================================
-// USER
+// USER MANAGEMENT
 // =====================================================
 function ensureUser(userId) {
   if (!userId) return null;
+
   const db = loadProfile();
 
   if (!db.users[userId]) {
     db.users[userId] = normalizeUser();
     saveProfile();
+    console.log(`[PROFILE] New user profile created for ${userId}`);
   } else {
     db.users[userId] = normalizeUser(db.users[userId]);
   }
+
   return db.users[userId];
 }
 
 // =====================================================
-// STATS
+// STATS UPDATERS
 // =====================================================
 function addVoiceTime(userId, seconds) {
   const amount = Math.floor(Number(seconds));
@@ -142,7 +148,7 @@ function addVoiceTime(userId, seconds) {
   user.daily.vc += amount;
 
   if (DEBUG_PROFILE_VOICE) {
-    console.log(`[PROFILE][VOICE] ${userId} +${amount}s | total=${user.voice}s | daily=${user.daily.vc}s`);
+    console.log(`[PROFILE][VOICE] ${userId} +${amount}s | Total: ${user.voice}s (${Math.floor(user.voice / 60)}m) | Daily: ${user.daily.vc}s`);
   }
 
   saveProfile();
@@ -151,6 +157,7 @@ function addVoiceTime(userId, seconds) {
 
 function addMessage(userId) {
   if (!userId) return false;
+
   const user = ensureUser(userId);
   if (!user) return false;
 
@@ -171,7 +178,7 @@ function getDailyTier(streak = 0) {
   const safeStreak = toSafeNumber(streak, 0);
   return {
     vcRequired: 30 + safeStreak * 5,
-    msgRequired: safeStreak >= 5 ? 20 + safeStreak * 2 : 50 // domyślnie 50 wiadomości przy streak < 5
+    msgRequired: safeStreak >= 5 ? 20 + safeStreak * 2 : 50
   };
 }
 
@@ -200,14 +207,14 @@ async function claimDaily(userId, member = null) {
   }
 
   const now = Date.now();
-  if (now - user.daily.lastClaim < 86_400_000) { // 24h
+  if (now - user.daily.lastClaim < 86_400_000) { // 24 godziny
     return { success: false, error: "cooldown", message: "Daily już dzisiaj odebrane." };
   }
 
   user.daily.streak += 1;
   const xp = 150 + Math.floor(Math.random() * 150);
 
-  // Dodaj XP przez levelSystem
+  // Dodaj XP przez levelSystem (jeśli istnieje)
   if (member && !member.user.bot) {
     try {
       const { addXP } = require("./levelSystem");
@@ -219,7 +226,7 @@ async function claimDaily(userId, member = null) {
     }
   }
 
-  // Reset daily + notified
+  // Reset daily counters
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
@@ -238,7 +245,7 @@ async function claimDaily(userId, member = null) {
 }
 
 // =====================================================
-// RESET
+// DAILY RESET
 // =====================================================
 function runDailyReset() {
   const db = loadProfile();
@@ -258,7 +265,10 @@ function runDailyReset() {
 }
 
 function startDailyReset() {
-  if (resetInterval) return;
+  if (resetInterval) {
+    console.log("[PROFILE] Daily reset watcher already running");
+    return;
+  }
 
   loadProfile();
   lastResetDayKey = getCurrentDayKey();
@@ -269,7 +279,7 @@ function startDailyReset() {
       lastResetDayKey = currentDayKey;
       runDailyReset();
     }
-  }, 60_000);
+  }, 60_000); // sprawdzaj co minutę
 
   console.log(`[PROFILE] Daily reset watcher started (${RESET_TIMEZONE})`);
 }
