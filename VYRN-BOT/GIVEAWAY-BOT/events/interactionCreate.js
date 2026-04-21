@@ -16,9 +16,6 @@ const {
 // Embed Builder
 const embedCommand = require("../commands/embed");
 
-// Private Channel System
-const { handlePrivateChannelCreation } = require("../utils/privateChannelSystem");   // Tylko to jest potrzebne na razie
-
 // ====================== MAIN ======================
 module.exports = {
   name: Events.InteractionCreate,
@@ -62,13 +59,7 @@ module.exports = {
         return await handleDailyClaim(interaction);
       }
 
-      // ====================== 6. PRIVATE CHANNEL SYSTEM ======================
-      // Obsługa przycisku tworzenia kanału (jeśli kiedyś dodasz)
-      if (interaction.isButton() && interaction.customId === "create_private_channel") {
-        // Na razie nie używamy przycisku, ale zostawiamy na przyszłość
-      }
-
-      // ====================== 7. TICKET SYSTEM ======================
+      // ====================== 6. TICKET SYSTEM ======================
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -87,7 +78,7 @@ module.exports = {
         }
       }
 
-      // ====================== 8. SLASH COMMANDS ======================
+      // ====================== 7. SLASH COMMANDS ======================
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
