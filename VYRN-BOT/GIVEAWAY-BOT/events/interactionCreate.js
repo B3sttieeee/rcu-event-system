@@ -1,4 +1,11 @@
-const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
+const {
+  EmbedBuilder,
+  Events,
+  PermissionFlagsBits,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle
+} = require("discord.js");
 
 // ====================== SYSTEMS ======================
 const ticketSystem = require("../utils/ticketSystem");
@@ -161,7 +168,7 @@ async function handleDailyClaim(interaction) {
   }
 }
 
-// ====================== PRIVATE CHANNEL PANEL HANDLER ======================
+// ====================== PRIVATE CHANNEL PANEL HANDLER (z modalami) ======================
 async function handlePrivatePanel(interaction) {
   await interaction.deferUpdate().catch(() => {});
 
@@ -176,7 +183,6 @@ async function handlePrivatePanel(interaction) {
     });
   }
 
-  // Sprawdzenie czy użytkownik jest właścicielem
   const isOwner = channel.permissionOverwrites.cache.some(perm =>
     perm.id === interaction.user.id && perm.allow.has(PermissionFlagsBits.ManageChannels)
   );
@@ -189,20 +195,37 @@ async function handlePrivatePanel(interaction) {
   }
 
   try {
-    switch (action) {
-      case "delete":
-        await channel.delete().catch(() => {});
-        await interaction.followUp({
-          content: "🗑️ Kanał został pomyślnie usunięty.",
-          ephemeral: true
-        });
-        break;
+    if (action === "rename" || action === "limit") {
+      const modal = new ModalBuilder()
+        .setCustomId(`private_${action}_${channel.id}`)
+        .setTitle(action === "rename" ? "Zmiana nazwy kanału" : "Zmiana limitu osób");
 
-      default:
-        await interaction.followUp({
-          content: `✅ Wybrano akcję: **${action}**\n\nPełna obsługa tej funkcji zostanie dodana wkrótce.`,
-          ephemeral: true
-        });
+      const input = new TextInputBuilder()
+        .setCustomId(action === "rename" ? "new_name" : "new_limit")
+        .setLabel(action === "rename" ? "Nowa nazwa kanału" : "Nowy limit osób (1-99)")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder(action === "rename" ? "Np. Fiflak's Chill Zone" : "10")
+        .setRequired(true);
+
+      if (action === "limit") input.setMaxLength(2);
+
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      await interaction.showModal(modal);
+      return;
+    }
+
+    // Pozostałe akcje
+    if (action === "delete") {
+      await channel.delete().catch(() => {});
+      await interaction.followUp({
+        content: "🗑️ Kanał został pomyślnie usunięty.",
+        ephemeral: true
+      });
+    } else {
+      await interaction.followUp({
+        content: `✅ Wybrano akcję: **${action}**\n\nPełna obsługa tej funkcji zostanie dodana wkrótce.`,
+        ephemeral: true
+      });
     }
   } catch (err) {
     console.error("[PrivatePanel] Błąd:", err);
