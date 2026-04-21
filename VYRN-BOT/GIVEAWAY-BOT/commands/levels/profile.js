@@ -1,9 +1,10 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { loadDB, loadConfig } = require("../../utils/levelSystem");
+
+const { loadDB, loadConfig, neededXP } = require("../../utils/levelSystem");
 const { loadProfile } = require("../../utils/profileSystem");
 const { getCurrentBoost } = require("../../utils/boostSystem");
+const { getCoins } = require("../../utils/economySystem");
 
-// ====================== RANK SYSTEM ======================
 function getRank(level) {
   if (level >= 75) return { name: "Legend",    emoji: "<:LegeRank:1488756343190847538>" };
   if (level >= 60) return { name: "Ruby",      emoji: "<:RubyRank:1488756400514404372>" };
@@ -14,7 +15,6 @@ function getRank(level) {
   return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
-// ====================== PROGRESS BAR ======================
 function createProgressBar(percent) {
   const size = 12;
   const filled = Math.round((percent / 100) * size);
@@ -32,19 +32,23 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      const levels = loadDB();
-      const profile = loadProfile();
+      // Poprawne ładowanie danych
+      const levelsDB = loadDB();           // zwraca { xp: {} }
+      const profileDB = loadProfile();     // zwraca { users: {} }
       const config = loadConfig();
 
-      const lvlData = levels.xp?.[userId] || { xp: 0, level: 0 };
-      const userData = profile.users?.[userId] || { 
+      const lvlData = levelsDB.xp?.[userId] || { xp: 0, level: 0 };
+      const userData = profileDB.users?.[userId] || { 
         voice: 0, 
         daily: { msgs: 0, vc: 0, streak: 0 } 
       };
 
-      const needed = Math.floor(100 * Math.pow(lvlData.level + 1, 1.5));
-      const progress = needed ? Math.min(100, Math.floor((lvlData.xp / needed) * 100)) : 0;
-      const xpLeft = Math.max(0, needed - lvlData.xp);
+      const nextLevelXP = neededXP(lvlData.level);           // Poprawne wywołanie
+      const progress = nextLevelXP > 0 
+        ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100)) 
+        : 0;
+
+      const xpLeft = Math.max(0, nextLevelXP - lvlData.xp);
 
       const totalVoiceMin = Math.floor((userData.voice || 0) / 60);
       const dailyVoiceMin = Math.floor((userData.daily.vc || 0) / 60);
@@ -52,6 +56,7 @@ module.exports = {
 
       const currentBoost = getCurrentBoost(userId);
       const rank = getRank(lvlData.level);
+      const coins = getCoins(userId);
 
       const embed = new EmbedBuilder()
         .setColor("#0a0a0a")
@@ -64,7 +69,7 @@ module.exports = {
           `**${rank.emoji} ${rank.name}** — Level **${lvlData.level}**\n\n` +
 
           `**Experience**\n` +
-          `> **${lvlData.xp} / ${needed} XP**\n` +
+          `> **${lvlData.xp} / ${nextLevelXP} XP**\n` +
           `> ${createProgressBar(progress)} **${progress}%**\n` +
           `> **${xpLeft}** XP do następnego poziomu\n\n` +
 
@@ -75,6 +80,9 @@ module.exports = {
           `**Daily Quest**\n` +
           `> Messages: **${userData.daily.msgs || 0}**\n` +
           `> Streak: **${userData.daily.streak || 0}** dni 🔥\n\n` +
+
+          `**Economy**\n` +
+          `> Monety: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
 
           `**Active Boost**\n` +
           `> ${currentBoost > 1 ? `**${currentBoost}x XP** 🚀` : "**Brak**"}`
