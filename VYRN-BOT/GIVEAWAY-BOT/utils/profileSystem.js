@@ -42,8 +42,7 @@ const normalizeDaily = (daily = {}) => ({
 
 const normalizeUser = (user = {}) => ({
   voice: toSafeNumber(user.voice, 0),
-  daily: normalizeDaily(user.daily),
-  // Poziomy są w osobnym pliku, więc nie trzymamy ich tutaj
+  daily: normalizeDaily(user.daily)
 });
 
 const normalizeDb = (db = {}) => {
@@ -128,6 +127,7 @@ function ensureUser(userId) {
     saveProfile();
     console.log(`[PROFILE] New user profile created for ${userId}`);
   } else {
+    // Poprawiona normalizacja istniejącego użytkownika
     db.users[userId] = normalizeUser(db.users[userId]);
   }
 
@@ -213,7 +213,6 @@ async function claimDaily(userId, member = null) {
   user.daily.streak += 1;
   const xp = 150 + Math.floor(Math.random() * 150);
 
-  // Dodaj XP przez levelSystem
   if (member && !member.user.bot) {
     try {
       const { addXP } = require("./levelSystem");
@@ -225,7 +224,6 @@ async function claimDaily(userId, member = null) {
     }
   }
 
-  // Reset daily
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
