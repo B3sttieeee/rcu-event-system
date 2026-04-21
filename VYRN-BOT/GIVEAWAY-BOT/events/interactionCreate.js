@@ -139,6 +139,7 @@ async function handleDailyClaim(interaction) {
       });
     }
 
+    // Reset powiadomienia DM
     onDailyClaimed(userId);
 
     const successEmbed = new EmbedBuilder()
