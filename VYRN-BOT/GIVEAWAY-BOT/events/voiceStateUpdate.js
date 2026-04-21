@@ -21,42 +21,35 @@ module.exports = {
     const member = newState.member;
     if (!member || member.user.bot) return;
 
-    // Debug – zawsze się pokazuje przy każdej zmianie stanu głosu
     console.log(`[VoiceDebug] ${member.user.tag} | ${oldState.channel?.id || 'none'} → ${newState.channel?.id || 'none'}`);
 
-    // Tylko gdy ktoś dołącza do kanału tworzenia
     if (!oldState.channel && newState.channel && newState.channel.id === CREATE_CHANNEL_ID) {
-      console.log(`[PrivateChannel] ROZPOCZYNAM TWORZENIE dla ${member.user.tag} (${member.id})`);
+      console.log(`[PrivateChannel] ROZPOCZYNAM TWORZENIE dla ${member.user.tag}`);
       await handlePrivateChannelCreation(member);
     }
   }
 };
 
-// ====================== TWORZENIE KANAŁU ======================
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
   if (userChannels.has(member.id)) {
     const existing = guild.channels.cache.get(userChannels.get(member.id));
     if (existing) {
-      console.log(`[PrivateChannel] Użytkownik ma już kanał – przenoszę`);
       await member.voice.setChannel(existing).catch(() => {});
       return;
     }
     userChannels.delete(member.id);
   }
 
-  console.log(`[PrivateChannel] Czekam 5 sekund dla ${member.user.tag}...`);
   await new Promise(r => setTimeout(r, 5000));
 
   if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) {
-    console.log(`[PrivateChannel] Użytkownik wyszedł przed 5s – anuluję`);
+    console.log(`[PrivateChannel] Użytkownik wyszedł przed 5s - anuluję`);
     return;
   }
 
   try {
-    console.log(`[PrivateChannel] Tworzę kanał dla ${member.user.tag}...`);
-
     const channel = await guild.channels.create({
       name: `・${member.displayName}'s Channel`,
       type: ChannelType.GuildVoice,
@@ -78,31 +71,44 @@ async function handlePrivateChannelCreation(member) {
     });
 
     userChannels.set(member.id, channel.id);
-    console.log(`[PrivateChannel] Kanał stworzony: ${channel.name} (${channel.id})`);
 
-    await member.voice.setChannel(channel).catch(err => 
-      console.log(`[PrivateChannel] Błąd przeniesienia: ${err.message}`)
-    );
+    await member.voice.setChannel(channel).catch(() => {});
 
     await channel.send({
-      content: `> **${member}** Twój prywatny kanał został stworzony!\nUżyj menu poniżej.`
+      content: `> **${member}** Twój prywatny kanał został stworzony!`
     }).catch(() => {});
 
     await sendControlPanel(channel, member);
     startEmptyChannelWatcher(channel, member.id);
 
+    console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name}`);
+
   } catch (err) {
-    console.error(`[PrivateChannel] BŁĄD TWORZENIA dla ${member.user.tag}:`, err.message);
+    console.error(`[PrivateChannel] BŁĄD TWORZENIA dla ${member.user.tag}:`, err);
   }
 }
 
-// ====================== PANEL ======================
 async function sendControlPanel(channel, owner) {
   const embed = new EmbedBuilder()
     .setColor("#0a0a0a")
-    .setTitle("🔧 Panel zarządzania kanałem")
-    .setDescription(`**Właściciel:** ${owner}\nZarządzaj swoim prywatnym kanałem.`)
+    .setTitle("🔧 Panel zarządzania prywatnym kanałem")
+    .setDescription(
+      `> **Właściciel:** ${owner}\n` +
+      `> **Kanał:** <#${channel.id}>\n\n` +
+      `Użyj menu poniżej, aby zarządzać kanałem.`
+    )
+    .addFields(
+      { name: "━━━━━━━━━━━━━━━━━━", value: "**Dostępne akcje:**", inline: false },
+      { name: "✏️ Zmiana nazwy", value: "Zmień nazwę kanału", inline: true },
+      { name: "👥 Limit osób", value: "Ustaw maksymalną liczbę osób", inline: true },
+      { name: "🚪 Wyrzuć", value: "Wyrzuć kogoś z kanału", inline: true },
+      { name: "🔨 Ban", value: "Zbanuj użytkownika", inline: true },
+      { name: "🔓 Unban", value: "Odbanuj użytkownika", inline: true },
+      { name: "🔒 Lock / Unlock", value: "Zablokuj lub odblokuj kanał", inline: true },
+      { name: "🗑️ Usuń", value: "Usuń kanał całkowicie", inline: true }
+    )
     .setThumbnail(owner.user.displayAvatarURL({ dynamic: true }))
+    .setFooter({ text: "VYRN • Private Channel System" })
     .setTimestamp();
 
   const menu = new StringSelectMenuBuilder()
@@ -123,7 +129,6 @@ async function sendControlPanel(channel, owner) {
   await channel.send({ embeds: [embed], components: [row] }).catch(console.error);
 }
 
-// ====================== USUWANIE PUSTEGO ======================
 function startEmptyChannelWatcher(channel, ownerId) {
   const interval = setInterval(async () => {
     try {
