@@ -1,28 +1,10 @@
-const {
-  Events,
-  EmbedBuilder,
-  PermissionFlagsBits
-} = require("discord.js");
+const { Events, EmbedBuilder, PermissionFlagsBits } = require("discord.js");
 
 const WELCOME_CHANNEL_ID = "1475559296594084007";
 const AUTO_ROLE_ID = "1475572275095929022";
 const AUTO_ROLE_DELAY = 1500;
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const resolveRole = async (guild, roleId) => {
-  const cachedRole = guild.roles.cache.get(roleId);
-  if (cachedRole) return cachedRole;
-
-  return guild.roles.fetch(roleId).catch(() => null);
-};
-
-const resolveChannel = async (guild, channelId) => {
-  const cachedChannel = guild.channels.cache.get(channelId);
-  if (cachedChannel) return cachedChannel;
-
-  return guild.channels.fetch(channelId).catch(() => null);
-};
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 module.exports = {
   name: Events.GuildMemberAdd,
@@ -30,100 +12,73 @@ module.exports = {
   async execute(member) {
     if (member.user.bot) return;
 
+    console.log(`[JOIN] ${member.user.tag} (${member.id}) joined the server`);
+
     try {
-      console.log(`[JOIN] ${member.user.tag} (${member.id})`);
+      const guild = member.guild;
+      const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
 
-      const me =
-        member.guild.members.me ||
-        (await member.guild.members.fetchMe().catch(() => null));
+      if (!me) return;
 
-      if (!me) {
-        console.warn(`[JOIN] Missing bot member in guild ${member.guild.id}`);
-        return;
+      // ====================== AUTO ROLE ======================
+      if (AUTO_ROLE_ID) {
+        const role = guild.roles.cache.get(AUTO_ROLE_ID) || 
+                     await guild.roles.fetch(AUTO_ROLE_ID).catch(() => null);
+
+        if (role && me.permissions.has(PermissionFlagsBits.ManageRoles) && 
+            me.roles.highest.comparePositionTo(role) > 0) {
+          
+          await sleep(AUTO_ROLE_DELAY);
+          await member.roles.add(role).catch(err => 
+            console.error(`[JOIN] Failed to assign auto-role:`, err.message)
+          );
+        }
       }
 
-      const role = await resolveRole(member.guild, AUTO_ROLE_ID);
+      // ====================== WELCOME EMBED ======================
+      const welcomeChannel = guild.channels.cache.get(WELCOME_CHANNEL_ID) ||
+                             await guild.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null);
 
-      if (!role) {
-        console.warn(`[JOIN] Auto-role not found: ${AUTO_ROLE_ID}`);
-      } else if (!me.permissions.has(PermissionFlagsBits.ManageRoles)) {
-        console.warn("[JOIN] Missing ManageRoles permission");
-      } else if (me.roles.highest.comparePositionTo(role) <= 0) {
-        console.warn(
-          `[JOIN] Cannot assign role "${role.name}" because it is above or equal to bot's highest role`
-        );
-      } else {
-        await sleep(AUTO_ROLE_DELAY);
+      if (!welcomeChannel?.isTextBased()) return;
 
-        await member.roles.add(role).then(() => {
-          console.log(`[JOIN] Auto-role assigned: ${role.name} -> ${member.user.tag}`);
-        }).catch((error) => {
-          console.error(`[JOIN] Auto-role failed for ${member.user.tag}: ${error.message}`);
-        });
-      }
-
-      const channel = await resolveChannel(member.guild, WELCOME_CHANNEL_ID);
-
-      if (!channel || !channel.isTextBased()) {
-        console.warn(`[JOIN] Welcome channel not found: ${WELCOME_CHANNEL_ID}`);
-        return;
-      }
-
-      const permissions = channel.permissionsFor(me);
-      if (
-        !permissions?.has([
-          PermissionFlagsBits.ViewChannel,
-          PermissionFlagsBits.SendMessages,
-          PermissionFlagsBits.EmbedLinks
-        ])
-      ) {
-        console.warn(
-          `[JOIN] Missing permissions in welcome channel ${WELCOME_CHANNEL_ID}`
-        );
+      const perms = welcomeChannel.permissionsFor(me);
+      if (!perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
         return;
       }
 
       const embed = new EmbedBuilder()
-        .setColor("#b8a672")
+        .setColor("#0f0f0f")                    // Ciemny / czarny styl
         .setAuthor({
           name: "VYRN CLAN • OFFICIAL",
-          iconURL: member.guild.iconURL({ size: 256 }) || undefined
+          iconURL: guild.iconURL({ size: 256, dynamic: true }) || null
         })
+        .setThumbnail(member.user.displayAvatarURL({ size: 256, dynamic: true }))
+        .setImage("https://media.discordapp.net/attachments/1475992778554216448/1496214765406650489/ezgif.com-animated-gif-maker.gif?ex=69e91216&is=69e7c096&hm=72902784e5851ece5f12ab25b5989bc9f78f522c1f5136baf32e11b45853f858&=&width=571&height=324")
         .setDescription(
-          [
-            `🎉 **Welcome ${member} to VYRN**`,
-            "",
-            "━━━━━━━━━━━━━━━━━━",
-            "",
-            "📌 **START HERE**",
-            "",
-            "• <#1475526080361140344> ・ Rules",
-            "• <#1475970436650237962> ・ Verification",
-            "",
-            "━━━━━━━━━━━━━━━━━━",
-            "",
-            "🎟 **JOIN THE CLAN**",
-            "",
-            "• <#1475558248487583805>",
-            "",
-            "━━━━━━━━━━━━━━━━━━",
-            "",
-            "🔥 **Good luck & have fun!**",
-            ""
-          ].join("\n")
+          `**Welcome ${member} to VYRN Clan!**\n\n` +
+
+          `> **Start Here**\n\n` +
+          `> • **<#1475526080361140344>** • Server Rules\n` +
+          `> • **<#1475970436650237962>** • Verification\n\n` +
+
+          `> **Join The Clan**\n\n` +
+          `> • **<#1475558248487583805>** • Clan Information\n\n` +
+
+          `If you want to verify, use the command **\`/verify\`** in this channel and follow the instructions from Blox.link.\n\n` +
+
+          `🔥 **Good luck and have fun!**`
         )
-        .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-        .setImage("https://media.discordapp.net/attachments/1475993709240778904/1486898592491896882/ezgif.com-video-to-gif-converter.gif")
         .setFooter({
-          text: `Member #${member.guild.memberCount} • VYRN`
+          text: `Member #${guild.memberCount} • VYRN`,
+          iconURL: guild.iconURL({ size: 64, dynamic: true }) || null
         })
         .setTimestamp();
 
-      await channel.send({ embeds: [embed] });
+      await welcomeChannel.send({ embeds: [embed] });
+      console.log(`[JOIN] Welcome embed sent → ${member.user.tag}`);
 
-      console.log(`[JOIN] Welcome embed sent -> ${member.user.tag}`);
     } catch (error) {
-      console.error(`[JOIN] Main error for ${member.user.tag}:`, error);
+      console.error(`[JOIN] Error for ${member.user.tag}:`, error);
     }
   }
 };
