@@ -1,10 +1,11 @@
 const fs = require("fs");
 const path = require("path");
 const { ChannelType } = require("discord.js");
+
 const { getCurrentBoost } = require("./boostSystem");
 const { addVoiceTime, addMessage } = require("./profileSystem");
 
-const DATA_DIR = process.env.DATA_DIR || "/data";
+const DATA_DIR = process.env.DATA_DIR || "./data";
 const DB_PATH = path.join(DATA_DIR, "levels.json");
 const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 const DB_TMP_PATH = `${DB_PATH}.tmp`;
@@ -23,17 +24,18 @@ const DEFAULT_CONFIG = {
 // =====================================================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  console.log(`[LEVEL] Data directory ready: ${DATA_DIR}`);
 }
 
 // =====================================================
-// CACHE
+// CACHE & WRITE QUEUE
 // =====================================================
 let dbCache = null;
 let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
-// cooldown tylko dla wiadomości
+// Cooldown dla wiadomości (zapobiega spamowi XP)
 const xpCooldown = new Map();
 
 // =====================================================
@@ -46,21 +48,17 @@ const normalizeUserXP = (user = {}) => ({
 
 const logError = (scope, error) => {
   console.error(`[LEVEL] ${scope}`);
-  if (error?.stack) {
-    console.error(error.stack);
-    return;
-  }
-  console.error(error);
+  if (error?.stack) console.error(error.stack);
+  else console.error(error);
 };
 
 const triggerDailyCheck = async (member) => {
   try {
     const { checkDailyDM } = require("./dailySystem");
-
     if (typeof checkDailyDM === "function") {
       await checkDailyDM(member);
     }
-  } catch {}
+  } catch (e) {}
 };
 
 const isEligibleVoiceMember = (member) => {
@@ -68,12 +66,11 @@ const isEligibleVoiceMember = (member) => {
   if (!member.voice?.channelId) return false;
   if (member.voice.selfMute || member.voice.selfDeaf) return false;
   if (member.voice.serverMute || member.voice.serverDeaf) return false;
-
   return true;
 };
 
 // =====================================================
-// DB
+// DATABASE
 // =====================================================
 function loadDB() {
   if (dbCache) return dbCache;
@@ -81,7 +78,7 @@ function loadDB() {
   try {
     if (!fs.existsSync(DB_PATH)) {
       dbCache = { xp: {} };
-      fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2), "utf8");
+      fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
       return dbCache;
     }
 
@@ -89,11 +86,9 @@ function loadDB() {
     const parsed = raw.trim() ? JSON.parse(raw) : { xp: {} };
 
     dbCache = { xp: {} };
-
     for (const [userId, userData] of Object.entries(parsed.xp || {})) {
       dbCache.xp[userId] = normalizeUserXP(userData);
     }
-
     return dbCache;
   } catch (error) {
     logError("DB LOAD ERROR", error);
@@ -106,7 +101,6 @@ function saveDB() {
   if (!dbCache) return writeQueue;
 
   const snapshot = JSON.stringify(dbCache, null, 2);
-
   writeQueue = writeQueue
     .catch(() => null)
     .then(async () => {
@@ -115,7 +109,6 @@ function saveDB() {
         await fs.promises.rename(DB_TMP_PATH, DB_PATH);
       } catch (error) {
         logError("DB SAVE ERROR", error);
-        throw error;
       }
     });
 
@@ -131,18 +124,13 @@ function loadConfig() {
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
       configCache = { ...DEFAULT_CONFIG };
-      fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2), "utf8");
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
       return configCache;
     }
 
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : {};
-
-    configCache = {
-      ...DEFAULT_CONFIG,
-      ...parsed
-    };
-
+    configCache = { ...DEFAULT_CONFIG, ...parsed };
     return configCache;
   } catch (error) {
     logError("CONFIG LOAD ERROR", error);
@@ -153,11 +141,11 @@ function loadConfig() {
 
 function saveConfig() {
   if (!configCache) return;
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2), "utf8");
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
 }
 
 // =====================================================
-// CORE
+// XP CALCULATIONS
 // =====================================================
 function neededXP(level) {
   const currentLevel = Math.max(0, Number(level) || 0);
@@ -168,8 +156,10 @@ function getMultiplier(member) {
   const cfg = loadConfig();
   let multiplier = Number(cfg.globalMultiplier) || 1;
 
+  // Boost z boostSystem
   multiplier *= getCurrentBoost(member.id) || 1;
 
+  // Rola boostująca
   if (cfg.boostRole && member.roles?.cache?.has(cfg.boostRole)) {
     multiplier *= 1.75;
   }
@@ -178,23 +168,21 @@ function getMultiplier(member) {
 }
 
 // =====================================================
-// XP ENGINE
+// CORE XP FUNCTION
 // =====================================================
 async function addXP(member, base = 0, length = 0, options = {}) {
   const { useCooldown = true } = options;
 
   if (!member || member.user?.bot) return null;
-
   const safeBase = Number(base);
   if (!Number.isFinite(safeBase) || safeBase <= 0) return null;
 
+  // Cooldown na wiadomości
   if (useCooldown) {
     const now = Date.now();
-
     if (xpCooldown.has(member.id) && now - xpCooldown.get(member.id) < 2500) {
       return null;
     }
-
     xpCooldown.set(member.id, now);
   }
 
@@ -205,11 +193,13 @@ async function addXP(member, base = 0, length = 0, options = {}) {
 
   let gain = safeBase;
 
+  // Bonus za długość wiadomości
   if ((length || 0) >= cfg.lengthThreshold) {
     gain *= 1 + cfg.lengthBonus;
   }
 
   gain = Math.floor(gain * getMultiplier(member));
+
   if (gain <= 0) return null;
 
   const user = db.xp[member.id];
@@ -238,11 +228,11 @@ async function addXP(member, base = 0, length = 0, options = {}) {
 }
 
 // =====================================================
-// ROLES
+// ROLE REWARDS
 // =====================================================
 async function checkRoles(member, level) {
   const roles = {
-    5: "1476000458987278397",
+    5:  "1476000458987278397",
     15: "1476000995501670534",
     30: "1476000459595448442",
     45: "1476000991206707221",
@@ -252,7 +242,9 @@ async function checkRoles(member, level) {
 
   for (const [requiredLevel, roleId] of Object.entries(roles)) {
     if (level >= Number(requiredLevel) && !member.roles.cache.has(roleId)) {
-      await member.roles.add(roleId).catch(() => {});
+      await member.roles.add(roleId).catch(err => 
+        console.error(`[LEVEL] Failed to add role ${roleId} to ${member.user.tag}:`, err.message)
+      );
     }
   }
 }
@@ -263,19 +255,18 @@ async function checkRoles(member, level) {
 async function handleMessageXP(member, content) {
   if (!member || member.user?.bot) return null;
 
-  addMessage(member.id);
+  addMessage(member.id); // Aktualizacja profilu
 
   const cfg = loadConfig();
-  const result = await addXP(member, cfg.messageXP, content?.length || 0, {
-    useCooldown: true
-  });
+  const result = await addXP(member, cfg.messageXP, content?.length || 0, { useCooldown: true });
 
   await triggerDailyCheck(member);
+
   return result;
 }
 
 // =====================================================
-// VOICE XP + PROFILE TIME
+// VOICE XP + PROFILE TRACKER
 // =====================================================
 function startVoiceXP(client) {
   if (voiceLoopStarted) {
@@ -292,45 +283,41 @@ function startVoiceXP(client) {
 
     for (const guild of client.guilds.cache.values()) {
       for (const channel of guild.channels.cache.values()) {
-        if (
-          channel.type !== ChannelType.GuildVoice &&
-          channel.type !== ChannelType.GuildStageVoice
-        ) {
+        if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) {
           continue;
         }
 
         for (const member of channel.members.values()) {
-          if (!isEligibleVoiceMember(member)) continue;
-          if (processedUsers.has(member.id)) continue;
+          if (!isEligibleVoiceMember(member) || processedUsers.has(member.id)) continue;
 
           processedUsers.add(member.id);
 
-          addVoiceTime(member.id, 60);
+          addVoiceTime(member.id, 60); // +1 minuta do profilu
 
-          await addXP(member, cfg.voiceXP, 0, {
-            useCooldown: false
-          }).catch(() => null);
+          await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => null);
 
           await triggerDailyCheck(member);
         }
       }
     }
-  }, 60_000);
+  }, 60_000); // co minutę
 }
 
 // =====================================================
-// CONFIG SETTERS
+// CONFIG SETTERS (dla komend administracyjnych)
 // =====================================================
 function setMessageXP(value) {
   const cfg = loadConfig();
   cfg.messageXP = Number(value) || DEFAULT_CONFIG.messageXP;
   saveConfig();
+  console.log(`[LEVEL] Message XP ustawione na ${cfg.messageXP}`);
 }
 
 function setVoiceXP(value) {
   const cfg = loadConfig();
   cfg.voiceXP = Number(value) || DEFAULT_CONFIG.voiceXP;
   saveConfig();
+  console.log(`[LEVEL] Voice XP ustawione na ${cfg.voiceXP}`);
 }
 
 // =====================================================
