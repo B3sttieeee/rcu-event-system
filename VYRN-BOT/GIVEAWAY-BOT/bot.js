@@ -163,15 +163,6 @@ async function loadSystems() {
       console.error("TicketSystem error:", e.message);
     }
   }, 5000);
-
-  // Voice Clock
-  try {
-    const voiceClock = require("./utils/voiceClock");
-    voiceClock.start?.(client);
-    console.log("🕒 Voice clock started");
-  } catch (e) {
-    console.error("VoiceClock error:", e.message);
-  }
 }
 
 // ====================== READY EVENT ======================
