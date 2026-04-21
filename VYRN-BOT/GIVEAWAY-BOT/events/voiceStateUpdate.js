@@ -11,7 +11,7 @@ module.exports = {
     const member = newState.member;
     if (!member || member.user.bot) return;
 
-    // Ktoś dołączył do kanału tworzenia prywatnego kanału
+    // Ktoś dołączył do kanału tworzenia
     if (!oldState.channel && newState.channel && newState.channel.id === CREATE_CHANNEL_ID) {
       await handlePrivateChannelCreation(member);
     }
