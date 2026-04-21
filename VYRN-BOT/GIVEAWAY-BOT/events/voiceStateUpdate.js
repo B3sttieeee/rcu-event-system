@@ -3,6 +3,9 @@ const {
   EmbedBuilder,
   ActionRowBuilder,
   StringSelectMenuBuilder,
+  ModalBuilder,
+  TextInputBuilder,
+  TextInputStyle,
   PermissionFlagsBits,
   ChannelType
 } = require("discord.js");
@@ -30,6 +33,7 @@ module.exports = {
   }
 };
 
+// ====================== TWORZENIE KANAŁU ======================
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
@@ -88,6 +92,7 @@ async function handlePrivateChannelCreation(member) {
   }
 }
 
+// ====================== ŁADNY PANEL ======================
 async function sendControlPanel(channel, owner) {
   const embed = new EmbedBuilder()
     .setColor("#0a0a0a")
@@ -129,6 +134,60 @@ async function sendControlPanel(channel, owner) {
   await channel.send({ embeds: [embed], components: [row] }).catch(console.error);
 }
 
+// ====================== OBSŁUGA MODALI I AKCJI ======================
+async function handlePrivatePanel(interaction) {
+  await interaction.deferUpdate().catch(() => {});
+
+  const channelId = interaction.customId.split("_")[2];
+  const action = interaction.values[0];
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) {
+    return interaction.followUp({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+  }
+
+  const isOwner = channel.permissionOverwrites.cache.some(perm =>
+    perm.id === interaction.user.id && perm.allow.has(PermissionFlagsBits.ManageChannels)
+  );
+
+  if (!isOwner) {
+    return interaction.followUp({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
+  }
+
+  if (action === "rename" || action === "limit") {
+    const modal = new ModalBuilder()
+      .setCustomId(`private_${action}_${channel.id}`)
+      .setTitle(action === "rename" ? "Zmiana nazwy kanału" : "Zmiana limitu osób");
+
+    const input = new TextInputBuilder()
+      .setCustomId(action === "rename" ? "new_name" : "new_limit")
+      .setLabel(action === "rename" ? "Nowa nazwa kanału" : "Nowy limit osób (1-99)")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder(action === "rename" ? "Np. Fiflak's Chill Zone" : "10")
+      .setRequired(true);
+
+    if (action === "limit") input.setMaxLength(2);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+
+    await interaction.showModal(modal);
+    return;
+  }
+
+  // Pozostałe akcje
+  if (action === "delete") {
+    await channel.delete().catch(() => {});
+    userChannels.delete(interaction.user.id);
+    await interaction.followUp({ content: "🗑️ Kanał został usunięty.", ephemeral: true });
+  } else {
+    await interaction.followUp({
+      content: `✅ Wybrano **${action}**. Pełna obsługa zostanie dodana wkrótce.`,
+      ephemeral: true
+    });
+  }
+}
+
+// ====================== AUTOMATYCZNE USUWANIE PUSTEGO KANAŁU ======================
 function startEmptyChannelWatcher(channel, ownerId) {
   const interval = setInterval(async () => {
     try {
