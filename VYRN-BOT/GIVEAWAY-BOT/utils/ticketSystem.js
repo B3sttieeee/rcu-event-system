@@ -31,18 +31,20 @@ async function createTicketPanel(client) {
     .setDescription(
       `**Welcome to VYRN Clan Recruitment**\n\n` +
 
-      `Select the type of application you want to submit below.\n\n` +
+      `> **Available Applications**\n\n` +
 
-      `**Available Applications:**\n\n` +
-      `• **VYRN Main Clan** — Competitive / High-tier players\n` +
-      `• **Staff Support** — Join the moderation team\n\n` +
+      `> • **🔥 VYRN Main Clan**\n` +
+      `>   Competitive / High-tier players\n\n` +
+
+      `> • **🛠️ Staff Support**\n` +
+      `>   Join the moderation team\n\n` +
 
       `━━━━━━━━━━━━━━━━━━\n\n` +
 
-      `📌 **Instructions**\n` +
-      `• Choose an option\n` +
-      `• Fill out the form honestly\n` +
-      `• Wait for a response (up to 24h)`
+      `> **Instructions**\n\n` +
+      `> • Select an option below\n` +
+      `> • Fill the form carefully\n` +
+      `> • Wait for a response (up to 24h)`
     )
     .setImage(CONFIG.PANEL_IMAGE)
     .setFooter({ text: "VYRN CLAN • Recruitment Panel" })
@@ -68,7 +70,7 @@ async function createTicketPanel(client) {
       ])
   );
 
-  // Usuń stare panele i wyślij nowy
+  // Usuń stare panele jeśli istnieją
   const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
   const existing = messages?.find(m => m.embeds?.[0]?.title?.includes("Recruitment Center"));
 
@@ -81,18 +83,15 @@ async function createTicketPanel(client) {
 
 // ================= HANDLE INTERACTIONS =================
 async function handle(interaction, client) {
-  // Select Menu
   if (interaction.isStringSelectMenu() && interaction.customId === "clan_ticket_select") {
     const type = interaction.values[0];
     return openModal(interaction, type);
   }
 
-  // Close Button
   if (interaction.isButton() && interaction.customId === "close_ticket") {
     return closeTicket(interaction);
   }
 
-  // Modal Submit
   if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket_modal_")) {
     const type = interaction.customId.split("_")[2];
     return createTicket(interaction, type, client);
@@ -101,9 +100,14 @@ async function handle(interaction, client) {
 
 // ================= OPEN MODAL =================
 async function openModal(interaction, type) {
+  const titles = {
+    vyrn: "VYRN Main Clan Application",
+    staff: "Staff Support Application"
+  };
+
   const modal = new ModalBuilder()
     .setCustomId(`ticket_modal_${type}`)
-    .setTitle(type === "vyrn" ? "VYRN Main Clan Application" : "Staff Support Application");
+    .setTitle(titles[type] || "Application Form");
 
   const nick = new TextInputBuilder()
     .setCustomId("nick")
@@ -135,7 +139,6 @@ async function createTicket(interaction, type, client) {
     staff: "Staff Support"
   };
 
-  // Sprawdź czy użytkownik już ma ticket
   const existing = interaction.guild.channels.cache.find(c => c.topic === interaction.user.id);
   if (existing) {
     return interaction.reply({
@@ -159,11 +162,7 @@ async function createTicket(interaction, type, client) {
       },
       { 
         id: CONFIG.ADMIN_ROLE, 
-        allow: [
-          PermissionsBitField.Flags.ViewChannel,
-          PermissionsBitField.Flags.SendMessages,
-          PermissionsBitField.Flags.ManageMessages
-        ] 
+        allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages, PermissionsBitField.Flags.ManageMessages] 
       }
     ]
   });
@@ -194,7 +193,6 @@ async function createTicket(interaction, type, client) {
   });
 
   await interaction.editReply({ content: `✅ Your ticket has been created: ${channel}` });
-
   await sendLog(client, interaction, type, channel, nick, lang);
 }
 
@@ -203,10 +201,7 @@ async function closeTicket(interaction) {
   await interaction.reply({ content: "🔒 Closing ticket...", ephemeral: true });
 
   const messages = await interaction.channel.messages.fetch({ limit: 100 });
-  const transcript = messages
-    .map(m => `[${m.author.tag}] ${m.content}`)
-    .reverse()
-    .join("\n");
+  const transcript = messages.map(m => `[${m.author.tag}] ${m.content}`).reverse().join("\n");
 
   const logChannel = await interaction.client.channels.fetch(CONFIG.LOG_CHANNEL_ID).catch(() => null);
 
