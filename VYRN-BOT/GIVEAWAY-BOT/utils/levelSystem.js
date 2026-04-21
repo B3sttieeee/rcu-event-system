@@ -5,7 +5,7 @@ const { ChannelType } = require("discord.js");
 const { getCurrentBoost } = require("./boostSystem");
 const { addVoiceTime, addMessage } = require("./profileSystem");
 
-const DATA_DIR = process.env.DATA_DIR || "/data";   // <-- ważne dla Railway
+const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "levels.json");
 const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 const DB_TMP_PATH = `${DB_PATH}.tmp`;
@@ -35,7 +35,7 @@ let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
-const xpCooldown = new Map(); // cooldown dla wiadomości XP
+const xpCooldown = new Map();
 
 // =====================================================
 // HELPERS
@@ -229,7 +229,7 @@ async function addXP(member, base = 0, length = 0, options = {}) {
 // =====================================================
 async function checkRoles(member, level) {
   const roles = {
-    5:  "1476000458987278397",
+    5: "1476000458987278397",
     15: "1476000995501670534",
     30: "1476000459595448442",
     45: "1476000991206707221",
@@ -240,7 +240,7 @@ async function checkRoles(member, level) {
   for (const [reqLevel, roleId] of Object.entries(roles)) {
     if (level >= Number(reqLevel) && !member.roles.cache.has(roleId)) {
       await member.roles.add(roleId).catch(err => 
-        console.error(`[LEVEL] Failed to add role ${roleId} to ${member.user.tag}:`, err.message)
+        console.error(`[LEVEL] Failed to add role to ${member.user.tag}:`, err.message)
       );
     }
   }
@@ -279,22 +279,20 @@ function startVoiceXP(client) {
 
     for (const guild of client.guilds.cache.values()) {
       for (const channel of guild.channels.cache.values()) {
-        if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) {
-          continue;
-        }
+        if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) continue;
 
         for (const member of channel.members.values()) {
           if (!isEligibleVoiceMember(member) || processedUsers.has(member.id)) continue;
 
           processedUsers.add(member.id);
 
-          addVoiceTime(member.id, 60); // +1 minuta do profilu
+          addVoiceTime(member.id, 60);
           await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => null);
           await triggerDailyCheck(member);
         }
       }
     }
-  }, 60_000); // co minutę
+  }, 60_000);
 }
 
 // =====================================================
