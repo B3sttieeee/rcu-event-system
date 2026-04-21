@@ -17,7 +17,10 @@ const {
 const embedCommand = require("../commands/embed");
 
 // Private Channel System
-const { handlePrivateChannelCreation, handlePrivatePanel } = require("../utils/privateChannelSystem");
+const { 
+  handlePrivateChannelCreation,   // ← do voiceStateUpdate
+  handlePrivatePanel             // ← do Select Menu
+} = require("../utils/privateChannelSystem");
 
 // ====================== MAIN ======================
 module.exports = {
@@ -63,8 +66,7 @@ module.exports = {
       }
 
       // ====================== 6. PRIVATE CHANNEL SYSTEM ======================
-      // Tworzenie kanału po wejściu na specjalny kanał (voiceStateUpdate)
-      // Obsługa panelu (Select Menu)
+      // Obsługa Select Menu z panelu prywatnego kanału
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
