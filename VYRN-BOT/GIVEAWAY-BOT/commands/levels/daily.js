@@ -34,19 +34,20 @@ async function showDailyPanel(interaction) {
     const userId = interaction.user.id;
     const ready = isDailyReady(userId);
 
-    const { embed, components } = buildDailyEmbed(userId, null);
+    // Poprawnie wywołujemy buildDailyEmbed
+    const { embed, components } = buildDailyEmbed(userId);
 
     await interaction.editReply({
       embeds: [embed],
-      components: components
+      components: components || []
     });
 
-    // Collector tylko jeśli daily jest gotowy
-    if (ready && components.length > 0) {
+    // Collector tylko gdy daily jest gotowy i jest przycisk
+    if (ready && components && components.length > 0) {
       const collector = interaction.channel.createMessageComponentCollector({
-        componentType: ComponentType.Button,   // Poprawny sposób
+        componentType: ComponentType.Button,
         filter: i => i.customId === "daily_claim" && i.user.id === userId,
-        time: 120000 // 2 minuty
+        time: 120000
       });
 
       collector.on("collect", async (btnInteraction) => {
@@ -56,10 +57,10 @@ async function showDailyPanel(interaction) {
 
       collector.on("end", async () => {
         try {
-          const { embed: disabledEmbed } = buildDailyEmbed(userId, null);
+          const { embed: disabledEmbed } = buildDailyEmbed(userId);
           await interaction.editReply({
             embeds: [disabledEmbed],
-            components: [] 
+            components: []
           });
         } catch (e) {}
       });
@@ -90,7 +91,6 @@ async function handleDailyClaim(interaction, member) {
       });
     }
 
-    // Sukces
     const successEmbed = new EmbedBuilder()
       .setColor("#22c55e")
       .setTitle("🎉 Daily Odebrany Pomyślnie!")
