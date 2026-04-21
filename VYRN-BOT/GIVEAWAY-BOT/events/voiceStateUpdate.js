@@ -1,6 +1,6 @@
-const { Events, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, PermissionFlagsBits, ChannelType } = require("discord.js");
+const { Events } = require("discord.js");
 
-const CREATE_CHANNEL_ID = "1496280414237491220";   // Kanał, na który ktoś wchodzi
+const CREATE_CHANNEL_ID = "1496280414237491220";
 const PRIVATE_CATEGORY_ID = "1496281285780574268";
 
 const userChannels = new Map(); // userId => channelId
@@ -11,7 +11,6 @@ module.exports = {
     const member = newState.member;
     if (!member || member.user.bot) return;
 
-    // Ktoś dołączył do kanału tworzenia prywatnego kanału
     if (!oldState.channel && newState.channel && newState.channel.id === CREATE_CHANNEL_ID) {
       await handlePrivateChannelCreation(member);
     }
@@ -22,7 +21,6 @@ module.exports = {
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
-  // Limit 1 kanał na użytkownika
   if (userChannels.has(member.id)) {
     const existing = guild.channels.cache.get(userChannels.get(member.id));
     if (existing) {
@@ -32,12 +30,10 @@ async function handlePrivateChannelCreation(member) {
     userChannels.delete(member.id);
   }
 
-  // Czekamy 5 sekund
   await new Promise(resolve => setTimeout(resolve, 5000));
 
-  // Sprawdzamy czy nadal jest na kanale tworzenia
   if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) {
-    return; // Wyszedł zanim minęło 5 sekund
+    return;
   }
 
   try {
@@ -63,20 +59,15 @@ async function handlePrivateChannelCreation(member) {
 
     userChannels.set(member.id, channel.id);
 
-    // Automatyczne przeniesienie na nowy kanał
     if (member.voice?.channel) {
       await member.voice.setChannel(channel).catch(() => {});
     }
 
-    // Ping osoby + informacja
     await channel.send({
       content: `> **${member}** Twój prywatny kanał został stworzony!`
     }).catch(() => {});
 
-    // Wysyłamy ładny panel sterowania
     await sendControlPanel(channel, member);
-
-    // Watcher usuwania pustego kanału
     startEmptyChannelWatcher(channel, member.id);
 
   } catch (err) {
@@ -138,11 +129,10 @@ function startEmptyChannelWatcher(channel, ownerId) {
         await freshChannel?.delete().catch(() => {});
         userChannels.delete(ownerId);
         clearInterval(interval);
-        console.log(`[PrivateChannel] Kanał ${channel.name} został usunięty (pusty)`);
       }
     } catch (e) {
       clearInterval(interval);
       userChannels.delete(ownerId);
     }
-  }, 15000); // co 15 sekund
+  }, 15000);
 }
