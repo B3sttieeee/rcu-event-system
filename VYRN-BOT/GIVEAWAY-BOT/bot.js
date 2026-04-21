@@ -56,7 +56,6 @@ function loadCommands() {
       loadFile(itemPath);
     }
   }
-
   console.log(`📊 Załadowano ${loaded} komend`);
 }
 
@@ -89,7 +88,6 @@ function loadEvents() {
       console.error(`❌ EVENT ERROR ${file}:`, e.message);
     }
   }
-
   console.log(`📊 Załadowano ${loaded} eventów`);
 }
 
@@ -97,11 +95,11 @@ function loadEvents() {
 async function loadSystems() {
   console.log("🚀 Ładowanie systemów...");
 
-  // 1. Giveaway System
+  // 1. Giveaway System (NAJWAŻNIEJSZE - musi być wczytane z clientem)
   try {
     const giveawaySystem = require("./utils/giveawaySystem");
-    giveawaySystem.loadGiveaways(client);
-    console.log("🎁 Giveaway system załadowany");
+    giveawaySystem.loadGiveaways(client);        // przekazuje client
+    console.log("🎁 Giveaway system załadowany i wznowiony");
   } catch (e) {
     console.error("❌ GiveawaySystem error:", e.message);
   }
