@@ -19,7 +19,7 @@ module.exports = {
       const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
 
       if (!me) {
-        console.warn(`[JOIN] Bot member not found in guild ${guild.id}`);
+        console.warn(`[JOIN] Bot member not found`);
         return;
       }
 
@@ -35,8 +35,8 @@ module.exports = {
           await sleep(AUTO_ROLE_DELAY);
           
           await member.roles.add(role)
-            .then(() => console.log(`[JOIN] Auto-role assigned → ${member.user.tag}`))
-            .catch(err => console.error(`[JOIN] Failed to assign auto-role:`, err.message));
+            .then(() => console.log(`[JOIN] Auto-role assigned to ${member.user.tag}`))
+            .catch(err => console.error(`[JOIN] Auto-role failed:`, err.message));
         }
       }
 
@@ -45,7 +45,7 @@ module.exports = {
                              await guild.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null);
 
       if (!welcomeChannel || !welcomeChannel.isTextBased()) {
-        console.warn(`[JOIN] Welcome channel not found or invalid`);
+        console.warn(`[JOIN] Welcome channel not found`);
         return;
       }
 
@@ -61,19 +61,19 @@ module.exports = {
           name: "VYRN CLAN • OFFICIAL",
           iconURL: guild.iconURL({ dynamic: true })
         })
-        .setTitle(`Welcome ${member} to VYRN Clan!`)
+        .setTitle(`Welcome ${member} to VYRN Clan!`)   // <-- tutaj pinguje poprawnie
         .setDescription(
           `> **Start Here**\n\n` +
-          
+
           `> • **<#1475526080361140344>** • Server Rules\n` +
           `> • **<#1475970436650237962>** • Verification\n\n` +
-          
+
           `> **Join The Clan**\n\n` +
           `> • **<#1475558248487583805>** • Clan Information\n\n` +
-          
+
           `If you want to verify, use the command **\`/verify\`** in this channel ` +
           `and follow the instructions from Blox.link.\n\n` +
-          
+
           `🔥 **Good luck and have fun!**`
         )
         .setThumbnail(member.user.displayAvatarURL({ size: 256, dynamic: true }))
@@ -88,7 +88,7 @@ module.exports = {
       console.log(`[JOIN] Welcome embed sent → ${member.user.tag}`);
 
     } catch (error) {
-      console.error(`[JOIN] Error processing member join for ${member.user.tag}:`, error);
+      console.error(`[JOIN] Error for ${member.user.tag}:`, error);
     }
   }
 };
