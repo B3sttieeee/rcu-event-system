@@ -1,10 +1,9 @@
 const fs = require("fs");
 const path = require("path");
 
-const DATA_DIR = process.env.DATA_DIR || "/data";
+const DATA_DIR = process.env.DATA_DIR || "./data";
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
 const PROFILE_TMP_PATH = `${PROFILE_PATH}.tmp`;
-
 const RESET_TIMEZONE = process.env.RESET_TIMEZONE || "Europe/Warsaw";
 const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true";
 
@@ -17,7 +16,7 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 
 // =====================================================
-// CACHE / WRITE QUEUE
+// CACHE & WRITE QUEUE
 // =====================================================
 let dbCache = null;
 let writeQueue = Promise.resolve();
@@ -32,28 +31,27 @@ const toSafeNumber = (value, fallback = 0) => {
   return Number.isFinite(number) ? number : fallback;
 };
 
+const normalizeDaily = (daily = {}) => ({
+  msgs: toSafeNumber(daily.msgs, 0),
+  vc: toSafeNumber(daily.vc, 0),
+  streak: toSafeNumber(daily.streak, 0),
+  lastClaim: toSafeNumber(daily.lastClaim, 0),
+  notified: Boolean(daily.notified),
+  lastNotifyAttemptAt: toSafeNumber(daily.lastNotifyAttemptAt, 0)
+});
+
 const normalizeUser = (user = {}) => ({
   voice: toSafeNumber(user.voice, 0),
-  daily: {
-    msgs: toSafeNumber(user.daily?.msgs, 0),
-    vc: toSafeNumber(user.daily?.vc, 0),
-    streak: toSafeNumber(user.daily?.streak, 0),
-    lastClaim: toSafeNumber(user.daily?.lastClaim, 0),
-    notified: Boolean(user.daily?.notified)
-  }
+  daily: normalizeDaily(user.daily)
 });
 
 const normalizeDb = (db = {}) => {
   const normalized = { users: {} };
-
-  if (!db.users || typeof db.users !== "object") {
-    return normalized;
-  }
+  if (!db.users || typeof db.users !== "object") return normalized;
 
   for (const [userId, userData] of Object.entries(db.users)) {
     normalized.users[userId] = normalizeUser(userData);
   }
-
   return normalized;
 };
 
@@ -66,7 +64,7 @@ const getCurrentDayKey = () =>
   }).format(new Date());
 
 // =====================================================
-// LOAD
+// LOAD & SAVE
 // =====================================================
 function loadProfile() {
   if (dbCache) return dbCache;
@@ -74,14 +72,13 @@ function loadProfile() {
   try {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
-      fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2), "utf8");
+      fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
       console.log(`[PROFILE] Created new database: ${PROFILE_PATH}`);
       return dbCache;
     }
 
     const raw = fs.readFileSync(PROFILE_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
-
     dbCache = normalizeDb(parsed);
     return dbCache;
   } catch (error) {
@@ -91,14 +88,10 @@ function loadProfile() {
   }
 }
 
-// =====================================================
-// SAVE
-// =====================================================
 function saveProfile() {
   if (!dbCache) return writeQueue;
 
   const snapshot = JSON.stringify(dbCache, null, 2);
-
   writeQueue = writeQueue
     .catch(() => null)
     .then(async () => {
@@ -107,7 +100,6 @@ function saveProfile() {
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
-        throw error;
       }
     });
 
@@ -117,7 +109,7 @@ function saveProfile() {
 async function flushProfile() {
   try {
     await writeQueue;
-  } catch {}
+  } catch (e) {}
 }
 
 // =====================================================
@@ -125,7 +117,6 @@ async function flushProfile() {
 // =====================================================
 function ensureUser(userId) {
   if (!userId) return null;
-
   const db = loadProfile();
 
   if (!db.users[userId]) {
@@ -134,7 +125,6 @@ function ensureUser(userId) {
   } else {
     db.users[userId] = normalizeUser(db.users[userId]);
   }
-
   return db.users[userId];
 }
 
@@ -143,16 +133,7 @@ function ensureUser(userId) {
 // =====================================================
 function addVoiceTime(userId, seconds) {
   const amount = Math.floor(Number(seconds));
-
-  if (!userId) return false;
-  if (!Number.isFinite(amount) || amount <= 0) {
-    if (DEBUG_PROFILE_VOICE) {
-      console.warn(
-        `[PROFILE][VOICE] Ignored invalid addVoiceTime call: userId=${userId}, seconds=${seconds}`
-      );
-    }
-    return false;
-  }
+  if (!userId || !Number.isFinite(amount) || amount <= 0) return false;
 
   const user = ensureUser(userId);
   if (!user) return false;
@@ -161,11 +142,7 @@ function addVoiceTime(userId, seconds) {
   user.daily.vc += amount;
 
   if (DEBUG_PROFILE_VOICE) {
-    console.log(
-      `[PROFILE][VOICE] ${userId} +${amount}s | total=${user.voice}s (${Math.floor(
-        user.voice / 60
-      )}m) | daily=${user.daily.vc}s`
-    );
+    console.log(`[PROFILE][VOICE] ${userId} +${amount}s | total=${user.voice}s | daily=${user.daily.vc}s`);
   }
 
   saveProfile();
@@ -174,21 +151,17 @@ function addVoiceTime(userId, seconds) {
 
 function addMessage(userId) {
   if (!userId) return false;
-
   const user = ensureUser(userId);
   if (!user) return false;
 
   user.daily.msgs += 1;
   saveProfile();
-
   return true;
 }
 
 function getVoiceMinutes(userId) {
   const user = ensureUser(userId);
-  if (!user) return 0;
-
-  return Math.floor(user.voice / 60);
+  return user ? Math.floor(user.voice / 60) : 0;
 }
 
 // =====================================================
@@ -196,10 +169,9 @@ function getVoiceMinutes(userId) {
 // =====================================================
 function getDailyTier(streak = 0) {
   const safeStreak = toSafeNumber(streak, 0);
-
   return {
     vcRequired: 30 + safeStreak * 5,
-    msgRequired: safeStreak >= 5 ? 20 + safeStreak * 2 : 0
+    msgRequired: safeStreak >= 5 ? 20 + safeStreak * 2 : 50 // domyślnie 50 wiadomości przy streak < 5
   };
 }
 
@@ -212,35 +184,33 @@ function isDailyReady(userId) {
 
   return (
     vcMinutes >= tier.vcRequired &&
-    (tier.msgRequired === 0 || user.daily.msgs >= tier.msgRequired)
+    user.daily.msgs >= tier.msgRequired
   );
 }
 
 // =====================================================
-// CLAIM
+// CLAIM DAILY
 // =====================================================
 async function claimDaily(userId, member = null) {
   const user = ensureUser(userId);
   if (!user) return { success: false, error: "invalid_user" };
 
-  const now = Date.now();
-
   if (!isDailyReady(userId)) {
-    return { success: false, error: "not_ready" };
+    return { success: false, error: "not_ready", message: "Daily Quest nie jest jeszcze gotowy." };
   }
 
-  if (now - user.daily.lastClaim < 86_400_000) {
-    return { success: false, error: "cooldown" };
+  const now = Date.now();
+  if (now - user.daily.lastClaim < 86_400_000) { // 24h
+    return { success: false, error: "cooldown", message: "Daily już dzisiaj odebrane." };
   }
 
   user.daily.streak += 1;
-
   const xp = 150 + Math.floor(Math.random() * 150);
 
+  // Dodaj XP przez levelSystem
   if (member && !member.user.bot) {
     try {
       const { addXP } = require("./levelSystem");
-
       if (typeof addXP === "function") {
         await addXP(member, xp);
       }
@@ -249,17 +219,21 @@ async function claimDaily(userId, member = null) {
     }
   }
 
+  // Reset daily + notified
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
   user.daily.notified = false;
+  user.daily.lastNotifyAttemptAt = 0;
 
   saveProfile();
 
   return {
     success: true,
     xp,
-    streak: user.daily.streak
+    streak: user.daily.streak,
+    message: `Otrzymałeś **${xp} XP** i przedłużyłeś streak do **${user.daily.streak} dni**!`,
+    reward: `${xp} XP`
   };
 }
 
@@ -272,11 +246,10 @@ function runDailyReset() {
 
   for (const user of Object.values(db.users)) {
     if (!user?.daily) continue;
-
     user.daily.msgs = 0;
     user.daily.vc = 0;
     user.daily.notified = false;
-
+    user.daily.lastNotifyAttemptAt = 0;
     count++;
   }
 
@@ -285,28 +258,24 @@ function runDailyReset() {
 }
 
 function startDailyReset() {
-  if (resetInterval) {
-    console.log("[PROFILE] Daily reset watcher already running");
-    return;
-  }
+  if (resetInterval) return;
 
   loadProfile();
   lastResetDayKey = getCurrentDayKey();
 
   resetInterval = setInterval(() => {
     const currentDayKey = getCurrentDayKey();
-
     if (currentDayKey !== lastResetDayKey) {
       lastResetDayKey = currentDayKey;
       runDailyReset();
     }
   }, 60_000);
 
-  console.log(`[PROFILE] Daily reset watcher ready (${RESET_TIMEZONE})`);
+  console.log(`[PROFILE] Daily reset watcher started (${RESET_TIMEZONE})`);
 }
 
 // =====================================================
-// PROCESS FLUSH
+// PROCESS EXIT
 // =====================================================
 process.on("SIGINT", async () => {
   await flushProfile();
@@ -319,7 +288,7 @@ process.on("SIGTERM", async () => {
 });
 
 // =====================================================
-// EXPORT
+// EXPORTS
 // =====================================================
 module.exports = {
   loadProfile,
@@ -332,5 +301,6 @@ module.exports = {
   getDailyTier,
   isDailyReady,
   claimDaily,
-  startDailyReset
+  startDailyReset,
+  runDailyReset
 };
