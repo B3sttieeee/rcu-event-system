@@ -7,11 +7,14 @@ const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleExpeditionSelect } = require("../commands/expedition");
 
 // Daily System
-const { 
-  isDailyReady, 
-  claimDaily, 
-  onDailyClaimed 
-} = require("../utils/dailySystem");   // <-- zmienione na dailySystem
+const {
+  isDailyReady,
+  claimDaily,
+  onDailyClaimed
+} = require("../utils/dailySystem");
+
+// Embed Builder
+const embedCommand = require("../commands/embed");
 
 // ====================== MAIN ======================
 module.exports = {
@@ -27,48 +30,72 @@ module.exports = {
     try {
       console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
-      // 1. GIVEAWAY
+      // ====================== 1. EMBED BUILDER ======================
+      if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
+        return await embedCommand.handleModal(interaction);
+      }
+
+      if (interaction.isButton() && interaction.customId.startsWith("embed_")) {
+        return await embedCommand.handleButton(interaction);
+      }
+
+      // ====================== 2. GIVEAWAY ======================
       if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
 
-      // 2. EVENT SYSTEM
+      // ====================== 3. EVENT SYSTEM ======================
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
       if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
         return await handleEventInteraction(interaction);
       }
 
-      // 3. EXPEDITION
+      // ====================== 4. EXPEDITION ======================
       if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
         return await handleExpeditionSelect(interaction);
       }
 
-      // 4. DAILY QUEST
+      // ====================== 5. DAILY QUEST ======================
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
 
-      // 5. TICKETS
-      const ticketIds = ["open_ticket_vyrn", "open_ticket_v2rn", "close_ticket", "ticket_modal_vyrn", "ticket_modal_v2rn"];
+      // ====================== 6. TICKETS ======================
+      const ticketIds = [
+        "open_ticket_vyrn",
+        "open_ticket_v2rn",
+        "close_ticket",
+        "ticket_modal_vyrn",
+        "ticket_modal_v2rn"
+      ];
       if ((interaction.isButton() || interaction.isModalSubmit()) && ticketIds.includes(cid)) {
         return await ticketSystem.handle(interaction, client);
       }
 
-      // 6. SLASH COMMANDS
+      // ====================== 7. SLASH COMMANDS ======================
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
-          return interaction.reply({ content: "❌ Command not found.", ephemeral: true });
+          return interaction.reply({
+            content: "❌ Command not found.",
+            ephemeral: true
+          });
         }
         return await cmd.execute(interaction, client);
       }
 
-      if (cid) console.log(`[UNHANDLED] ${type} | ${cid}`);
+      // ====================== UNHANDLED ======================
+      if (cid) {
+        console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
+      }
 
     } catch (err) {
       console.error("❌ INTERACTION ERROR:", err);
 
-      const payload = { content: "❌ Wystąpił błąd systemu.", ephemeral: true };
+      const payload = {
+        content: "❌ Wystąpił błąd systemu. Spróbuj ponownie później.",
+        ephemeral: true
+      };
 
       try {
         if (interaction.deferred || interaction.replied) {
@@ -96,7 +123,7 @@ async function handleDailyClaim(interaction) {
       });
     }
 
-    const result = claimDaily(userId); // zakładam, że zwraca { success, message, reward? }
+    const result = claimDaily(userId); // zwraca { success, message, reward?, xp?, streak? }
 
     if (!result?.success) {
       return await interaction.editReply({
@@ -110,9 +137,12 @@ async function handleDailyClaim(interaction) {
 
     const successEmbed = new EmbedBuilder()
       .setColor("#22c55e")
-      .setTitle("Daily Quest odebrany!")
+      .setTitle("✅ Daily Quest odebrany!")
       .setDescription(result.message || "Gratulacje! Otrzymałeś dzisiejszą nagrodę.")
-      .addFields({ name: "Nagroda", value: result.reward || "Brak szczegółów", inline: true })
+      .addFields(
+        { name: "Nagroda", value: result.reward || `${result.xp || 0} XP`, inline: true },
+        { name: "Streak", value: `\`${result.streak || "?"} dni\``, inline: true }
+      )
       .setTimestamp();
 
     await interaction.editReply({
@@ -120,12 +150,12 @@ async function handleDailyClaim(interaction) {
       components: []
     });
 
-    console.log(`[DAILY] Nagroda odebrana przez ${interaction.user.tag}`);
+    console.log(`[DAILY] Nagroda odebrana przez ${interaction.user.tag} | Streak: ${result.streak}`);
 
   } catch (err) {
     console.error(`[DAILY] Błąd claim dla ${userId}:`, err);
     await interaction.editReply({
-      content: "❌ Wystąpił błąd podczas odbierania daily.",
+      content: "❌ Wystąpił nieoczekiwany błąd podczas odbierania daily.",
       components: []
     }).catch(() => {});
   }
