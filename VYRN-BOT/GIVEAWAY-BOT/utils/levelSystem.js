@@ -4,7 +4,7 @@ const { ChannelType, EmbedBuilder } = require("discord.js");
 
 const { getCurrentBoost } = require("./boostSystem");
 const { addVoiceTime, addMessage } = require("./profileSystem");
-const { addCoins } = require("./economySystem");   // <-- dodane dla monet
+const { addCoins } = require("./economySystem");
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "levels.json");
@@ -20,6 +20,18 @@ const DEFAULT_CONFIG = {
   lengthThreshold: 30,
   globalMultiplier: 1,
   boostRole: "1476000398107217980"
+};
+
+// =====================================================
+// ROLE REWARDS (Twoje role)
+// =====================================================
+const LEVEL_ROLES = {
+  5:  "1476000458987278397",
+  15: "1476000995501670534",
+  30: "1476000459595448442",
+  45: "1476000991206707221",
+  60: "1476000991823532032",
+  75: "1476000992351879229"
 };
 
 // =====================================================
@@ -83,15 +95,15 @@ function getRank(level) {
 }
 
 // =====================================================
-// LEVEL UP MESSAGE - NOWA WERSJA (wysoka jakość)
+// LEVEL UP MESSAGE - Ładny embed
 // =====================================================
 async function sendLevelUpMessage(member, newLevel, xpGained) {
   if (!member || member.user.bot) return;
 
   const rank = getRank(newLevel);
-
-  // Nagroda w monetach za level up
   const coinReward = 50;
+
+  // Dodaj monety za level up
   addCoins(member.id, coinReward);
 
   const embed = new EmbedBuilder()
@@ -118,16 +130,14 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
         content: `> **${member}** just leveled up!`,
         embeds: [embed]
       });
-    } else {
-      console.warn(`[LEVEL] Level-up channel not found: ${LEVEL_UP_CHANNEL_ID}`);
     }
   } catch (err) {
-    console.error(`[LEVEL] Failed to send level-up message for ${member.user.tag}:`, err.message);
+    console.error(`[LEVEL] Failed to send level-up for ${member.user.tag}:`, err.message);
   }
 }
 
 // =====================================================
-// DATABASE + CONFIG (pozostała część bez zmian)
+// DATABASE
 // =====================================================
 function loadDB() {
   if (dbCache) return dbCache;
@@ -169,9 +179,36 @@ function saveDB() {
   return writeQueue;
 }
 
-function loadConfig() { /* Twój istniejący kod loadConfig */ }
-function saveConfig() { /* Twój istniejący kod saveConfig */ }
+// =====================================================
+// CONFIG
+// =====================================================
+function loadConfig() {
+  if (configCache) return configCache;
+  try {
+    if (!fs.existsSync(CONFIG_PATH)) {
+      configCache = { ...DEFAULT_CONFIG };
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
+      return configCache;
+    }
+    const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+    const parsed = raw.trim() ? JSON.parse(raw) : {};
+    configCache = { ...DEFAULT_CONFIG, ...parsed };
+    return configCache;
+  } catch (error) {
+    logError("CONFIG LOAD ERROR", error);
+    configCache = { ...DEFAULT_CONFIG };
+    return configCache;
+  }
+}
 
+function saveConfig() {
+  if (!configCache) return;
+  fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
+}
+
+// =====================================================
+// XP CALCULATIONS
+// =====================================================
 function neededXP(level) {
   const currentLevel = Math.max(0, Number(level) || 0);
   return Math.floor(100 * Math.pow(currentLevel + 1, 1.5));
@@ -186,7 +223,7 @@ function getMultiplier(member) {
 }
 
 // =====================================================
-// CORE XP FUNCTION
+// CORE XP + LEVEL UP + ROLE REWARDS
 // =====================================================
 async function addXP(member, base = 0, length = 0, options = {}) {
   const { useCooldown = true } = options;
@@ -223,8 +260,8 @@ async function addXP(member, base = 0, length = 0, options = {}) {
   }
 
   if (leveled) {
-    await checkRoles(member, user.level);
-    await sendLevelUpMessage(member, user.level, gain);   // Level Up Notification
+    await checkRoles(member, user.level);           // Nadawanie ról
+    await sendLevelUpMessage(member, user.level, gain); // Powiadomienie
   }
 
   saveDB();
@@ -237,12 +274,58 @@ async function addXP(member, base = 0, length = 0, options = {}) {
   };
 }
 
-// Reszta Twoich funkcji (checkRoles, handleMessageXP, startVoiceXP, setters...)
-// Możesz je zostawić bez zmian
+// =====================================================
+// ROLE REWARDS (Twoje role)
+// =====================================================
+async function checkRoles(member, level) {
+  for (const [reqLevel, roleId] of Object.entries(LEVEL_ROLES)) {
+    if (level >= Number(reqLevel) && !member.roles.cache.has(roleId)) {
+      await member.roles.add(roleId).catch(err => 
+        console.error(`[LEVEL] Failed to add role ${roleId} to ${member.user.tag}:`, err.message)
+      );
+    }
+  }
+}
 
-function checkRoles(member, level) { /* Twój kod */ }
-async function handleMessageXP(member, content) { /* Twój kod */ }
-function startVoiceXP(client) { /* Twój kod */ }
+// =====================================================
+// MESSAGE & VOICE XP
+// =====================================================
+async function handleMessageXP(member, content) {
+  if (!member || member.user?.bot) return null;
+  addMessage(member.id);
+  const cfg = loadConfig();
+  const result = await addXP(member, cfg.messageXP, content?.length || 0, { useCooldown: true });
+  await triggerDailyCheck(member);
+  return result;
+}
+
+function startVoiceXP(client) {
+  if (voiceLoopStarted) return;
+  voiceLoopStarted = true;
+  console.log("🎤 Voice XP + Profile Voice Tracker started");
+
+  setInterval(async () => {
+    const cfg = loadConfig();
+    const processedUsers = new Set();
+
+    for (const guild of client.guilds.cache.values()) {
+      for (const channel of guild.channels.cache.values()) {
+        if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) continue;
+
+        for (const member of channel.members.values()) {
+          if (!isEligibleVoiceMember(member) || processedUsers.has(member.id)) continue;
+
+          processedUsers.add(member.id);
+          addVoiceTime(member.id, 60);
+          await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => null);
+          await triggerDailyCheck(member);
+        }
+      }
+    }
+  }, 60_000);
+}
+
+// Config setters
 function setMessageXP(value) { /* Twój kod */ }
 function setVoiceXP(value) { /* Twój kod */ }
 
