@@ -18,10 +18,7 @@ module.exports = {
       const guild = member.guild;
       const me = guild.members.me || await guild.members.fetchMe().catch(() => null);
 
-      if (!me) {
-        console.warn(`[JOIN] Bot member not found`);
-        return;
-      }
+      if (!me) return;
 
       // ====================== AUTO ROLE ======================
       if (AUTO_ROLE_ID) {
@@ -33,10 +30,7 @@ module.exports = {
             me.roles.highest.comparePositionTo(role) > 0) {
 
           await sleep(AUTO_ROLE_DELAY);
-          
-          await member.roles.add(role)
-            .then(() => console.log(`[JOIN] Auto-role assigned to ${member.user.tag}`))
-            .catch(err => console.error(`[JOIN] Auto-role failed:`, err.message));
+          await member.roles.add(role).catch(() => {});
         }
       }
 
@@ -44,14 +38,10 @@ module.exports = {
       const welcomeChannel = guild.channels.cache.get(WELCOME_CHANNEL_ID) ||
                              await guild.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null);
 
-      if (!welcomeChannel || !welcomeChannel.isTextBased()) {
-        console.warn(`[JOIN] Welcome channel not found`);
-        return;
-      }
+      if (!welcomeChannel || !welcomeChannel.isTextBased()) return;
 
       const perms = welcomeChannel.permissionsFor(me);
       if (!perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
-        console.warn(`[JOIN] Missing permissions in welcome channel`);
         return;
       }
 
@@ -61,15 +51,15 @@ module.exports = {
           name: "VYRN CLAN • OFFICIAL",
           iconURL: guild.iconURL({ dynamic: true })
         })
-        .setTitle(`Welcome ${member} to VYRN Clan!`)   // <-- tutaj pinguje poprawnie
+        .setTitle(`Welcome ${member} to VYRN Clan!`)   // Ping działa tutaj najlepiej
         .setDescription(
-          `> **Start Here**\n\n` +
+          `**Start Here**\n\n` +
 
-          `> • **<#1475526080361140344>** • Server Rules\n` +
-          `> • **<#1475970436650237962>** • Verification\n\n` +
+          `• **<#1475526080361140344>** • Server Rules\n` +
+          `• **<#1475970436650237962>** • Verification\n\n` +
 
-          `> **Join The Clan**\n\n` +
-          `> • **<#1475558248487583805>** • Clan Information\n\n` +
+          `**Join The Clan**\n\n` +
+          `• **<#1475558248487583805>** • Clan Information\n\n` +
 
           `If you want to verify, use the command **\`/verify\`** in this channel ` +
           `and follow the instructions from Blox.link.\n\n` +
