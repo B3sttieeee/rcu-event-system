@@ -27,6 +27,7 @@ function ensureDailyState(user) {
   d.msgs = Number(d.msgs) || 0;
   d.vc = Number(d.vc) || 0;
   d.streak = Number(d.streak) || 0;
+  d.lastClaim = Number(d.lastClaim) || 0;
   d.notified = Boolean(d.notified);
   d.lastNotifyAttemptAt = Number(d.lastNotifyAttemptAt) || 0;
 
@@ -41,7 +42,7 @@ function buildDailyEmbed(userId, daily) {
       .setColor(ready ? "#22c55e" : "#1e293b")
       .setTitle(ready ? "Daily Quest gotowy!" : "Postęp Daily Quest")
       .setDescription(
-        ready 
+        ready
           ? "Wymagania zostały spełnione.\nKliknij przycisk poniżej, aby odebrać nagrodę."
           : "Wbij wymagane progi i wróć po nagrodę."
       )
@@ -83,7 +84,7 @@ async function checkDailyDM(member) {
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
-    // KLUCZOWA POPRAWKA: Reset przy braku gotowości
+    // Reset powiadomienia jeśli daily nie jest gotowy
     if (!ready) {
       if (daily.notified || daily.lastNotifyAttemptAt > 0) {
         daily.notified = false;
@@ -104,7 +105,7 @@ async function checkDailyDM(member) {
 
     if (now - lastAttempt < cooldown) return false;
 
-    // Próba wysłania
+    // Przygotowanie do wysłania
     daily.lastNotifyAttemptAt = now;
     dmCooldown.set(userId, now);
     saveProfile();
@@ -121,7 +122,7 @@ async function checkDailyDM(member) {
       daily.notified = true;
       saveProfile();
 
-      console.log(`[DAILY] DM wysłany → ${member.user.tag}`);
+      console.log(`[DAILY] DM wysłany → ${member.user.tag} | Streak: ${daily.streak}`);
       return true;
 
     } catch (sendErr) {
@@ -135,7 +136,7 @@ async function checkDailyDM(member) {
     }
 
   } catch (err) {
-    console.error(`[DAILY] Błąd checkDailyDM:`, err);
+    console.error(`[DAILY] Błąd checkDailyDM dla ${userId}:`, err);
     return false;
   } finally {
     setTimeout(() => dmLock.delete(userId), 10000);
