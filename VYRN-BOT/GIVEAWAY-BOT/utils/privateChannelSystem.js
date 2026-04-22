@@ -39,7 +39,7 @@ async function handlePrivateChannelCreation(member) {
 
   // Sprawdzamy czy nadal jest na kanale tworzenia
   if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) {
-    console.log(`[PrivateChannel] Użytkownik wyszedł zanim minęło 5s - anuluję`);
+    console.log(`[PrivateChannel] Użytkownik wyszedł przed 5s - anuluję`);
     return;
   }
 
@@ -70,7 +70,7 @@ async function handlePrivateChannelCreation(member) {
       await member.voice.setChannel(channel).catch(() => {});
     }
 
-    console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name}`);
+    console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name} (ID: ${channel.id})`);
 
     await channel.send({
       content: `> **${member}** Twój prywatny kanał został stworzony!`
@@ -80,24 +80,28 @@ async function handlePrivateChannelCreation(member) {
     startEmptyChannelWatcher(channel, member.id);
 
   } catch (err) {
-    console.error("[PrivateChannel] Create error:", err);
+    console.error(`[PrivateChannel] Błąd tworzenia dla ${member.user.tag}:`, err);
   }
 }
 
-// ====================== PANEL ======================
+// ====================== PANEL STEROWANIA ======================
 async function sendControlPanel(channel, owner) {
   const embed = new EmbedBuilder()
     .setColor("#0a0a0a")
-    .setTitle("🔧 Panel zarządzania kanałem")
-    .setDescription(`**Właściciel:** ${owner}\nZarządzaj swoim prywatnym kanałem.`)
+    .setTitle("🔧 Panel zarządzania prywatnym kanałem")
+    .setDescription(
+      `> **Właściciel:** ${owner}\n` +
+      `> **Kanał:** <#${channel.id}>\n\n` +
+      `Wybierz akcję z menu poniżej.`
+    )
     .setTimestamp();
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`private_panel_${channel.id}`)
     .setPlaceholder("Wybierz akcję...")
     .addOptions([
-      { label: "Zmiana nazwy", value: "rename", emoji: "✏️" },
-      { label: "Zmiana limitu", value: "limit", emoji: "👥" },
+      { label: "Zmiana nazwy kanału", value: "rename", emoji: "✏️" },
+      { label: "Zmiana limitu osób", value: "limit", emoji: "👥" },
       { label: "Wyrzuć użytkownika", value: "kick", emoji: "🚪" },
       { label: "Zbanuj użytkownika", value: "ban", emoji: "🔨" },
       { label: "Odbanuj użytkownika", value: "unban", emoji: "🔓" },
@@ -113,11 +117,57 @@ async function sendControlPanel(channel, owner) {
 
 // ====================== OBSŁUGA PANELU ======================
 async function handlePrivatePanel(interaction) {
-  // ... (pozostawiam bez zmian na razie, bo problem jest z tworzeniem kanału)
-  // Możesz mi podać ten fragment jeśli chcesz, żebym go poprawił
+  const channelId = interaction.customId.split("_")[2];
+  const action = interaction.values[0];
+  const channel = interaction.guild.channels.cache.get(channelId);
+
+  if (!channel) {
+    return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+  }
+
+  const isOwner = channel.permissionOverwrites.cache.some(perm =>
+    perm.id === interaction.user.id && perm.allow.has(PermissionFlagsBits.ManageChannels)
+  );
+
+  if (!isOwner) {
+    return interaction.reply({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
+  }
+
+  // Modale dla rename i limit
+  if (action === "rename" || action === "limit") {
+    const modal = new ModalBuilder()
+      .setCustomId(`private_${action}_${channel.id}`)
+      .setTitle(action === "rename" ? "Zmiana nazwy kanału" : "Zmiana limitu osób");
+
+    const input = new TextInputBuilder()
+      .setCustomId(action === "rename" ? "new_name" : "new_limit")
+      .setLabel(action === "rename" ? "Nowa nazwa kanału" : "Nowy limit osób (1-99)")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder(action === "rename" ? "Np. Fiflak's Chill Zone" : "10")
+      .setRequired(true);
+
+    if (action === "limit") input.setMaxLength(2);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return await interaction.showModal(modal);
+  }
+
+  // Inne akcje
+  await interaction.deferUpdate().catch(() => {});
+
+  if (action === "delete") {
+    await channel.delete().catch(() => {});
+    userChannels.delete(interaction.user.id);
+    await interaction.followUp({ content: "🗑️ Kanał został pomyślnie usunięty.", ephemeral: true });
+  } else {
+    await interaction.followUp({
+      content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
+      ephemeral: true
+    });
+  }
 }
 
-// ====================== USUWANIE PUSTEGO KANAŁU ======================
+// ====================== AUTOMATYCZNE USUWANIE PUSTEGO KANAŁU ======================
 function startEmptyChannelWatcher(channel, ownerId) {
   const interval = setInterval(async () => {
     try {
@@ -126,7 +176,7 @@ function startEmptyChannelWatcher(channel, ownerId) {
         await freshChannel?.delete().catch(() => {});
         userChannels.delete(ownerId);
         clearInterval(interval);
-        console.log(`[PrivateChannel] Kanał ${channel.name} usunięty (pusty)`);
+        console.log(`[PrivateChannel] Kanał ${channel.name} został usunięty (pusty)`);
       }
     } catch (e) {
       clearInterval(interval);
