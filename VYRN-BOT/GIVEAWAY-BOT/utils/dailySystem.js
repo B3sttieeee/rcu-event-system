@@ -22,14 +22,12 @@ const dmCooldown = new Map();
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
   const d = user.daily;
-
   d.msgs = Number(d.msgs) || 0;
   d.vc = Number(d.vc) || 0;
   d.streak = Number(d.streak) || 0;
   d.lastClaim = Number(d.lastClaim) || 0;
   d.notified = Boolean(d.notified);
   d.lastNotifyAttemptAt = Number(d.lastNotifyAttemptAt) || 0;
-
   return d;
 }
 
@@ -51,11 +49,10 @@ function buildDailyEmbed(userId) {
       .addFields(
         { name: "Wiadomości", value: `\`${Math.min(daily.msgs, 50)}/50\``, inline: true },
         { name: "Voice Chat", value: `\`${Math.min(Math.floor(daily.vc / 60), 30)}/30 min\``, inline: true },
-        { name: "Streak",     value: `\`${daily.streak} dni\``, inline: true }
+        { name: "Streak", value: `\`${daily.streak} dni\``, inline: true }
       )
       .setFooter({ text: ready ? "Nagroda czeka na odbiór • VYRN" : "Daily System • VYRN" })
       .setTimestamp(),
-
     components: ready ? [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -65,7 +62,6 @@ function buildDailyEmbed(userId) {
           .setEmoji("🎁")
       )
     ] : [],
-
     ready
   };
 }
@@ -86,15 +82,15 @@ async function checkDailyDM(member) {
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
-    // === NAJWAŻNIEJSZA POPRAWKA ===
-    // Zawsze resetuj powiadomienie, jeśli daily NIE jest gotowy
+    // === KLUCZOWA POPRAWKA ===
+    // Zawsze resetuj notified, jeśli daily NIE jest gotowy
     if (!ready) {
       if (daily.notified) {
         daily.notified = false;
         daily.lastNotifyAttemptAt = 0;
         dmCooldown.delete(userId);
         saveProfile();
-        console.log(`[DAILY] Reset notified - nie gotowy → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30 | Streak: ${daily.streak}`);
+        console.log(`[DAILY] Reset notified (nie gotowy) → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
       }
       return false;
     }
@@ -103,9 +99,14 @@ async function checkDailyDM(member) {
     if (daily.notified) return false;
 
     const now = Date.now();
-    const lastAttempt = Math.max(daily.lastNotifyAttemptAt || 0, dmCooldown.get(userId) || 0);
-    const isFailedAttempt = (now - lastAttempt) < DM_RETRY_COOLDOWN_MS * 2;
-    const cooldown = isFailedAttempt ? DM_FAILED_COOLDOWN_MS : DM_RETRY_COOLDOWN_MS;
+    const lastAttempt = Math.max(
+      Number(daily.lastNotifyAttemptAt) || 0,
+      dmCooldown.get(userId) || 0
+    );
+
+    const cooldown = (now - lastAttempt < DM_RETRY_COOLDOWN_MS * 2)
+      ? DM_FAILED_COOLDOWN_MS 
+      : DM_RETRY_COOLDOWN_MS;
 
     if (now - lastAttempt < cooldown) return false;
 
@@ -134,10 +135,11 @@ async function checkDailyDM(member) {
         console.log(`[DAILY] DM zablokowane → ${member.user.tag}`);
         dmCooldown.set(userId, now + DM_FAILED_COOLDOWN_MS - DM_RETRY_COOLDOWN_MS);
       } else {
-        console.error(`[DAILY] Błąd wysyłania DM:`, sendErr.message);
+        console.error(`[DAILY] Błąd DM:`, sendErr.message);
       }
       return false;
     }
+
   } catch (err) {
     console.error(`[DAILY] Błąd checkDailyDM dla ${userId}:`, err);
     return false;
@@ -157,8 +159,8 @@ function onDailyClaimed(userId) {
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
     dmCooldown.delete(userId);
-
     saveProfile();
+
     console.log(`[DAILY] Status zresetowany po odebraniu → ${userId}`);
   } catch (err) {
     console.error("Błąd onDailyClaimed:", err);
