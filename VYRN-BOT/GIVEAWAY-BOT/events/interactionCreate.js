@@ -22,7 +22,7 @@ const {
   handlePrivateUserAction,
   handlePrivateRename,
   handlePrivateLimit
-} = require("../utils/privateChannelSystem");   // zakładam, że masz te funkcje wyeksportowane
+} = require("../utils/privateChannelSystem");
 
 // ====================== MAIN ======================
 module.exports = {
@@ -62,7 +62,7 @@ module.exports = {
         return await handleLumberjackSelect(interaction);
       }
 
-      // 5. DAILY QUEST – POPRAWIONA WERSJA
+      // 5. DAILY QUEST
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
@@ -135,7 +135,7 @@ module.exports = {
   }
 };
 
-// ====================== DAILY CLAIM HANDLER (NAPRAWIONY) ======================
+// ====================== DAILY CLAIM HANDLER (POPRAWIONY) ======================
 async function handleDailyClaim(interaction) {
   const userId = interaction.user.id;
 
