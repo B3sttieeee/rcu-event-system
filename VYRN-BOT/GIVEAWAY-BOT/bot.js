@@ -56,6 +56,7 @@ function loadCommands() {
       loadFile(itemPath);
     }
   }
+
   console.log(`📊 Załadowano ${loaded} komend`);
 }
 
@@ -72,7 +73,7 @@ function loadEvents() {
   for (const file of files) {
     try {
       const event = require(path.join(eventsPath, file));
-      if (!event?.name || !event?.execute) continue;
+      if (!event?.name || !typeof event.execute === "function") continue;
 
       const runner = (...args) => event.execute(...args, client);
 
@@ -88,6 +89,7 @@ function loadEvents() {
       console.error(`❌ EVENT ERROR ${file}:`, e.message);
     }
   }
+
   console.log(`📊 Załadowano ${loaded} eventów`);
 }
 
@@ -95,31 +97,31 @@ function loadEvents() {
 async function loadSystems() {
   console.log("🚀 Ładowanie systemów...");
 
-  // 1. Giveaway System (NAJWAŻNIEJSZE - musi być wczytane z clientem)
+  // 1. Giveaway System
   try {
     const giveawaySystem = require("./utils/giveawaySystem");
-    giveawaySystem.loadGiveaways(client);        // przekazuje client
+    giveawaySystem.loadGiveaways?.(client);
     console.log("🎁 Giveaway system załadowany i wznowiony");
   } catch (e) {
     console.error("❌ GiveawaySystem error:", e.message);
   }
 
-  // 2. Level System
+  // 2. Level System + Voice XP
   try {
     const levelSystem = require("./utils/levelSystem");
     levelSystem.startVoiceXP?.(client);
-    console.log("📈 Level system załadowany");
+    console.log("📈 Level + Voice XP system załadowany");
   } catch (e) {
-    console.error("LevelSystem error:", e.message);
+    console.error("❌ LevelSystem error:", e.message);
   }
 
   // 3. Daily System + Profile
   try {
     const { startDailyReset } = require("./utils/profileSystem");
     startDailyReset?.();
-    console.log("📅 Daily system załadowany");
+    console.log("📅 Daily reset watcher załadowany");
   } catch (e) {
-    console.error("DailySystem error:", e.message);
+    console.error("❌ DailySystem error:", e.message);
   }
 
   // 4. Clan System
@@ -128,7 +130,7 @@ async function loadSystems() {
     startClanSystem?.(client);
     console.log("🏴 Clan system załadowany");
   } catch (e) {
-    console.error("ClanSystem error:", e.message);
+    console.error("❌ ClanSystem error:", e.message);
   }
 
   // 5. Economy + Boosts
@@ -139,7 +141,7 @@ async function loadSystems() {
     loadBoosts?.();
     console.log("💰 Economy & Boosts załadowane");
   } catch (e) {
-    console.error("EconomySystem error:", e.message);
+    console.error("❌ EconomySystem error:", e.message);
   }
 
   // 6. Rules Panel
@@ -148,17 +150,17 @@ async function loadSystems() {
     await createRulesPanel(client);
     console.log("📜 Rules panel gotowy");
   } catch (e) {
-    console.error("RulesPanel error:", e.message);
+    console.error("❌ RulesPanel error:", e.message);
   }
 
-  // 7. Ticket Panel
+  // 7. Ticket Panel (z opóźnieniem)
   setTimeout(async () => {
     try {
       const { createTicketPanel } = require("./utils/ticketSystem");
       await createTicketPanel(client);
       console.log("🎟 Ticket panel gotowy");
     } catch (e) {
-      console.error("TicketSystem error:", e.message);
+      console.error("❌ TicketSystem error:", e.message);
     }
   }, 5000);
 }
