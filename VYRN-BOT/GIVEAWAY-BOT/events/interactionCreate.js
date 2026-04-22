@@ -118,7 +118,7 @@ module.exports = {
   }
 };
 
-// ====================== DAILY CLAIM HANDLER (NAPRAWIONY – działa z DM!) ======================
+// ====================== DAILY CLAIM HANDLER (TYLKO NA SERWERZE – BEZ DM) ======================
 async function handleDailyClaim(interaction) {
   const userId = interaction.user.id;
 
@@ -127,6 +127,15 @@ async function handleDailyClaim(interaction) {
   await interaction.deferUpdate().catch(() => {});
 
   try {
+    // BLOKADA DM – daily claim tylko na serwerze
+    if (!interaction.guild) {
+      return await interaction.editReply({
+        content: "❌ Daily claim działa **tylko na serwerze**, nie w prywatnych wiadomościach (DM).",
+        embeds: [],
+        components: []
+      });
+    }
+
     if (!isDailyReady(userId)) {
       return await interaction.editReply({
         content: "❌ Twój Daily Quest nie jest jeszcze gotowy.",
@@ -135,12 +144,7 @@ async function handleDailyClaim(interaction) {
       });
     }
 
-    // NAPRAWA: bezpieczne pobieranie member (działa w DM i na serwerze)
-    let member = interaction.member;
-    if (!member && interaction.guild) {
-      member = interaction.guild.members.cache.get(userId) || null;
-    }
-
+    const member = interaction.member || interaction.guild.members.cache.get(userId);
     const result = await claimDaily(userId, member);
 
     if (!result?.success) {
