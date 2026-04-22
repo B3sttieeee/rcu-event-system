@@ -48,7 +48,6 @@ const normalizeUser = (user = {}) => ({
 const normalizeDb = (db = {}) => {
   const normalized = { users: {} };
   if (!db.users || typeof db.users !== "object") return normalized;
-
   for (const [userId, userData] of Object.entries(db.users)) {
     normalized.users[userId] = normalizeUser(userData);
   }
@@ -68,7 +67,6 @@ const getCurrentDayKey = () =>
 // =====================================================
 function loadProfile() {
   if (dbCache) return dbCache;
-
   try {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
@@ -76,7 +74,6 @@ function loadProfile() {
       console.log(`[PROFILE] New database created: ${PROFILE_PATH}`);
       return dbCache;
     }
-
     const raw = fs.readFileSync(PROFILE_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
     dbCache = normalizeDb(parsed);
@@ -90,7 +87,6 @@ function loadProfile() {
 
 function saveProfile() {
   if (!dbCache) return writeQueue;
-
   const snapshot = JSON.stringify(dbCache, null, 2);
   writeQueue = writeQueue
     .catch(() => null)
@@ -102,7 +98,6 @@ function saveProfile() {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
       }
     });
-
   return writeQueue;
 }
 
@@ -119,16 +114,13 @@ async function flushProfile() {
 // =====================================================
 function ensureUser(userId) {
   if (!userId) return null;
-
   const db = loadProfile();
-
   if (!db.users[userId]) {
     db.users[userId] = normalizeUser();
     saveProfile();
   } else {
     db.users[userId] = normalizeUser(db.users[userId]);
   }
-
   return db.users[userId];
 }
 
@@ -138,17 +130,13 @@ function ensureUser(userId) {
 function addVoiceTime(userId, seconds) {
   const amount = Math.floor(Number(seconds));
   if (!userId || !Number.isFinite(amount) || amount <= 0) return false;
-
   const user = ensureUser(userId);
   if (!user) return false;
-
   user.voice += amount;
   user.daily.vc += amount;
-
   if (DEBUG_PROFILE_VOICE) {
     console.log(`[PROFILE][VOICE] ${userId} +${amount}s | Total: ${user.voice}s | Daily: ${user.daily.vc}s`);
   }
-
   saveProfile();
   return true;
 }
@@ -157,7 +145,6 @@ function addMessage(userId) {
   if (!userId) return false;
   const user = ensureUser(userId);
   if (!user) return false;
-
   user.daily.msgs += 1;
   saveProfile();
   return true;
@@ -182,17 +169,13 @@ function getDailyTier(streak = 0) {
 function isDailyReady(userId) {
   const user = ensureUser(userId);
   if (!user) return false;
-
   const tier = getDailyTier(user.daily.streak);
   const vcMinutes = Math.floor(user.daily.vc / 60);
-
   const ready = (
     vcMinutes >= tier.vcRequired &&
     user.daily.msgs >= tier.msgRequired
   );
-
   console.log(`[DAILY CHECK] ${userId} | Msg: ${user.daily.msgs}/${tier.msgRequired} | VC: ${vcMinutes}/${tier.vcRequired} | Ready: ${ready} | Streak: ${user.daily.streak}`);
-
   return ready;
 }
 
@@ -215,7 +198,6 @@ async function claimDaily(userId, member = null) {
   user.daily.streak += 1;
   const xp = 150 + Math.floor(Math.random() * 150);
 
-  // Przyznaj XP jeśli member istnieje
   if (member && !member.user?.bot) {
     try {
       const { addXP } = require("./levelSystem");
@@ -227,7 +209,6 @@ async function claimDaily(userId, member = null) {
     }
   }
 
-  // Reset daily
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
@@ -251,7 +232,6 @@ async function claimDaily(userId, member = null) {
 function runDailyReset() {
   const db = loadProfile();
   let count = 0;
-
   for (const user of Object.values(db.users)) {
     if (!user?.daily) continue;
     user.daily.msgs = 0;
@@ -260,17 +240,14 @@ function runDailyReset() {
     user.daily.lastNotifyAttemptAt = 0;
     count++;
   }
-
   saveProfile();
   console.log(`[PROFILE] Daily reset completed for ${count} users`);
 }
 
 function startDailyReset() {
   if (resetInterval) return;
-
   loadProfile();
   lastResetDayKey = getCurrentDayKey();
-
   resetInterval = setInterval(() => {
     const currentDayKey = getCurrentDayKey();
     if (currentDayKey !== lastResetDayKey) {
@@ -278,7 +255,6 @@ function startDailyReset() {
       runDailyReset();
     }
   }, 60_000);
-
   console.log(`[PROFILE] Daily reset watcher started (${RESET_TIMEZONE})`);
 }
 
@@ -289,7 +265,6 @@ process.on("SIGINT", async () => {
   await flushProfile();
   process.exit(0);
 });
-
 process.on("SIGTERM", async () => {
   await flushProfile();
   process.exit(0);
@@ -308,7 +283,7 @@ module.exports = {
   getVoiceMinutes,
   getDailyTier,
   isDailyReady,
-  claimDaily,           // ← teraz eksportowane!
+  claimDaily,
   startDailyReset,
   runDailyReset
 };
