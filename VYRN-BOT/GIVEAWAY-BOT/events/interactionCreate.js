@@ -1,103 +1,170 @@
 const { Events } = require("discord.js");
 
-// SYSTEMS
+// ================= SYSTEMS =================
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
-const { handleLumberjackSelect } = require("../commands/lumberjack");
+const {
+  handleLumberjackSelect
+} = require("../commands/lumberjack");
 const embedCommand = require("../commands/embed");
 
-// PRIVATE VC (FIX)
+// ================= PRIVATE VC =================
 const privateVC = require("../utils/privateChannelSystem");
 
 module.exports = {
   name: Events.InteractionCreate,
 
   async execute(interaction, client) {
-    const cid = interaction.customId;
+    const cid = interaction.customId || "NONE";
 
     console.log(
-      `[INTERACTION] ${interaction.type} | ${interaction.user.tag} | ${cid ?? "NONE"}`
+      `[INTERACTION] ${interaction.type} | ${interaction.user.tag} | ${cid}`
     );
 
-    // EMBED
-    if (interaction.isModalSubmit() && cid?.startsWith("embedModal_")) {
-      return embedCommand.handleModal(interaction);
-    }
+    try {
 
-    // GIVEAWAY
-    if (interaction.isButton() && cid?.startsWith("gw_")) {
-      return handleGiveaway(interaction);
-    }
+      // =====================================================
+      // EMBED MODAL
+      // =====================================================
+      if (
+        interaction.isModalSubmit() &&
+        cid.startsWith("embedModal_")
+      ) {
+        return embedCommand.handleModal(interaction);
+      }
 
-    // EVENT SYSTEM
-    const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
+      // =====================================================
+      // GIVEAWAY
+      // =====================================================
+      if (
+        interaction.isButton() &&
+        cid.startsWith("gw_")
+      ) {
+        return handleGiveaway(interaction);
+      }
 
-    if (
-      (interaction.isButton() || interaction.isStringSelectMenu()) &&
-      eventIds.includes(cid)
-    ) {
-      return handleEventInteraction(interaction);
-    }
+      // =====================================================
+      // EVENT SYSTEM
+      // =====================================================
+      const eventIds = [
+        "refresh",
+        "roles",
+        "dm",
+        "role_menu",
+        "dm_menu"
+      ];
 
-    // LUMBERJACK
-    if (
-      interaction.isStringSelectMenu() &&
-      cid === "expedition_time_select"
-    ) {
-      return handleLumberjackSelect(interaction);
-    }
+      if (
+        (interaction.isButton() ||
+          interaction.isStringSelectMenu()) &&
+        eventIds.includes(cid)
+      ) {
+        return handleEventInteraction(interaction);
+      }
 
-    // ================= PRIVATE VC (FIXED SYSTEM) =================
+      // =====================================================
+      // LUMBERJACK PICKERS
+      // =====================================================
+      if (
+        interaction.isStringSelectMenu() &&
+        (
+          cid === "lumberjack_location" ||
+          cid === "lumberjack_duration"
+        )
+      ) {
+        return handleLumberjackSelect(interaction);
+      }
 
-    if (interaction.isButton() && cid?.startsWith("vc_")) {
-      return privateVC.handlePrivatePanel(interaction);
-    }
+      // =====================================================
+      // PRIVATE VC BUTTONS
+      // =====================================================
+      if (
+        interaction.isButton() &&
+        cid.startsWith("vc_")
+      ) {
+        return privateVC.handlePrivatePanel(interaction);
+      }
 
-    if (
-      interaction.isModalSubmit() &&
-      cid?.startsWith("vc_rename_")
-    ) {
-      return privateVC.handleRename(interaction);
-    }
+      // =====================================================
+      // PRIVATE VC PICKERS
+      // =====================================================
+      if (
+        interaction.isStringSelectMenu() &&
+        (
+          cid.startsWith("vc_kickselect_") ||
+          cid.startsWith("vc_banselect_")
+        )
+      ) {
+        return privateVC.handlePrivateSelect(interaction);
+      }
 
-    if (
-      interaction.isModalSubmit() &&
-      cid?.startsWith("vc_limit_")
-    ) {
-      return privateVC.handleLimit(interaction);
-    }
+      // =====================================================
+      // PRIVATE VC MODALS
+      // =====================================================
+      if (
+        interaction.isModalSubmit() &&
+        cid.startsWith("vc_rename_")
+      ) {
+        return privateVC.handleRename(interaction);
+      }
 
-    // TICKET SYSTEM
-    const ticketIds = [
-      "clan_ticket_select",
-      "open_ticket_vyrn",
-      "open_ticket_v2rn",
-      "close_ticket",
-      "ticket_modal_vyrn",
-      "ticket_modal_v2rn"
-    ];
+      if (
+        interaction.isModalSubmit() &&
+        cid.startsWith("vc_limit_")
+      ) {
+        return privateVC.handleLimit(interaction);
+      }
 
-    if (
-      (interaction.isButton() ||
-        interaction.isStringSelectMenu() ||
-        interaction.isModalSubmit()) &&
-      ticketIds.includes(cid)
-    ) {
-      return ticketSystem.handle(interaction, client);
-    }
+      // =====================================================
+      // TICKET SYSTEM
+      // clan_ticket_select
+      // close_ticket
+      // ticket_modal_vyrn
+      // ticket_modal_staff
+      // =====================================================
+      if (
+        (
+          interaction.isButton() ||
+          interaction.isStringSelectMenu() ||
+          interaction.isModalSubmit()
+        ) &&
+        (
+          cid === "clan_ticket_select" ||
+          cid === "close_ticket" ||
+          cid.startsWith("ticket_modal_")
+        )
+      ) {
+        return ticketSystem.handle(interaction, client);
+      }
 
-    // SLASH COMMANDS
-    if (interaction.isChatInputCommand()) {
-      const cmd = client.commands.get(interaction.commandName);
-      if (!cmd) {
+      // =====================================================
+      // SLASH COMMANDS
+      // =====================================================
+      if (interaction.isChatInputCommand()) {
+        const cmd = client.commands.get(
+          interaction.commandName
+        );
+
+        if (!cmd) {
+          return interaction.reply({
+            content: "❌ Command not found.",
+            ephemeral: true
+          });
+        }
+
+        return cmd.execute(interaction, client);
+      }
+
+    } catch (err) {
+      console.error("[INTERACTION ERROR]", err);
+
+      if (!interaction.replied && !interaction.deferred) {
         return interaction.reply({
-          content: "❌ Not found",
+          content: "❌ Interaction error.",
           ephemeral: true
         });
       }
-
-      return cmd.execute(interaction, client);
     }
   }
 };
