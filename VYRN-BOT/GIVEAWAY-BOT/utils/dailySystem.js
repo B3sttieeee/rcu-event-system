@@ -9,12 +9,14 @@ const {
   loadProfile,
   isDailyReady,
   saveProfile,
-  getDailyReward
+  getDailyReward   // bierzemy z profileSystem (jedno źródło prawdy)
 } = require("./profileSystem");
 
+// ====================== CONFIG ======================
 const BLACK_COLOR = "#0a0a0a";
 const READY_COLOR = "#22c55e";
 
+// ====================== POMOCNICZE ======================
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
   const d = user.daily;
@@ -27,10 +29,13 @@ function ensureDailyState(user) {
   return d;
 }
 
+// ====================== BUILD EMBED (kluczowe) ======================
 function buildDailyEmbed(userId) {
+  // ZAWSZE ładujemy najświeższe dane z dysku
   const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
+
   const ready = isDailyReady(userId);
   const reward = getDailyReward(daily.streak);
 
@@ -75,6 +80,7 @@ function buildDailyEmbed(userId) {
   return { embed, components };
 }
 
+// ====================== PO ODEBRANIU ======================
 function onDailyClaimed(userId) {
   try {
     const db = loadProfile();
@@ -82,18 +88,22 @@ function onDailyClaimed(userId) {
     if (!user) return;
 
     const daily = ensureDailyState(user);
+
+    // Tylko resetujemy flagi (msgs i vc resetuje już claimDaily)
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
 
     saveProfile();
+
     console.log(`[DAILY] Status zresetowany po odebraniu → ${userId} | Aktualny streak: ${daily.streak}`);
   } catch (err) {
     console.error("[DAILY] Błąd onDailyClaimed:", err);
   }
 }
 
+// ====================== STUB DM ======================
 async function checkDailyDM(member) {
-  return false;
+  return false; // DM wyłączone
 }
 
 module.exports = {
