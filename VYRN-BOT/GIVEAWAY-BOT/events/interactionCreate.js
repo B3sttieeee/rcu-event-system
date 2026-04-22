@@ -36,30 +36,24 @@ module.exports = {
 
     console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
+    // ======================
     // 1. EMBED BUILDER
-    if (
-      interaction.isModalSubmit() &&
-      cid.startsWith("embedModal_")
-    ) {
+    // ======================
+    if (interaction.isModalSubmit() && cid.startsWith("embedModal_")) {
       return await embedCommand.handleModal(interaction);
     }
 
-    // 2. GIVEAWAY
-    if (
-      interaction.isButton() &&
-      cid?.startsWith("gw_")
-    ) {
+    // ======================
+    // 2. GIVEAWAY SYSTEM
+    // ======================
+    if (interaction.isButton() && cid?.startsWith("gw_")) {
       return await handleGiveaway(interaction);
     }
 
+    // ======================
     // 3. EVENT SYSTEM
-    const eventIds = [
-      "refresh",
-      "roles",
-      "dm",
-      "role_menu",
-      "dm_menu"
-    ];
+    // ======================
+    const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
 
     if (
       (interaction.isButton() || interaction.isStringSelectMenu()) &&
@@ -68,7 +62,9 @@ module.exports = {
       return await handleEventInteraction(interaction);
     }
 
+    // ======================
     // 4. LUMBERJACK
+    // ======================
     if (
       interaction.isStringSelectMenu() &&
       cid === "expedition_time_select"
@@ -76,29 +72,43 @@ module.exports = {
       return await handleLumberjackSelect(interaction);
     }
 
-    // 5. PRIVATE CHANNEL
+    // ======================
+    // 5. PRIVATE CHANNEL SYSTEM
+    // ======================
     if (
       interaction.isStringSelectMenu() &&
-      cid.startsWith("private_")
+      cid?.startsWith("private_")
     ) {
       return await handlePrivatePanel(interaction);
     }
 
     if (
       interaction.isModalSubmit() &&
-      cid.startsWith("private_rename_")
+      cid?.startsWith("private_rename_")
     ) {
       return await handlePrivateRename(interaction);
     }
 
     if (
       interaction.isModalSubmit() &&
-      cid.startsWith("private_limit_")
+      cid?.startsWith("private_limit_")
     ) {
       return await handlePrivateLimit(interaction);
     }
 
-    // 6. TICKET SYSTEM
+    // ======================
+    // 6. TICKET SYSTEM (FIXED)
+    // ======================
+
+    // ✅ SELECT MENU FIX (TO BYŁ TWÓJ BUG)
+    if (
+      interaction.isStringSelectMenu() &&
+      cid === "clan_ticket_select"
+    ) {
+      return await ticketSystem.handle(interaction, client);
+    }
+
+    // BUTTON + MODAL
     const ticketIds = [
       "open_ticket_vyrn",
       "open_ticket_v2rn",
@@ -114,7 +124,9 @@ module.exports = {
       return await ticketSystem.handle(interaction, client);
     }
 
+    // ======================
     // 7. SLASH COMMANDS
+    // ======================
     if (interaction.isChatInputCommand()) {
       const cmd = client.commands.get(interaction.commandName);
 
