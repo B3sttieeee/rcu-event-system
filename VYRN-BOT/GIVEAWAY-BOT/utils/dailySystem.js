@@ -8,13 +8,12 @@ const {
 const {
   loadProfile,
   isDailyReady,
-  saveProfile,
-  claimDaily        // ← teraz używamy z profileSystem
+  saveProfile
 } = require("./profileSystem");
 
 // ====================== CONFIG ======================
-const DM_RETRY_COOLDOWN_MS = 25 * 60 * 1000;   // 25 minut
-const DM_FAILED_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 godzin przy zablokowanych DM
+const DM_RETRY_COOLDOWN_MS = 25 * 60 * 1000;
+const DM_FAILED_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 
 const dmLock = new Set();
 const dmCooldown = new Map();
@@ -36,7 +35,6 @@ function buildDailyEmbed(userId) {
   const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
-
   const ready = isDailyReady(userId);
 
   return {
@@ -71,10 +69,8 @@ function buildDailyEmbed(userId) {
 // ====================== CHECK DAILY DM ======================
 async function checkDailyDM(member) {
   if (!member?.user || member.user.bot) return false;
-
   const userId = member.id;
   if (dmLock.has(userId)) return false;
-
   dmLock.add(userId);
 
   try {
@@ -85,22 +81,17 @@ async function checkDailyDM(member) {
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
-    // Najważniejsze zabezpieczenie
     if (!ready) {
       if (daily.notified) {
         daily.notified = false;
         daily.lastNotifyAttemptAt = 0;
         dmCooldown.delete(userId);
         saveProfile();
-        console.log(`[DAILY] RESET NOTIFIED (nie gotowy) → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
       }
       return false;
     }
 
-    if (daily.notified) {
-      console.log(`[DAILY] Już powiadomiony → ${member.user.tag}`);
-      return false;
-    }
+    if (daily.notified) return false;
 
     const now = Date.now();
     const lastAttempt = Math.max(
@@ -122,12 +113,9 @@ async function checkDailyDM(member) {
         embeds: [embed],
         components
       });
-
       daily.notified = true;
       saveProfile();
-
       console.log(`[DAILY] DM WYSŁANY → ${member.user.tag} | Streak: ${daily.streak} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
-
       return true;
     } catch (sendErr) {
       if (sendErr.code === 50007) {
@@ -152,13 +140,11 @@ function onDailyClaimed(userId) {
     const db = loadProfile();
     const user = db.users?.[userId];
     if (!user) return;
-
     const daily = ensureDailyState(user);
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
     dmCooldown.delete(userId);
     saveProfile();
-
     console.log(`[DAILY] Status zresetowany po odebraniu → ${userId}`);
   } catch (err) {
     console.error("Błąd onDailyClaimed:", err);
