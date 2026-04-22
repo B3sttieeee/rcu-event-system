@@ -1,17 +1,19 @@
-const { Events, EmbedBuilder, AuditLogEvent } = require("discord.js");
+const { Events, AuditLogEvent } = require("discord.js");
 const {
   LOGS,
+  LOG_COLORS,
   formatTime,
   sendLog,
   findAuditEntry,
   formatExecutor,
-  clampText
+  clampText,
+  createLogEmbed
 } = require("../utils/logSystem");
 
 module.exports = {
   name: Events.MessageBulkDelete,
   async execute(messages) {
-    if (!messages?.size || messages.size < 1) return;
+    if (!messages?.size || messages.size < 2) return; // ignorujemy pojedyncze usunięcia
 
     const firstMessage = messages.first();
     const guild = firstMessage?.guild;
@@ -19,65 +21,76 @@ module.exports = {
 
     if (!guild || !channel) return;
 
-    // Szukamy wpisu w Audit Log (z lepszą tolerancją)
+    // Szukamy wpisu w Audit Log z większą tolerancją
     const auditEntry = await findAuditEntry(guild, {
       type: AuditLogEvent.MessageBulkDelete,
+      limit: 10,
+      maxAge: 20_000, // 20 sekund – więcej czasu na znalezienie
       match: (entry) => {
         const sameChannel = entry.extra?.channel?.id === channel.id;
-        // Zwiększamy tolerancję - akceptujemy nawet mniejszą liczbę w logu
         const countMatches = typeof entry.extra?.count === "number"
-          ? Math.abs(entry.extra.count - messages.size) <= 5   // tolerancja ±5
+          ? Math.abs(entry.extra.count - messages.size) <= 8 // większa tolerancja
           : true;
         return sameChannel && countMatches;
-      },
-      limit: 10,        // szukamy głębiej
-      timeout: 3000     // czekamy dłużej
+      }
     });
 
-    // Przygotowanie preview
+    // Przygotowanie preview (max 8 wiadomości, bez botów)
     const previewLines = [...messages.values()]
-      .filter((message) => !message.author?.bot)
-      .slice(0, 8) // więcej wiadomości w preview
-      .map((message) => {
-        const author = message.author?.tag || "Unknown";
-        const content = clampText(
-          message.content || 
-          (message.attachments?.size ? "[Attachment]" : "[No content]"),
-          100,
-          "[No cached content]"
-        );
+      .filter((msg) => !msg.author?.bot && msg.content)
+      .slice(0, 8)
+      .map((msg) => {
+        const author = msg.author?.tag || "Unknown";
+        const content = clampText(msg.content, 90, "[No content]");
         return `**${author}:** ${content}`;
       });
 
-    const preview = previewLines.length 
-      ? clampText(previewLines.join("\n"), 950, "")
+    const preview = previewLines.length
+      ? clampText(previewLines.join("\n"), 950, "No cached content available.")
       : "No cached messages available.";
 
-    // Główny embed
-    const embed = new EmbedBuilder()
-      .setColor("#ef4444")
-      .setTitle("🧹 Bulk Messages Deleted")
-      .addFields(
-        { name: "📍 Channel", value: `<#${channel.id}>`, inline: true },
-        { name: "🧮 Deleted", value: `**${messages.size}** messages`, inline: true },
-        { 
-          name: "🛠 Deleted By", 
-          value: formatExecutor(auditEntry) || "**Unknown / Not logged**", 
-          inline: true 
+    // Tworzymy embed za pomocą ujednoliconej funkcji
+    const embed = createLogEmbed(
+      "🧹 Bulk Messages Deleted",
+      LOG_COLORS.CHAT || "#ef4444",
+      `**Zbiorcze usunięcie wiadomości**`,
+      [
+        {
+          name: "📍 Channel",
+          value: `<#${channel.id}>`,
+          inline: true
         },
-        { 
-          name: "📝 Preview", 
-          value: preview || "*No preview available*" 
+        {
+          name: "🧮 Amount",
+          value: `**${messages.size}** messages`,
+          inline: true
+        },
+        {
+          name: "🛠 Deleted By",
+          value: formatExecutor(auditEntry) || "**Unknown / Not in audit logs**",
+          inline: true
+        },
+        {
+          name: "📝 Preview",
+          value: preview,
+          inline: false
         }
-      )
-      .setFooter({ text: `Time: ${formatTime()}` })
-      .setTimestamp();
+      ],
+      `Time: ${formatTime()}`
+    );
 
-    await sendLog(guild, LOGS.CHAT, embed);
+    // Wysyłamy log
+    const success = await sendLog(guild, LOGS.CHAT, embed);
 
-    // Opcjonalnie: dodatkowy log jeśli nie znaleziono autora
+    if (success) {
+      console.log(`[BULK DELETE] Zalogowano usunięcie ${messages.size} wiadomości w #${channel.name}`);
+    } else {
+      console.warn(`[BULK DELETE] Nie udało się wysłać loga dla ${messages.size} wiadomości`);
+    }
+
+    // Dodatkowa informacja w konsoli gdy nie znaleziono audit entry
     if (!auditEntry) {
-      console.log(`[BULK DELETE] No audit entry found for ${messages.size} messages in #${channel.name}`);
+      console.log(`[BULK DELETE] Audit entry not found for ${messages.size} messages in #${channel.name}`);
     }
   }
 };
