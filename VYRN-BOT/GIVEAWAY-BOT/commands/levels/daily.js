@@ -1,9 +1,12 @@
 const {
   SlashCommandBuilder,
-  EmbedBuilder
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
 } = require("discord.js");
 
-const { buildDailyEmbed } = require("../../utils/dailySystem");   // ← POPRAWIONA ŚCIEŻKA
+const { buildDailyEmbed } = require("../../utils/dailySystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -24,6 +27,7 @@ module.exports = {
 
     } catch (err) {
       console.error("[DAILY CMD] Błąd:", err);
+
       await interaction.editReply({
         content: "❌ Wystąpił błąd podczas ładowania daily.",
         embeds: [],
