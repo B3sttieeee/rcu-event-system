@@ -1,17 +1,10 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} = require("discord.js");
-
+const { SlashCommandBuilder } = require("discord.js");
 const { buildDailyEmbed } = require("../../utils/dailySystem");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("daily")
-    .setDescription("🎯 Sprawdź postęp Daily Quest i odbierz nagrodę"),
+    .setDescription("🎯 Sprawdź postęp i odbierz Daily Quest"),
 
   async execute(interaction) {
     try {
@@ -27,7 +20,6 @@ module.exports = {
 
     } catch (err) {
       console.error("[DAILY CMD] Błąd:", err);
-
       await interaction.editReply({
         content: "❌ Wystąpił błąd podczas ładowania daily.",
         embeds: [],
