@@ -1,7 +1,9 @@
 const { Events } = require("discord.js");
 
-// 🔥 FIXED PATH (utils folder)
-const { handlePrivateChannelCreation } = require("../utils/privateChannelSystem");
+// poprawna ścieżka do utils
+const {
+  handlePrivateChannelCreation
+} = require("../utils/privateChannelSystem");
 
 const CREATE_CHANNEL_ID = "1496280414237491220";
 
@@ -15,18 +17,18 @@ module.exports = {
     const oldChannel = oldState.channel;
     const newChannel = newState.channel;
 
-    // 🔥 JOIN CREATE CHANNEL CHECK (stable version)
+    // join create channel only once
     const joinedCreate =
       newChannel &&
       newChannel.id === CREATE_CHANNEL_ID &&
       oldChannel?.id !== CREATE_CHANNEL_ID;
 
-    if (joinedCreate) {
-      try {
-        await handlePrivateChannelCreation(member);
-      } catch (err) {
-        console.error("[VOICE SYSTEM ERROR]", err);
-      }
+    if (!joinedCreate) return;
+
+    try {
+      await handlePrivateChannelCreation(member);
+    } catch (err) {
+      console.error("[VOICE SYSTEM ERROR]", err);
     }
   }
 };
