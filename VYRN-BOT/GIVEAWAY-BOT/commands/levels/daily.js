@@ -1,5 +1,9 @@
-const { SlashCommandBuilder } = require("discord.js");
-const { buildDailyEmbed } = require("../utils/dailySystem");
+const {
+  SlashCommandBuilder,
+  EmbedBuilder
+} = require("discord.js");
+
+const { buildDailyEmbed } = require("../../utils/dailySystem");   // ← POPRAWIONA ŚCIEŻKA
 
 module.exports = {
   data: new SlashCommandBuilder()
