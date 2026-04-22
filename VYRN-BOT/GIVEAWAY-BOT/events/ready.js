@@ -12,13 +12,8 @@ const log = (tag, message) => {
 
 const logError = (scope, error) => {
   console.error(`[READY] ${scope}`);
-
-  if (error?.stack) {
-    console.error(error.stack);
-    return;
-  }
-
-  console.error(error);
+  if (error?.stack) console.error(error.stack);
+  else console.error(error);
 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -51,17 +46,14 @@ const registerCommands = async (client) => {
       Routes.applicationGuildCommands(client.user.id, GUILD_ID),
       { body: commands }
     );
-
     log("✅", `Guild slash commands deployed (${commands.length})`);
-    return;
+  } else {
+    await rest.put(
+      Routes.applicationCommands(client.user.id),
+      { body: commands }
+    );
+    log("✅", `Global slash commands deployed (${commands.length})`);
   }
-
-  await rest.put(
-    Routes.applicationCommands(client.user.id),
-    { body: commands }
-  );
-
-  log("✅", `Global slash commands deployed (${commands.length})`);
 };
 
 // =====================================================
@@ -79,94 +71,75 @@ const initSystems = async (client) => {
   const economySystem = safeRequire("../utils/economySystem");
   const boostSystem = safeRequire("../utils/boostSystem");
 
-  try {
-    if (eventSystem) {
-      await eventSystem.startPanel?.(client);
-      await eventSystem.startEventSystem?.(client);
-      log("✨", "Event system ready");
-    } else {
-      log("⚠️", "eventSystem not found");
-    }
-  } catch (error) {
-    logError("eventSystem failed", error);
-  }
-
+  // Giveaway
   try {
     if (giveawaySystem?.loadGiveaways) {
       await giveawaySystem.loadGiveaways(client);
       log("🎁", "Giveaways loaded");
-    } else {
-      log("⚠️", "giveawaySystem not found");
     }
   } catch (error) {
-    logError("giveawaySystem failed", error);
+    logError("giveawaySystem", error);
   }
 
+  // Level + Voice XP
   try {
     if (levelSystem?.startVoiceXP) {
       levelSystem.startVoiceXP(client);
-      log("🎤", "Voice XP ready");
-    } else {
-      log("⚠️", "levelSystem not found");
+      log("🎤", "Level + Voice XP ready");
     }
   } catch (error) {
-    logError("levelSystem failed", error);
+    logError("levelSystem", error);
   }
 
-  try {
-    if (economySystem?.loadCoins) {
-      economySystem.loadCoins();
-      log("💰", "Economy system ready");
-    } else {
-      log("⚠️", "economySystem not found");
-    }
-
-    if (boostSystem?.loadBoosts) {
-      boostSystem.loadBoosts();
-      log("🚀", "Boost system ready");
-    } else {
-      log("⚠️", "boostSystem not found");
-    }
-  } catch (error) {
-    logError("economy/boost systems failed", error);
-  }
-
-  try {
-    if (typeof profileSystem?.startDailyReset === "function") {
-      profileSystem.startDailyReset();
-      log("🎯", "Daily system ready");
-    } else {
-      log("⚠️", "profileSystem not found or startDailyReset missing");
-    }
-  } catch (error) {
-    logError("profileSystem failed", error);
-  }
-
+  // Clan System
   try {
     if (typeof clanSystem?.startClanSystem === "function") {
       clanSystem.startClanSystem(client);
       log("🧠", "Clan system ready");
-    } else {
-      log("⚠️", "clanSystem not found");
     }
   } catch (error) {
-    logError("clanSystem failed", error);
+    logError("clanSystem", error);
   }
 
+  // Economy + Boosts
+  try {
+    if (economySystem?.loadCoins) economySystem.loadCoins();
+    if (boostSystem?.loadBoosts) boostSystem.loadBoosts();
+    log("💰", "Economy & Boosts ready");
+  } catch (error) {
+    logError("economy/boost", error);
+  }
+
+  // Profile System (bez Daily)
+  try {
+    if (profileSystem) {
+      log("📁", "Profile system ready (without Daily Quest)");
+    }
+  } catch (error) {
+    logError("profileSystem", error);
+  }
+
+  // Rules Panel
+  try {
+    const { createRulesPanel } = require("../utils/rulesPanel");
+    await createRulesPanel(client);
+    log("📜", "Rules panel ready");
+  } catch (error) {
+    logError("rulesPanel", error);
+  }
+
+  // Ticket Panel
   setTimeout(async () => {
     try {
-      if (typeof ticketSystem?.createTicketPanel === "function") {
-        await ticketSystem.createTicketPanel(client);
-        log("🎟", "Ticket system ready");
-      } else {
-        log("⚠️", "ticketSystem not found");
-      }
+      const { createTicketPanel } = require("../utils/ticketSystem");
+      await createTicketPanel(client);
+      log("🎟", "Ticket panel ready");
     } catch (error) {
-      logError("ticketSystem failed", error);
+      logError("ticketSystem", error);
     }
   }, TICKET_PANEL_DELAY);
 
-  log("✅", "Core systems initialized");
+  log("✅", "Core systems initialized (Daily Quest removed)");
 };
 
 // =====================================================
@@ -175,7 +148,6 @@ const initSystems = async (client) => {
 module.exports = {
   name: Events.ClientReady,
   once: true,
-
   async execute(client) {
     log("🔥", `${client.user.tag} logged in`);
     log("📊", `Guilds: ${client.guilds.cache.size}`);
@@ -184,7 +156,6 @@ module.exports = {
       await registerCommands(client);
       await sleep(1000);
       await initSystems(client);
-
       log("🚀", "BOT FULLY INITIALIZED");
     } catch (error) {
       logError("Critical startup error", error);
