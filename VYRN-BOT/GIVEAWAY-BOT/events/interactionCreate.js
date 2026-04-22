@@ -19,7 +19,7 @@ const {
 // Embed Builder
 const embedCommand = require("../commands/embed");
 
-// Private Channel System
+// Private Channel
 const {
   handlePrivatePanel,
   handlePrivateRename,
@@ -36,74 +36,56 @@ module.exports = {
                  interaction.isStringSelectMenu() ? `SELECT:${cid || "NONE"}` :
                  interaction.isModalSubmit() ? `MODAL:${cid || "NONE"}` : "UNKNOWN";
 
-    try {
-      console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
+    console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
-      // ====================== DAILY CLAIM - NAJWYŻSZY PRIORYTET ======================
-      if (interaction.isButton() && cid === "daily_claim") {
-        console.log(`[DAILY] === KLIKNIĘTO PRZYCISK daily_claim przez ${interaction.user.tag} ===`);
-        return await handleDailyClaim(interaction);
-      }
-
-      // 1. EMBED BUILDER
-      if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
-        return await embedCommand.handleModal(interaction);
-      }
-
-      // 2. GIVEAWAY
-      if (interaction.isButton() && cid?.startsWith("gw_")) {
-        return await handleGiveaway(interaction);
-      }
-
-      // 3. EVENT SYSTEM
-      const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
-      if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
-        return await handleEventInteraction(interaction);
-      }
-
-      // 4. LUMBERJACK
-      if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
-        return await handleLumberjackSelect(interaction);
-      }
-
-      // 5. PRIVATE CHANNEL
-      if (interaction.isStringSelectMenu() && cid.startsWith("private_panel_")) {
-        return await handlePrivatePanel(interaction);
-      }
-      if (interaction.isModalSubmit() && cid.startsWith("private_rename_")) {
-        return await handlePrivateRename(interaction);
-      }
-      if (interaction.isModalSubmit() && cid.startsWith("private_limit_")) {
-        return await handlePrivateLimit(interaction);
-      }
-
-      // 6. TICKET SYSTEM
-      const ticketIds = ["open_ticket_vyrn", "open_ticket_v2rn", "close_ticket", "ticket_modal_vyrn", "ticket_modal_v2rn"];
-      if ((interaction.isButton() || interaction.isModalSubmit()) && ticketIds.includes(cid)) {
-        return await ticketSystem.handle(interaction, client);
-      }
-
-      // 7. SLASH COMMANDS
-      if (interaction.isChatInputCommand()) {
-        const cmd = client.commands.get(interaction.commandName);
-        if (!cmd) {
-          return interaction.reply({ content: "❌ Command not found.", ephemeral: true });
-        }
-        return await cmd.execute(interaction, client);
-      }
-
-      console.log(`[UNHANDLED] ${type} | ${cid}`);
-    } catch (err) {
-      console.error("❌ INTERACTION ERROR:", err);
-      const payload = { content: "❌ System error occurred.", ephemeral: true };
-      try {
-        if (interaction.deferred || interaction.replied) {
-          await interaction.followUp(payload);
-        } else {
-          await interaction.reply(payload);
-        }
-      } catch (_) {}
+    // ====================== DAILY CLAIM - NAJWYŻSZY PRIORYTET ======================
+    if (interaction.isButton() && cid === "daily_claim") {
+      console.log(`[DAILY] === KLIKNIĘTO PRZYCISK daily_claim przez ${interaction.user.tag} ===`);
+      return await handleDailyClaim(interaction);
     }
+
+    // Reszta handlerów (niższy priorytet)
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
+      return await embedCommand.handleModal(interaction);
+    }
+
+    if (interaction.isButton() && cid?.startsWith("gw_")) {
+      return await handleGiveaway(interaction);
+    }
+
+    const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
+    if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
+      return await handleEventInteraction(interaction);
+    }
+
+    if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
+      return await handleLumberjackSelect(interaction);
+    }
+
+    if (interaction.isStringSelectMenu() && cid.startsWith("private_panel_")) {
+      return await handlePrivatePanel(interaction);
+    }
+
+    if (interaction.isModalSubmit() && cid.startsWith("private_rename_")) {
+      return await handlePrivateRename(interaction);
+    }
+
+    if (interaction.isModalSubmit() && cid.startsWith("private_limit_")) {
+      return await handlePrivateLimit(interaction);
+    }
+
+    const ticketIds = ["open_ticket_vyrn", "open_ticket_v2rn", "close_ticket", "ticket_modal_vyrn", "ticket_modal_v2rn"];
+    if ((interaction.isButton() || interaction.isModalSubmit()) && ticketIds.includes(cid)) {
+      return await ticketSystem.handle(interaction, client);
+    }
+
+    if (interaction.isChatInputCommand()) {
+      const cmd = client.commands.get(interaction.commandName);
+      if (!cmd) return interaction.reply({ content: "❌ Command not found.", ephemeral: true });
+      return await cmd.execute(interaction, client);
+    }
+
+    console.log(`[UNHANDLED] ${type} | ${cid}`);
   }
 };
 
