@@ -13,7 +13,6 @@ const client = new Client({
     GatewayIntentBits.GuildVoiceStates,
   ]
 });
-
 client.commands = new Collection();
 
 // ====================== RATE LIMIT LOGGING ======================
@@ -27,14 +26,11 @@ function loadCommands() {
   if (!fs.existsSync(commandsPath)) {
     return console.warn("⚠️ Folder 'commands' nie istnieje!");
   }
-
   let loaded = 0;
   const items = fs.readdirSync(commandsPath);
-
   for (const item of items) {
     const itemPath = path.join(commandsPath, item);
     const stat = fs.statSync(itemPath);
-
     const loadFile = (filePath) => {
       try {
         const cmd = require(filePath);
@@ -47,7 +43,6 @@ function loadCommands() {
         console.error(`❌ CMD ERROR ${filePath}:`, e.message);
       }
     };
-
     if (stat.isDirectory()) {
       fs.readdirSync(itemPath)
         .filter(f => f.endsWith(".js"))
@@ -56,7 +51,6 @@ function loadCommands() {
       loadFile(itemPath);
     }
   }
-
   console.log(`📊 Załadowano ${loaded} komend`);
 }
 
@@ -66,30 +60,24 @@ function loadEvents() {
   if (!fs.existsSync(eventsPath)) {
     return console.warn("⚠️ Folder 'events' nie istnieje!");
   }
-
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let loaded = 0;
-
   for (const file of files) {
     try {
       const event = require(path.join(eventsPath, file));
-      if (!event?.name || !typeof event.execute === "function") continue;
-
+      if (!event?.name || typeof event.execute !== "function") continue;
       const runner = (...args) => event.execute(...args, client);
-
       if (event.once) {
         client.once(event.name, runner);
       } else {
         client.on(event.name, runner);
       }
-
       console.log(`✅ Loaded event: ${event.name}`);
       loaded++;
     } catch (e) {
       console.error(`❌ EVENT ERROR ${file}:`, e.message);
     }
   }
-
   console.log(`📊 Załadowano ${loaded} eventów`);
 }
 
@@ -115,16 +103,7 @@ async function loadSystems() {
     console.error("❌ LevelSystem error:", e.message);
   }
 
-  // 3. Daily System + Profile
-  try {
-    const { startDailyReset } = require("./utils/profileSystem");
-    startDailyReset?.();
-    console.log("📅 Daily reset watcher załadowany");
-  } catch (e) {
-    console.error("❌ DailySystem error:", e.message);
-  }
-
-  // 4. Clan System
+  // 3. Clan System
   try {
     const { startClanSystem } = require("./utils/clanSystem");
     startClanSystem?.(client);
@@ -133,7 +112,7 @@ async function loadSystems() {
     console.error("❌ ClanSystem error:", e.message);
   }
 
-  // 5. Economy + Boosts
+  // 4. Economy + Boosts
   try {
     const { loadCoins } = require("./utils/economySystem");
     const { loadBoosts } = require("./utils/boostSystem");
@@ -144,7 +123,7 @@ async function loadSystems() {
     console.error("❌ EconomySystem error:", e.message);
   }
 
-  // 6. Rules Panel
+  // 5. Rules Panel
   try {
     const { createRulesPanel } = require("./utils/rulesPanel");
     await createRulesPanel(client);
@@ -153,7 +132,7 @@ async function loadSystems() {
     console.error("❌ RulesPanel error:", e.message);
   }
 
-  // 7. Ticket Panel (z opóźnieniem)
+  // 6. Ticket Panel (z opóźnieniem)
   setTimeout(async () => {
     try {
       const { createTicketPanel } = require("./utils/ticketSystem");
@@ -171,11 +150,9 @@ client.once("ready", async () => {
   console.log(`🔥 Bot zalogowany jako: ${client.user.tag}`);
   console.log(`📊 Serwery: ${client.guilds.cache.size}`);
   console.log("================================");
-
   loadCommands();
   loadEvents();
   await loadSystems();
-
   console.log("✅ BOT GOTOWY DO DZIAŁANIA");
 });
 
@@ -183,7 +160,6 @@ client.once("ready", async () => {
 process.on("unhandledRejection", (err) => {
   console.error("❌ Unhandled Rejection:", err);
 });
-
 process.on("uncaughtException", (err) => {
   console.error("❌ Uncaught Exception:", err);
   process.exit(1);
