@@ -8,7 +8,7 @@ const fs = require("fs");
 const path = require("path");
 
 // ====================== CONFIG ======================
-const DATA_DIR = process.env.DATA_DIR || "/data";   // <-- ważne dla Railway
+const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "giveaways.json");
 const DB_TMP_PATH = `${DB_PATH}.tmp`;
 
@@ -22,7 +22,7 @@ const BONUS_ROLES = {
 };
 
 // ====================== DATABASE ======================
-const giveaways = new Map();   // messageId => data
+const giveaways = new Map(); // messageId => data
 let writeQueue = Promise.resolve();
 
 function ensureDataDir() {
@@ -94,8 +94,10 @@ function getEntries(member) {
   return entries;
 }
 
+// ====================== BUILD EMBED (CZARNY MOTYW) ======================
 function buildEmbed(data) {
   const timeLeft = Math.max(0, data.end - Date.now());
+
   const bonusText = Object.entries(BONUS_ROLES)
     .map(([roleId, bonus]) => `<@&${roleId}> → **+${bonus}**`)
     .join("\n") || "Brak bonusów";
@@ -111,7 +113,10 @@ function buildEmbed(data) {
       { name: "🎟 Boosty ról", value: bonusText, inline: false }
     )
     .setImage(data.image || null)
-    .setFooter({ text: `Host: ${data.hostId ? `<@${data.hostId}>` : "Nieznany"} • VYRN` })
+    .setFooter({ 
+      text: `Host: ${data.hostId ? `<@${data.hostId}>` : "Nieznany"} • VYRN`, 
+      iconURL: null 
+    })
     .setTimestamp();
 }
 
@@ -137,8 +142,14 @@ async function createGiveaway(interaction, options) {
   };
 
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("gw_join").setLabel("🎟 Dołącz").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("gw_leave").setLabel("❌ Wypisz się").setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder()
+      .setCustomId("gw_join")
+      .setLabel("🎟 Dołącz")
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId("gw_leave")
+      .setLabel("❌ Wypisz się")
+      .setStyle(ButtonStyle.Secondary)
   );
 
   const embed = buildEmbed(giveawayData);
@@ -151,7 +162,7 @@ async function createGiveaway(interaction, options) {
   startTimer(msg.id);
 
   await interaction.reply({
-    content: `✅ **Giveaway utworzony!**\nID wiadomości: \`${msg.id}\``,
+    content: `✅ **Giveaway utworzony pomyślnie!**\nID wiadomości: \`${msg.id}\``,
     ephemeral: true
   });
 }
@@ -171,8 +182,9 @@ function startTimer(messageId) {
       return;
     }
 
+    // Aktualizacja embedu co 10 sekund
     try {
-      const channel = await client.channels.fetch(data.channelId).catch(() => null); // client trzeba przekazać lub globalnie
+      const channel = await client.channels.fetch(data.channelId).catch(() => null); // client musi być dostępny
       if (channel) {
         const message = await channel.messages.fetch(messageId).catch(() => null);
         if (message) await message.edit({ embeds: [buildEmbed(data)] });
@@ -180,7 +192,7 @@ function startTimer(messageId) {
     } catch (err) {
       if (err.code === 10008) clearInterval(interval); // wiadomość usunięta
     }
-  }, 10000); // co 10 sekund
+  }, 10000);
 }
 
 // ====================== END GIVEAWAY ======================
@@ -204,7 +216,7 @@ async function endGiveaway(messageId) {
       return;
     }
 
-    // Weighted random
+    // Weighted random z bonusami ról
     let weightedUsers = [];
     for (const userId of data.users) {
       const member = await channel.guild.members.fetch(userId).catch(() => null);
@@ -250,7 +262,6 @@ async function endGiveaway(messageId) {
 async function reroll(client, messageId, rerollWinners = null) {
   let data = giveaways.get(messageId);
   if (!data) data = loadDB()[messageId];
-
   if (!data) return "❌ Giveaway nie istnieje.";
   if (!data.ended) return "❌ Giveaway jeszcze się nie zakończył!";
 
@@ -303,8 +314,8 @@ async function resumeGiveaway(client, messageId) {
   }
 
   startTimer(messageId);
-
   console.log(`[GIVEAWAY] Wznowiono giveaway ${messageId} — pozostało ${Math.floor(remaining/1000)}s`);
+
   return `✅ Giveaway wznowiony! Zakończy się za ${Math.floor(remaining/60000)} minut.`;
 }
 
@@ -316,6 +327,7 @@ function loadGiveaways(client) {
   for (const [id, g] of Object.entries(data)) {
     if (g.ended) continue;
     giveaways.set(id, g);
+
     const remaining = g.end - Date.now();
     if (remaining > 0) {
       setTimeout(() => endGiveaway(id), remaining);
@@ -331,8 +343,8 @@ function loadGiveaways(client) {
 module.exports = {
   createGiveaway,
   handleGiveaway: async (interaction) => {
-    // Tu możesz dodać pełną obsługę przycisków gw_join / gw_leave jeśli chcesz
-    console.log(`[GIVEAWAY] Button: ${interaction.customId}`);
+    console.log(`[GIVEAWAY] Button clicked: ${interaction.customId}`);
+    // Tu możesz dodać pełną obsługę gw_join / gw_leave jeśli chcesz
   },
   reroll,
   loadGiveaways,
