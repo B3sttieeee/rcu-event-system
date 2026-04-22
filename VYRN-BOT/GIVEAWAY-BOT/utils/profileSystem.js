@@ -48,6 +48,7 @@ const normalizeUser = (user = {}) => ({
 const normalizeDb = (db = {}) => {
   const normalized = { users: {} };
   if (!db.users || typeof db.users !== "object") return normalized;
+
   for (const [userId, userData] of Object.entries(db.users)) {
     normalized.users[userId] = normalizeUser(userData);
   }
@@ -67,6 +68,7 @@ const getCurrentDayKey = () =>
 // =====================================================
 function loadProfile() {
   if (dbCache) return dbCache;
+
   try {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
@@ -74,6 +76,7 @@ function loadProfile() {
       console.log(`[PROFILE] New database created: ${PROFILE_PATH}`);
       return dbCache;
     }
+
     const raw = fs.readFileSync(PROFILE_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
     dbCache = normalizeDb(parsed);
@@ -87,6 +90,7 @@ function loadProfile() {
 
 function saveProfile() {
   if (!dbCache) return writeQueue;
+
   const snapshot = JSON.stringify(dbCache, null, 2);
   writeQueue = writeQueue
     .catch(() => null)
@@ -98,6 +102,7 @@ function saveProfile() {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
       }
     });
+
   return writeQueue;
 }
 
@@ -114,13 +119,16 @@ async function flushProfile() {
 // =====================================================
 function ensureUser(userId) {
   if (!userId) return null;
+
   const db = loadProfile();
+
   if (!db.users[userId]) {
     db.users[userId] = normalizeUser();
     saveProfile();
   } else {
     db.users[userId] = normalizeUser(db.users[userId]);
   }
+
   return db.users[userId];
 }
 
@@ -161,13 +169,13 @@ function getVoiceMinutes(userId) {
 }
 
 // =====================================================
-// DAILY LOGIC - NAPRAWIONA WERSJA
+// DAILY LOGIC
 // =====================================================
 function getDailyTier(streak = 0) {
   const safeStreak = toSafeNumber(streak, 0);
   return {
-    vcRequired: 30,                    // zawsze 30 minut VC
-    msgRequired: 50                    // zawsze 50 wiadomości (bez obniżania przy streaku)
+    vcRequired: 30,
+    msgRequired: 50
   };
 }
 
@@ -183,7 +191,6 @@ function isDailyReady(userId) {
     user.daily.msgs >= tier.msgRequired
   );
 
-  // Debug log przy każdym sprawdzeniu
   console.log(`[DAILY CHECK] ${userId} | Msg: ${user.daily.msgs}/${tier.msgRequired} | VC: ${vcMinutes}/${tier.vcRequired} | Ready: ${ready} | Streak: ${user.daily.streak}`);
 
   return ready;
@@ -201,14 +208,15 @@ async function claimDaily(userId, member = null) {
   }
 
   const now = Date.now();
-  if (now - user.daily.lastClaim < 86_400_000) {
+  if (now - (user.daily.lastClaim || 0) < 86_400_000) {
     return { success: false, error: "cooldown", message: "Daily już dzisiaj odebrane." };
   }
 
   user.daily.streak += 1;
   const xp = 150 + Math.floor(Math.random() * 150);
 
-  if (member && !member.user.bot) {
+  // Przyznaj XP jeśli member istnieje
+  if (member && !member.user?.bot) {
     try {
       const { addXP } = require("./levelSystem");
       if (typeof addXP === "function") {
@@ -259,6 +267,7 @@ function runDailyReset() {
 
 function startDailyReset() {
   if (resetInterval) return;
+
   loadProfile();
   lastResetDayKey = getCurrentDayKey();
 
@@ -299,7 +308,7 @@ module.exports = {
   getVoiceMinutes,
   getDailyTier,
   isDailyReady,
-  claimDaily,
+  claimDaily,           // ← teraz eksportowane!
   startDailyReset,
   runDailyReset
 };
