@@ -6,12 +6,15 @@ const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleLumberjackSelect } = require("../commands/lumberjack");
 
-// Daily System – poprawione importy
+// Daily System – POPRAWIONE IMPORTY
 const {
   isDailyReady,
-  claimDaily,
+  claimDaily
+} = require("../utils/profileSystem");          // te dwie są w profileSystem
+
+const {
   onDailyClaimed
-} = require("../utils/profileSystem");   // ← WAŻNE: z profileSystem, nie dailySystem
+} = require("../utils/dailySystem");           // ta jest w dailySystem
 
 const embedCommand = require("../commands/embed");
 
@@ -109,18 +112,14 @@ module.exports = {
   }
 };
 
-// ====================== DAILY CLAIM HANDLER (Z LOGAMI) ======================
+// ====================== DAILY CLAIM HANDLER ======================
 async function handleDailyClaim(interaction) {
   const userId = interaction.user.id;
-  console.log(`[DAILY] Kliknięto daily_claim przez ${interaction.user.tag} (userId: ${userId})`);
-
   if (interaction.replied || interaction.deferred) return;
   await interaction.deferUpdate().catch(() => {});
 
   try {
-    console.log(`[DAILY] Sprawdzenie isDailyReady dla ${userId}`);
     if (!isDailyReady(userId)) {
-      console.log(`[DAILY] Nie gotowy dla ${userId}`);
       return await interaction.editReply({
         content: "❌ Twój Daily Quest nie jest jeszcze gotowy.",
         embeds: [],
@@ -129,13 +128,9 @@ async function handleDailyClaim(interaction) {
     }
 
     const member = interaction.member || (interaction.guild ? interaction.guild.members.cache.get(userId) : null);
-    console.log(`[DAILY] Member: ${member ? "tak" : "nie"}`);
-
-    console.log(`[DAILY] Wywołanie claimDaily...`);
     const result = await claimDaily(userId, member);
 
     if (!result?.success) {
-      console.log(`[DAILY] Claim nieudany: ${result?.message}`);
       return await interaction.editReply({
         content: result?.message || "❌ Nie udało się odebrać daily.",
         embeds: [],
