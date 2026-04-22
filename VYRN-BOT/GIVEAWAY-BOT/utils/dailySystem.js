@@ -82,21 +82,23 @@ async function checkDailyDM(member) {
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
-    // === KLUCZOWA POPRAWKA ===
-    // Zawsze resetuj notified, jeśli daily NIE jest gotowy
+    // === NAJWAŻNIEJSZE ZABEZPIECZENIE ===
     if (!ready) {
       if (daily.notified) {
         daily.notified = false;
         daily.lastNotifyAttemptAt = 0;
         dmCooldown.delete(userId);
         saveProfile();
-        console.log(`[DAILY] Reset notified (nie gotowy) → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
+        console.log(`[DAILY] RESET NOTIFIED (nie gotowy) → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30 | Streak: ${daily.streak}`);
       }
       return false;
     }
 
     // Już powiadomiony
-    if (daily.notified) return false;
+    if (daily.notified) {
+      console.log(`[DAILY] Już powiadomiony → ${member.user.tag}`);
+      return false;
+    }
 
     const now = Date.now();
     const lastAttempt = Math.max(
@@ -105,10 +107,13 @@ async function checkDailyDM(member) {
     );
 
     const cooldown = (now - lastAttempt < DM_RETRY_COOLDOWN_MS * 2)
-      ? DM_FAILED_COOLDOWN_MS 
+      ? DM_FAILED_COOLDOWN_MS
       : DM_RETRY_COOLDOWN_MS;
 
-    if (now - lastAttempt < cooldown) return false;
+    if (now - lastAttempt < cooldown) {
+      console.log(`[DAILY] Jeszcze cooldown → ${member.user.tag}`);
+      return false;
+    }
 
     // Wysyłamy DM
     daily.lastNotifyAttemptAt = now;
@@ -127,15 +132,15 @@ async function checkDailyDM(member) {
       daily.notified = true;
       saveProfile();
 
-      console.log(`[DAILY] DM wysłany → ${member.user.tag} | Streak: ${daily.streak} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
+      console.log(`[DAILY] DM WYSŁANY → ${member.user.tag} | Streak: ${daily.streak} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
       return true;
 
     } catch (sendErr) {
       if (sendErr.code === 50007) {
-        console.log(`[DAILY] DM zablokowane → ${member.user.tag}`);
+        console.log(`[DAILY] DM ZABLOKOWANE → ${member.user.tag}`);
         dmCooldown.set(userId, now + DM_FAILED_COOLDOWN_MS - DM_RETRY_COOLDOWN_MS);
       } else {
-        console.error(`[DAILY] Błąd DM:`, sendErr.message);
+        console.error(`[DAILY] Błąd wysyłania DM:`, sendErr.message);
       }
       return false;
     }
