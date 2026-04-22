@@ -7,25 +7,16 @@ const PROFILE_TMP_PATH = `${PROFILE_PATH}.tmp`;
 const RESET_TIMEZONE = process.env.RESET_TIMEZONE || "Europe/Warsaw";
 const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true";
 
-// =====================================================
-// INIT
-// =====================================================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   console.log(`[PROFILE] Data directory created: ${DATA_DIR}`);
 }
 
-// =====================================================
-// CACHE & WRITE QUEUE
-// =====================================================
 let dbCache = null;
 let writeQueue = Promise.resolve();
 let resetInterval = null;
 let lastResetDayKey = null;
 
-// =====================================================
-// HELPERS
-// =====================================================
 const toSafeNumber = (value, fallback = 0) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -62,9 +53,6 @@ const getCurrentDayKey = () =>
     day: "2-digit"
   }).format(new Date());
 
-// =====================================================
-// LOAD & SAVE
-// =====================================================
 function loadProfile() {
   if (dbCache) return dbCache;
   try {
@@ -109,9 +97,6 @@ async function flushProfile() {
   }
 }
 
-// =====================================================
-// USER MANAGEMENT
-// =====================================================
 function ensureUser(userId) {
   if (!userId) return null;
   const db = loadProfile();
@@ -124,9 +109,6 @@ function ensureUser(userId) {
   return db.users[userId];
 }
 
-// =====================================================
-// STATS UPDATERS
-// =====================================================
 function addVoiceTime(userId, seconds) {
   const amount = Math.floor(Number(seconds));
   if (!userId || !Number.isFinite(amount) || amount <= 0) return false;
@@ -155,15 +137,8 @@ function getVoiceMinutes(userId) {
   return user ? Math.floor(user.voice / 60) : 0;
 }
 
-// =====================================================
-// DAILY LOGIC
-// =====================================================
 function getDailyTier(streak = 0) {
-  const safeStreak = toSafeNumber(streak, 0);
-  return {
-    vcRequired: 30,
-    msgRequired: 50
-  };
+  return { vcRequired: 30, msgRequired: 50 };
 }
 
 function isDailyReady(userId) {
@@ -171,17 +146,11 @@ function isDailyReady(userId) {
   if (!user) return false;
   const tier = getDailyTier(user.daily.streak);
   const vcMinutes = Math.floor(user.daily.vc / 60);
-  const ready = (
-    vcMinutes >= tier.vcRequired &&
-    user.daily.msgs >= tier.msgRequired
-  );
+  const ready = (vcMinutes >= tier.vcRequired && user.daily.msgs >= tier.msgRequired);
   console.log(`[DAILY CHECK] ${userId} | Msg: ${user.daily.msgs}/${tier.msgRequired} | VC: ${vcMinutes}/${tier.vcRequired} | Ready: ${ready} | Streak: ${user.daily.streak}`);
   return ready;
 }
 
-// =====================================================
-// CLAIM DAILY
-// =====================================================
 async function claimDaily(userId, member = null) {
   const user = ensureUser(userId);
   if (!user) return { success: false, error: "invalid_user" };
@@ -226,9 +195,6 @@ async function claimDaily(userId, member = null) {
   };
 }
 
-// =====================================================
-// DAILY RESET
-// =====================================================
 function runDailyReset() {
   const db = loadProfile();
   let count = 0;
@@ -258,21 +224,9 @@ function startDailyReset() {
   console.log(`[PROFILE] Daily reset watcher started (${RESET_TIMEZONE})`);
 }
 
-// =====================================================
-// PROCESS EXIT
-// =====================================================
-process.on("SIGINT", async () => {
-  await flushProfile();
-  process.exit(0);
-});
-process.on("SIGTERM", async () => {
-  await flushProfile();
-  process.exit(0);
-});
+process.on("SIGINT", async () => { await flushProfile(); process.exit(0); });
+process.on("SIGTERM", async () => { await flushProfile(); process.exit(0); });
 
-// =====================================================
-// EXPORTS
-// =====================================================
 module.exports = {
   loadProfile,
   saveProfile,
