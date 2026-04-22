@@ -37,12 +37,9 @@ module.exports = {
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
-  console.log(`[PrivateChannel] handlePrivateChannelCreation wywołane dla ${member.user.tag}`);
-
   if (userChannels.has(member.id)) {
     const existing = guild.channels.cache.get(userChannels.get(member.id));
     if (existing) {
-      console.log(`[PrivateChannel] Użytkownik ma już kanał - przenoszę`);
       await member.voice.setChannel(existing).catch(() => {});
       return;
     }
@@ -57,8 +54,6 @@ async function handlePrivateChannelCreation(member) {
   }
 
   try {
-    console.log(`[PrivateChannel] Tworzę kanał dla ${member.user.tag}...`);
-
     const channel = await guild.channels.create({
       name: `・${member.displayName}'s Channel`,
       type: ChannelType.GuildVoice,
@@ -83,14 +78,14 @@ async function handlePrivateChannelCreation(member) {
 
     await member.voice.setChannel(channel).catch(() => {});
 
-    console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name} (ID: ${channel.id})`);
-
     await channel.send({
       content: `> **${member}** Twój prywatny kanał został stworzony!`
     }).catch(() => {});
 
     await sendControlPanel(channel, member);
     startEmptyChannelWatcher(channel, member.id);
+
+    console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name}`);
 
   } catch (err) {
     console.error(`[PrivateChannel] Błąd tworzenia dla ${member.user.tag}:`, err);
@@ -281,5 +276,5 @@ function startEmptyChannelWatcher(channel, ownerId) {
 module.exports = {
   handlePrivateChannelCreation,
   handlePrivatePanel,
-  handlePrivateUserAction   // <--- DODANE – to było brakujące w poprzedniej wersji
+  handlePrivateUserAction
 };
