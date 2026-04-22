@@ -1,7 +1,6 @@
 const { Events } = require("discord.js");
-const { handlePrivateChannelCreation } = require("../utils/privateChannelSystem");
 
-const CREATE_CHANNEL_ID = "1496280414237491220";
+const { handlePrivateChannelCreation } = require("./privateChannelSystem");
 
 module.exports = {
   name: Events.VoiceStateUpdate,
@@ -10,12 +9,15 @@ module.exports = {
     const member = newState.member;
     if (!member || member.user.bot) return;
 
-    if (
+    // wejście na kanał tworzenia
+    const joinedCreate =
+      !oldState.channel &&
       newState.channel &&
-      newState.channel.id === CREATE_CHANNEL_ID &&
-      oldState.channel?.id !== CREATE_CHANNEL_ID
-    ) {
+      newState.channel.id === "1496280414237491220";
+
+    if (joinedCreate) {
       await handlePrivateChannelCreation(member);
+      return;
     }
   }
 };
