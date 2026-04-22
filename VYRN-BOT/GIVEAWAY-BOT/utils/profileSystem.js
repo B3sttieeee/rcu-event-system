@@ -59,7 +59,7 @@ function loadProfile() {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
       fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
-      console.log(`[PROFILE] New database created`);
+      console.log(`[PROFILE] New database created: ${PROFILE_PATH}`);
       return dbCache;
     }
     const raw = fs.readFileSync(PROFILE_PATH, "utf8");
@@ -82,7 +82,7 @@ function saveProfile() {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        dbCache = null;   // <--- KLUCZOWE CZYSZCZENIE CACHE
+        dbCache = null;                    // <--- NAJWAŻNIEJSZE CZYSZCZENIE CACHE
         console.log(`[PROFILE] Saved and cache cleared`);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
