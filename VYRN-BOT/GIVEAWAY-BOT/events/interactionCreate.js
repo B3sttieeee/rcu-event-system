@@ -1,115 +1,72 @@
 const { Events } = require("discord.js");
 
-// ====================== SYSTEMS ======================
+// SYSTEMS
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleLumberjackSelect } = require("../commands/lumberjack");
-
-// Embed Builder
 const embedCommand = require("../commands/embed");
 
-// Private Channel
+// PRIVATE VC
 const {
   handlePrivatePanel,
   handlePrivateRename,
-  handlePrivateLimit
+  handlePrivateLimit,
+  handlePrivateButton
 } = require("../utils/privateChannelSystem");
 
-// ====================== MAIN ======================
 module.exports = {
   name: Events.InteractionCreate,
 
   async execute(interaction, client) {
     const cid = interaction.customId;
 
-    const type =
-      interaction.isChatInputCommand()
-        ? "SLASH"
-        : interaction.isButton()
-        ? `BUTTON:${cid || "NONE"}`
-        : interaction.isStringSelectMenu()
-        ? `SELECT:${cid || "NONE"}`
-        : interaction.isModalSubmit()
-        ? `MODAL:${cid || "NONE"}`
-        : "UNKNOWN";
+    console.log(`[INTERACTION] ${interaction.type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
-    console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
-
-    // ======================
-    // 1. EMBED BUILDER
-    // ======================
-    if (interaction.isModalSubmit() && cid.startsWith("embedModal_")) {
-      return await embedCommand.handleModal(interaction);
+    // EMBED
+    if (interaction.isModalSubmit() && cid?.startsWith("embedModal_")) {
+      return embedCommand.handleModal(interaction);
     }
 
-    // ======================
-    // 2. GIVEAWAY SYSTEM
-    // ======================
+    // GIVEAWAY
     if (interaction.isButton() && cid?.startsWith("gw_")) {
-      return await handleGiveaway(interaction);
+      return handleGiveaway(interaction);
     }
 
-    // ======================
-    // 3. EVENT SYSTEM
-    // ======================
+    // EVENT SYSTEM
     const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
 
     if (
       (interaction.isButton() || interaction.isStringSelectMenu()) &&
       eventIds.includes(cid)
     ) {
-      return await handleEventInteraction(interaction);
+      return handleEventInteraction(interaction);
     }
 
-    // ======================
-    // 4. LUMBERJACK
-    // ======================
+    // LUMBERJACK
     if (
       interaction.isStringSelectMenu() &&
       cid === "expedition_time_select"
     ) {
-      return await handleLumberjackSelect(interaction);
+      return handleLumberjackSelect(interaction);
     }
 
-    // ======================
-    // 5. PRIVATE CHANNEL SYSTEM
-    // ======================
-    if (
-      interaction.isStringSelectMenu() &&
-      cid?.startsWith("private_")
-    ) {
-      return await handlePrivatePanel(interaction);
+    // ================= PRIVATE VC (NOW BUTTON BASED) =================
+    if (interaction.isButton() && cid?.startsWith("vc_")) {
+      return handlePrivateButton(interaction);
     }
 
-    if (
-      interaction.isModalSubmit() &&
-      cid?.startsWith("private_rename_")
-    ) {
-      return await handlePrivateRename(interaction);
+    if (interaction.isModalSubmit() && cid?.startsWith("private_rename_")) {
+      return handlePrivateRename(interaction);
     }
 
-    if (
-      interaction.isModalSubmit() &&
-      cid?.startsWith("private_limit_")
-    ) {
-      return await handlePrivateLimit(interaction);
+    if (interaction.isModalSubmit() && cid?.startsWith("private_limit_")) {
+      return handlePrivateLimit(interaction);
     }
 
-    // ======================
-    // 6. TICKET SYSTEM (FIXED)
-    // ======================
-
-    // ✅ SELECT MENU FIX (TO BYŁ TWÓJ BUG)
-    if (
-      interaction.isStringSelectMenu() &&
-      cid === "clan_ticket_select"
-    ) {
-      return await ticketSystem.handle(interaction, client);
-    }
-
-    // BUTTON + MODAL
+    // TICKET SYSTEM
     const ticketIds = [
+      "clan_ticket_select",
       "open_ticket_vyrn",
       "open_ticket_v2rn",
       "close_ticket",
@@ -118,28 +75,18 @@ module.exports = {
     ];
 
     if (
-      (interaction.isButton() || interaction.isModalSubmit()) &&
+      (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) &&
       ticketIds.includes(cid)
     ) {
-      return await ticketSystem.handle(interaction, client);
+      return ticketSystem.handle(interaction, client);
     }
 
-    // ======================
-    // 7. SLASH COMMANDS
-    // ======================
+    // SLASH
     if (interaction.isChatInputCommand()) {
       const cmd = client.commands.get(interaction.commandName);
+      if (!cmd) return interaction.reply({ content: "❌ Not found", ephemeral: true });
 
-      if (!cmd) {
-        return interaction.reply({
-          content: "❌ Command not found.",
-          ephemeral: true
-        });
-      }
-
-      return await cmd.execute(interaction, client);
+      return cmd.execute(interaction, client);
     }
-
-    console.log(`[UNHANDLED] ${type} | ${cid}`);
   }
 };
