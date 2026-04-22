@@ -23,7 +23,6 @@ async function handlePrivateChannelCreation(member) {
 
   console.log(`[PrivateChannel] handlePrivateChannelCreation wywołane dla ${member.user.tag}`);
 
-  // Ochrona przed duplikatami
   if (userChannels.has(member.id)) {
     const existing = guild.channels.cache.get(userChannels.get(member.id));
     if (existing) {
@@ -34,16 +33,16 @@ async function handlePrivateChannelCreation(member) {
     userChannels.delete(member.id);
   }
 
-  // Czekamy 5 sekund
-  await new Promise(resolve => setTimeout(resolve, 5000));
+  await new Promise(r => setTimeout(r, 5000));
 
-  // Sprawdzamy czy nadal jest na kanale tworzenia
   if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) {
     console.log(`[PrivateChannel] Użytkownik wyszedł przed 5s - anuluję`);
     return;
   }
 
   try {
+    console.log(`[PrivateChannel] Tworzę kanał dla ${member.user.tag}...`);
+
     const channel = await guild.channels.create({
       name: `・${member.displayName}'s Channel`,
       type: ChannelType.GuildVoice,
@@ -66,9 +65,7 @@ async function handlePrivateChannelCreation(member) {
 
     userChannels.set(member.id, channel.id);
 
-    if (member.voice?.channel) {
-      await member.voice.setChannel(channel).catch(() => {});
-    }
+    await member.voice.setChannel(channel).catch(() => {});
 
     console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name} (ID: ${channel.id})`);
 
@@ -133,7 +130,6 @@ async function handlePrivatePanel(interaction) {
     return interaction.reply({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
   }
 
-  // Modale dla rename i limit
   if (action === "rename" || action === "limit") {
     const modal = new ModalBuilder()
       .setCustomId(`private_${action}_${channel.id}`)
@@ -152,18 +148,99 @@ async function handlePrivatePanel(interaction) {
     return await interaction.showModal(modal);
   }
 
-  // Inne akcje
+  if (action === "kick" || action === "ban" || action === "unban") {
+    return await showUserSelectMenu(interaction, channel, action);
+  }
+
   await interaction.deferUpdate().catch(() => {});
 
-  if (action === "delete") {
+  if (action === "lock") {
+    await channel.permissionOverwrites.edit(channel.guild.id, { Connect: false });
+    await interaction.followUp({ content: "🔒 Kanał zablokowany.", ephemeral: true });
+  } else if (action === "unlock") {
+    await channel.permissionOverwrites.edit(channel.guild.id, { Connect: null });
+    await interaction.followUp({ content: "🔓 Kanał odblokowany.", ephemeral: true });
+  } else if (action === "delete") {
     await channel.delete().catch(() => {});
     userChannels.delete(interaction.user.id);
-    await interaction.followUp({ content: "🗑️ Kanał został pomyślnie usunięty.", ephemeral: true });
-  } else {
-    await interaction.followUp({
-      content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
+    await interaction.followUp({ content: "🗑️ Kanał został usunięty.", ephemeral: true });
+  }
+}
+
+// ====================== DYNAMICZNE MENU ======================
+async function showUserSelectMenu(interaction, channel, action) {
+  let options = [];
+
+  if (action === "kick" || action === "ban") {
+    options = Array.from(channel.members.values())
+      .filter(m => m.id !== interaction.user.id)
+      .map(m => ({
+        label: m.displayName || m.user.username,
+        value: m.id,
+        description: m.user.tag
+      }));
+  } else if (action === "unban") {
+    const banned = channel.permissionOverwrites.cache.filter(perm =>
+      perm.type === 1 && perm.deny.has(PermissionFlagsBits.Connect)
+    );
+    options = banned.map(perm => {
+      const member = interaction.guild.members.cache.get(perm.id);
+      return {
+        label: member ? (member.displayName || member.user.username) : "Nieznany",
+        value: perm.id,
+        description: "Zbanowany"
+      };
+    });
+  }
+
+  if (options.length === 0) {
+    return interaction.reply({
+      content: action === "unban" ? "✅ Nie ma zbanowanych osób." : "❌ Na kanale nie ma nikogo innego.",
       ephemeral: true
     });
+  }
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`private_${action}_user_${channel.id}`)
+    .setPlaceholder(`Wybierz kogo ${action === "kick" ? "wyrzucić" : action === "ban" ? "zbanować" : "odbanować"}`)
+    .addOptions(options.slice(0, 25));
+
+  const row = new ActionRowBuilder().addComponents(select);
+
+  await interaction.reply({
+    content: `Wybierz użytkownika do **${action === "kick" ? "wyrzucenia" : action === "ban" ? "zbanowania" : "odbanowania"}**:`,
+    components: [row],
+    ephemeral: true
+  });
+}
+
+// ====================== OBSŁUGA AKCJI NA UŻYTKOWNIKU ======================
+async function handlePrivateUserAction(interaction) {
+  const parts = interaction.customId.split("_");
+  const action = parts[1];
+  const channelId = parts[3];
+  const targetId = interaction.values[0];
+  const channel = interaction.guild.channels.cache.get(channelId);
+
+  if (!channel) return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+
+  await interaction.deferUpdate().catch(() => {});
+
+  try {
+    if (action === "kick") {
+      const member = await interaction.guild.members.fetch(targetId).catch(() => null);
+      if (member) await member.voice.disconnect().catch(() => {});
+      await interaction.followUp({ content: `🚪 Wyrzucono użytkownika.`, ephemeral: true });
+    } else if (action === "ban") {
+      await channel.permissionOverwrites.edit(targetId, { Connect: false });
+      await interaction.followUp({ content: `🔨 Użytkownik zbanowany.`, ephemeral: true });
+    } else if (action === "unban") {
+      await channel.permissionOverwrites.delete(targetId).catch(() => {});
+      await interaction.followUp({ content: `🔓 Użytkownik odbanowany.`, ephemeral: true });
+    }
+  } catch (err) {
+    console.error(`[PrivateUserAction] Błąd ${action}:`, err);
+    await interaction.followUp({ content: "❌ Nie udało się wykonać akcji.", ephemeral: true });
   }
 }
 
@@ -171,12 +248,12 @@ async function handlePrivatePanel(interaction) {
 function startEmptyChannelWatcher(channel, ownerId) {
   const interval = setInterval(async () => {
     try {
-      const freshChannel = await channel.guild.channels.fetch(channel.id).catch(() => null);
-      if (!freshChannel || freshChannel.members.size === 0) {
-        await freshChannel?.delete().catch(() => {});
+      const fresh = await channel.guild.channels.fetch(channel.id).catch(() => null);
+      if (!fresh || fresh.members.size === 0) {
+        await fresh?.delete().catch(() => {});
         userChannels.delete(ownerId);
         clearInterval(interval);
-        console.log(`[PrivateChannel] Kanał ${channel.name} został usunięty (pusty)`);
+        console.log(`[PrivateChannel] Kanał ${channel.name} usunięty (pusty)`);
       }
     } catch (e) {
       clearInterval(interval);
@@ -187,5 +264,6 @@ function startEmptyChannelWatcher(channel, ownerId) {
 
 module.exports = {
   handlePrivateChannelCreation,
-  handlePrivatePanel
+  handlePrivatePanel,
+  handlePrivateUserAction
 };
