@@ -1,5 +1,4 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-
 const { loadDB, loadConfig, neededXP } = require("../../utils/levelSystem");
 const { loadProfile } = require("../../utils/profileSystem");
 const { getCurrentBoost } = require("../../utils/boostSystem");
@@ -11,7 +10,7 @@ function getRank(level) {
   if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
   if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
   if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
-  if (level >= 5)  return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
+  if (level >= 5) return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
   return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
@@ -33,25 +32,20 @@ module.exports = {
       const userId = interaction.user.id;
 
       const levelsDB = loadDB();
-      const profileDB = loadProfile();
+      const profileDB = loadProfile();        // zawsze świeże dane
       const config = loadConfig();
 
       const lvlData = levelsDB.xp?.[userId] || { xp: 0, level: 0 };
-      
-      // Bezpieczne pobieranie danych daily
-      const dailyData = profileDB.users?.[userId]?.daily || { msgs: 0, vc: 0, streak: 0 };
+      const dailyData = profileDB.users?.[userId]?.daily || { msgs: 0, vc: 0, streak: 0, lastClaim: 0 };
       const userVoice = profileDB.users?.[userId]?.voice || 0;
 
       const nextLevelXP = neededXP(lvlData.level);
-      const progress = nextLevelXP > 0 
-        ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100)) 
-        : 0;
-
+      const progress = nextLevelXP > 0 ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100)) : 0;
       const xpLeft = Math.max(0, nextLevelXP - lvlData.xp);
 
       const totalVoiceMin = Math.floor(userVoice / 60);
       const dailyVoiceMin = Math.floor((dailyData.vc || 0) / 60);
-      const dailyVoiceReq = 30 + ((dailyData.streak || 0) * 5);
+      const dailyVoiceReq = 30;
 
       const currentBoost = getCurrentBoost(userId);
       const rank = getRank(lvlData.level);
@@ -66,23 +60,19 @@ module.exports = {
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setDescription(
           `**${rank.emoji} ${rank.name}** — Level **${lvlData.level}**\n\n` +
-
           `**Experience**\n` +
           `> **${lvlData.xp} / ${nextLevelXP} XP**\n` +
           `> ${createProgressBar(progress)} **${progress}%**\n` +
           `> **${xpLeft}** XP do następnego poziomu\n\n` +
-
           `**Voice Activity**\n` +
           `> Total: **${totalVoiceMin}** minut\n` +
           `> Daily: **${dailyVoiceMin} / ${dailyVoiceReq}** minut\n\n` +
-
           `**Daily Quest**\n` +
-          `> Messages: **${dailyData.msgs || 0}**\n` +
+          `> Wiadomości: **${dailyData.msgs || 0} / 50**\n` +
+          `> Voice Chat: **${dailyVoiceMin} / 30** min\n` +
           `> Streak: **${dailyData.streak || 0}** dni 🔥\n\n` +
-
           `**Economy**\n` +
           `> Monety: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
-
           `**Active Boost**\n` +
           `> ${currentBoost > 1 ? `**${currentBoost}x XP** 🚀` : "**Brak**"}`
         )
