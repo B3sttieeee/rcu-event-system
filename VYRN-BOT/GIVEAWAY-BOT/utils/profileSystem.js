@@ -17,6 +17,7 @@ let writeQueue = Promise.resolve();
 let resetInterval = null;
 let lastResetDayKey = null;
 
+// ====================== HELPERS ======================
 const toSafeNumber = (value, fallback = 0) => {
   const number = Number(value);
   return Number.isFinite(number) ? number : fallback;
@@ -53,6 +54,18 @@ const getCurrentDayKey = () =>
     day: "2-digit"
   }).format(new Date());
 
+// ====================== REWARD ======================
+function getDailyReward(streak) {
+  const baseXP = 150;
+  const streakBonus = Math.min(streak * 50, 500);
+  const totalXP = baseXP + streakBonus;
+  return {
+    xp: totalXP,
+    text: `**${totalXP} XP** (150 base + ${streakBonus} za streak)`
+  };
+}
+
+// ====================== DATABASE ======================
 function loadProfile() {
   if (dbCache) return dbCache;
   try {
@@ -82,7 +95,7 @@ function saveProfile() {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        dbCache = null;                    // <--- TO JEST NAJWAŻNIEJSZE
+        dbCache = null; // kluczowe - czyszczenie cache
         console.log(`[PROFILE] Saved and cache cleared`);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
@@ -99,6 +112,7 @@ async function flushProfile() {
   }
 }
 
+// ====================== USER MANAGEMENT ======================
 function ensureUser(userId) {
   if (!userId) return null;
   const db = loadProfile();
@@ -111,6 +125,7 @@ function ensureUser(userId) {
   return db.users[userId];
 }
 
+// ====================== ACTIVITY ======================
 function addVoiceTime(userId, seconds) {
   const amount = Math.floor(Number(seconds));
   if (!userId || !Number.isFinite(amount) || amount <= 0) return false;
@@ -139,6 +154,7 @@ function getVoiceMinutes(userId) {
   return user ? Math.floor(user.voice / 60) : 0;
 }
 
+// ====================== DAILY LOGIC ======================
 function getDailyTier(streak = 0) {
   return { vcRequired: 30, msgRequired: 50 };
 }
@@ -153,19 +169,8 @@ function isDailyReady(userId) {
   return ready;
 }
 
-function getDailyReward(streak) {
-  const baseXP = 150;
-  const streakBonus = Math.min(streak * 50, 500);
-  const totalXP = baseXP + streakBonus;
-  return {
-    xp: totalXP,
-    text: `**${totalXP} XP** (150 base + ${streakBonus} za streak)`
-  };
-}
-
 async function claimDaily(userId, member = null) {
   console.log(`[CLAIM] Rozpoczynam claim dla ${userId}`);
-
   const user = ensureUser(userId);
   if (!user) return { success: false, error: "invalid_user" };
 
@@ -182,6 +187,7 @@ async function claimDaily(userId, member = null) {
   user.daily.streak += 1;
   const reward = getDailyReward(user.daily.streak);
 
+  // Przyznaj XP
   if (member && !member.user?.bot) {
     try {
       const { addXP } = require("./levelSystem");
@@ -193,6 +199,7 @@ async function claimDaily(userId, member = null) {
     }
   }
 
+  // Reset daily
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
@@ -211,6 +218,7 @@ async function claimDaily(userId, member = null) {
   };
 }
 
+// ====================== RESET ======================
 function runDailyReset() {
   const db = loadProfile();
   let count = 0;
@@ -240,9 +248,11 @@ function startDailyReset() {
   console.log(`[PROFILE] Daily reset watcher started (${RESET_TIMEZONE})`);
 }
 
+// ====================== PROCESS EXIT ======================
 process.on("SIGINT", async () => { await flushProfile(); process.exit(0); });
 process.on("SIGTERM", async () => { await flushProfile(); process.exit(0); });
 
+// ====================== EXPORTS ======================
 module.exports = {
   loadProfile,
   saveProfile,
@@ -254,6 +264,7 @@ module.exports = {
   getDailyTier,
   isDailyReady,
   claimDaily,
+  getDailyReward,        // <--- dodane
   startDailyReset,
   runDailyReset
 };
