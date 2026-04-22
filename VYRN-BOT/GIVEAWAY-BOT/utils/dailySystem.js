@@ -8,23 +8,13 @@ const {
 const {
   loadProfile,
   isDailyReady,
-  saveProfile
+  saveProfile,
+  getDailyReward   // <-- bierzemy z profileSystem (jedno źródło prawdy)
 } = require("./profileSystem");
 
 // ====================== CONFIG ======================
 const BLACK_COLOR = "#0a0a0a";
 const READY_COLOR = "#22c55e";
-
-// ====================== NAGRODA ======================
-function getDailyReward(streak) {
-  const baseXP = 150;
-  const streakBonus = Math.min(streak * 50, 500);
-  const totalXP = baseXP + streakBonus;
-  return {
-    xp: totalXP,
-    text: `**${totalXP} XP** (150 base + ${streakBonus} za streak)`
-  };
-}
 
 // ====================== POMOCNICZE ======================
 function ensureDailyState(user) {
@@ -39,8 +29,9 @@ function ensureDailyState(user) {
   return d;
 }
 
+// ====================== BUILD EMBED ======================
 function buildDailyEmbed(userId) {
-  // WYMUSZAMY ŚWIEŻE DANE Z DYSKU - to jest klucz
+  // ZAWSZE świeże dane z dysku
   const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
@@ -88,32 +79,37 @@ function buildDailyEmbed(userId) {
   return { embed, components };
 }
 
-// ====================== WYŁĄCZONE DM ======================
+// ====================== PO ODEBRANIU ======================
+function onDailyClaimed(userId) {
+  try {
+    // Wymuszamy pełne odświeżenie
+    const db = loadProfile();
+    const user = db.users?.[userId];
+    if (!user) return;
+
+    const daily = ensureDailyState(user);
+
+    // Resetujemy flagi
+    daily.notified = false;
+    daily.lastNotifyAttemptAt = 0;
+
+    saveProfile();
+
+    console.log(`[DAILY] Status zresetowany po odebraniu → ${userId} | Nowy streak: ${daily.streak}`);
+  } catch (err) {
+    console.error("[DAILY] Błąd onDailyClaimed:", err);
+  }
+}
+
+// ====================== STUB DM (wyłączone) ======================
 async function checkDailyDM(member) {
   return false;
 }
 
-// ====================== PO ODEBRANIU ======================
-function onDailyClaimed(userId) {
-  try {
-    // Wymuszamy pełne odświeżenie cache po odebraniu
-    loadProfile(); // czyścimy cache
-    const db = loadProfile();
-    const user = db.users?.[userId];
-    if (!user) return;
-    const daily = ensureDailyState(user);
-    daily.notified = false;
-    daily.lastNotifyAttemptAt = 0;
-    saveProfile();
-    console.log(`[DAILY] Status zresetowany po odebraniu → ${userId} (streak = ${daily.streak})`);
-  } catch (err) {
-    console.error("Błąd onDailyClaimed:", err);
-  }
-}
-
+// ====================== EXPORTS ======================
 module.exports = {
   buildDailyEmbed,
-  checkDailyDM,
   onDailyClaimed,
+  checkDailyDM,
   ensureDailyState
 };
