@@ -15,6 +15,20 @@ const {
 const BLACK_COLOR = "#0a0a0a";
 const READY_COLOR = "#22c55e";
 
+// ====================== NAGRODY ======================
+function getDailyReward(streak) {
+  const baseXP = 150;
+  const streakBonus = Math.min(streak * 50, 500); // max +500 XP za streak
+  const totalXP = baseXP + streakBonus;
+
+  return {
+    xp: totalXP,
+    baseXP,
+    streakBonus,
+    message: `+${totalXP} XP (${baseXP} bazowo + ${streakBonus} za streak)`
+  };
+}
+
 // ====================== POMOCNICZE ======================
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
@@ -23,16 +37,7 @@ function ensureDailyState(user) {
   d.vc = Number(d.vc) || 0;
   d.streak = Number(d.streak) || 0;
   d.lastClaim = Number(d.lastClaim) || 0;
-  d.notified = Boolean(d.notified);
-  d.lastNotifyAttemptAt = Number(d.lastNotifyAttemptAt) || 0;
   return d;
-}
-
-// Progres bar
-function createProgressBar(current, max, length = 12) {
-  const percent = Math.min(Math.max(current / max, 0), 1);
-  const filled = Math.round(percent * length);
-  return "▰".repeat(filled) + "▱".repeat(length - filled);
 }
 
 function buildDailyEmbed(userId) {
@@ -41,32 +46,33 @@ function buildDailyEmbed(userId) {
   const daily = ensureDailyState(user);
   const ready = isDailyReady(userId);
 
-  const tier = { vcRequired: 30, msgRequired: 50 }; // stałe wymagania
-  const vcProgress = Math.min(Math.floor(daily.vc / 60), tier.vcRequired);
-  const msgProgress = Math.min(daily.msgs, tier.msgRequired);
+  const reward = getDailyReward(daily.streak);
 
   const embed = new EmbedBuilder()
     .setColor(ready ? READY_COLOR : BLACK_COLOR)
-    .setTitle(ready ? "🎉 Daily Quest jest gotowy!" : "📊 Postęp Daily Quest")
+    .setTitle("🌙 Daily Quest — VYRN")
     .setDescription(
       ready
-        ? "**Wszystkie wymagania spełnione!** Kliknij przycisk poniżej, aby odebrać nagrodę."
-        : "Wbij wymagane progi i wróć po nagrodę."
+        ? "**Wszystkie wymagania zostały spełnione!**\nCzas odebrać nagrodę."
+        : "Wykonaj codzienne cele, aby zdobyć nagrodę."
     )
     .addFields(
       {
-        name: "💬 Wiadomości",
-        value: `${createProgressBar(msgProgress, tier.msgRequired)}\n\`${msgProgress}/${tier.msgRequired}\``,
-        inline: true
+        name: "📌 Wymagania",
+        value: `• Wiadomości: \`${Math.min(daily.msgs, 50)}/50\`\n` +
+               `• Voice Chat: \`${Math.min(Math.floor(daily.vc / 60), 30)}/30 min\``,
+        inline: false
       },
       {
-        name: "🎤 Voice Chat",
-        value: `${createProgressBar(vcProgress, tier.vcRequired)}\n\`${vcProgress}/${tier.vcRequired} min\``,
-        inline: true
+        name: "🏆 Nagroda",
+        value: `**${reward.xp} XP**\n` +
+               `Base: ${reward.baseXP} XP\n` +
+               `Streak Bonus: +${reward.streakBonus} XP`,
+        inline: false
       },
       {
-        name: "🔥 Streak",
-        value: `\`${daily.streak} dni\``,
+        name: "🔥 Aktualny Streak",
+        value: `\`${daily.streak} dni` + (daily.streak >= 5 ? " 🔥" : "") + "`",
         inline: true
       }
     )
@@ -86,9 +92,9 @@ function buildDailyEmbed(userId) {
   return { embed, components };
 }
 
-// ====================== CHECK DAILY DM (WYŁĄCZONE) ======================
+// ====================== WYŁĄCZONE DM ======================
 async function checkDailyDM(member) {
-  return false; // DM całkowicie wyłączone
+  return false;
 }
 
 // ====================== PO ODEBRANIU ======================
@@ -101,7 +107,7 @@ function onDailyClaimed(userId) {
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
     saveProfile();
-    console.log(`[DAILY] Status zresetowany po odebraniu → ${userId}`);
+    console.log(`[DAILY] Nagroda odebrana i zresetowana → ${userId}`);
   } catch (err) {
     console.error("Błąd onDailyClaimed:", err);
   }
