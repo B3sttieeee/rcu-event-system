@@ -1,159 +1,185 @@
-const {
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} = require("discord.js");
+const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
+
+// ====================== SYSTEMS ======================
+const ticketSystem = require("../utils/ticketSystem");
+const { handleEventInteraction } = require("../utils/eventSystem");
+const { handleGiveaway } = require("../utils/giveawaySystem");
+const { handleLumberjackSelect } = require("../commands/lumberjack");
 
 const {
-  loadProfile,
   isDailyReady,
-  saveProfile
-} = require("./profileSystem");
+  claimDaily,
+  onDailyClaimed
+} = require("../utils/dailySystem");
 
-// ====================== CONFIG ======================
-const DM_RETRY_COOLDOWN_MS = 25 * 60 * 1000;
-const DM_FAILED_COOLDOWN_MS = 6 * 60 * 60 * 1000;
+const embedCommand = require("../commands/embed");
 
-const dmLock = new Set();
-const dmCooldown = new Map();
+const {
+  handlePrivatePanel,
+  handlePrivateUserAction,
+  handlePrivateRename,
+  handlePrivateLimit
+} = require("../utils/privateChannelSystem");
 
-// ====================== POMOCNICZE ======================
-function ensureDailyState(user) {
-  if (!user.daily) user.daily = {};
-  const d = user.daily;
-  d.msgs = Number(d.msgs) || 0;
-  d.vc = Number(d.vc) || 0;
-  d.streak = Number(d.streak) || 0;
-  d.lastClaim = Number(d.lastClaim) || 0;
-  d.notified = Boolean(d.notified);
-  d.lastNotifyAttemptAt = Number(d.lastNotifyAttemptAt) || 0;
-  return d;
-}
-
-function buildDailyEmbed(userId) {
-  const db = loadProfile();
-  const user = db.users?.[userId] || {};
-  const daily = ensureDailyState(user);
-  const ready = isDailyReady(userId);
-
-  return {
-    embed: new EmbedBuilder()
-      .setColor(ready ? "#22c55e" : "#1e293b")
-      .setTitle(ready ? "Daily Quest gotowy!" : "Postęp Daily Quest")
-      .setDescription(
-        ready
-          ? "Wymagania zostały spełnione.\nKliknij przycisk poniżej, aby odebrać nagrodę."
-          : "Wbij wymagane progi i wróć po nagrodę."
-      )
-      .addFields(
-        { name: "Wiadomości", value: `\`${Math.min(daily.msgs, 50)}/50\``, inline: true },
-        { name: "Voice Chat", value: `\`${Math.min(Math.floor(daily.vc / 60), 30)}/30 min\``, inline: true },
-        { name: "Streak", value: `\`${daily.streak} dni\``, inline: true }
-      )
-      .setFooter({ text: ready ? "Nagroda czeka na odbiór • VYRN" : "Daily System • VYRN" })
-      .setTimestamp(),
-
-    components: ready ? [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("daily_claim")
-          .setLabel("Odbierz daily")
-          .setStyle(ButtonStyle.Success)
-          .setEmoji("🎁")
-      )
-    ] : []
-  };
-}
-
-// ====================== CHECK DAILY DM ======================
-async function checkDailyDM(member) {
-  if (!member?.user || member.user.bot) return false;
-  const userId = member.id;
-  if (dmLock.has(userId)) return false;
-  dmLock.add(userId);
-
-  try {
-    const db = loadProfile();
-    const user = db.users?.[userId];
-    if (!user) return false;
-
-    const daily = ensureDailyState(user);
-    const ready = isDailyReady(userId);
-
-    if (!ready) {
-      if (daily.notified) {
-        daily.notified = false;
-        daily.lastNotifyAttemptAt = 0;
-        dmCooldown.delete(userId);
-        saveProfile();
-      }
-      return false;
-    }
-
-    if (daily.notified) return false;
-
-    const now = Date.now();
-    const lastAttempt = Math.max(
-      Number(daily.lastNotifyAttemptAt) || 0,
-      dmCooldown.get(userId) || 0
-    );
-
-    if (now - lastAttempt < DM_RETRY_COOLDOWN_MS) return false;
-
-    daily.lastNotifyAttemptAt = now;
-    dmCooldown.set(userId, now);
-    saveProfile();
-
-    const { embed, components } = buildDailyEmbed(userId);
+// ====================== MAIN ======================
+module.exports = {
+  name: Events.InteractionCreate,
+  async execute(interaction, client) {
+    const cid = interaction.customId;
+    const type = interaction.isChatInputCommand() ? "SLASH" :
+                 interaction.isButton() ? `BUTTON:${cid || "NONE"}` :
+                 interaction.isStringSelectMenu() ? `SELECT:${cid || "NONE"}` :
+                 interaction.isModalSubmit() ? `MODAL:${cid || "NONE"}` : "UNKNOWN";
 
     try {
-      await member.send({
-        content: "Twój **Daily Quest** jest gotowy do odebrania!",
-        embeds: [embed],
-        components
-      });
-      daily.notified = true;
-      saveProfile();
-      console.log(`[DAILY] DM WYSŁANY → ${member.user.tag} | Streak: ${daily.streak} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
-      return true;
-    } catch (sendErr) {
-      if (sendErr.code === 50007) {
-        console.log(`[DAILY] DM ZABLOKOWANE → ${member.user.tag}`);
-        dmCooldown.set(userId, now + DM_FAILED_COOLDOWN_MS);
-      } else {
-        console.error(`[DAILY] Błąd wysyłania DM:`, sendErr.message);
+      console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
+
+      if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
+        return await embedCommand.handleModal(interaction);
       }
-      return false;
+      if (interaction.isButton() && interaction.customId.startsWith("embed_")) {
+        return await embedCommand.handleButton(interaction);
+      }
+
+      if (interaction.isButton() && cid?.startsWith("gw_")) {
+        return await handleGiveaway(interaction);
+      }
+
+      const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
+      if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
+        return await handleEventInteraction(interaction);
+      }
+
+      if (interaction.isStringSelectMenu() &&
+          (cid === "lumberjack_location" || cid === "lumberjack_duration")) {
+        return await handleLumberjackSelect(interaction);
+      }
+
+      if (interaction.isButton() && cid === "daily_claim") {
+        return await handleDailyClaim(interaction);
+      }
+
+      if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
+        return await handlePrivatePanel(interaction);
+      }
+
+      if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_") && interaction.customId.includes("_user_")) {
+        return await handlePrivateUserAction(interaction);
+      }
+
+      if (interaction.isModalSubmit()) {
+        if (interaction.customId.startsWith("private_rename_")) {
+          return await handlePrivateRename(interaction);
+        }
+        if (interaction.customId.startsWith("private_limit_")) {
+          return await handlePrivateLimit(interaction);
+        }
+      }
+
+      const ticketIds = [
+        "open_ticket_vyrn",
+        "open_ticket_v2rn",
+        "close_ticket",
+        "ticket_modal_vyrn",
+        "ticket_modal_v2rn"
+      ];
+      if (
+        (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()) &&
+        (ticketIds.includes(cid) || cid === "clan_ticket_select" || cid?.startsWith("ticket_modal_"))
+      ) {
+        return await ticketSystem.handle(interaction, client);
+      }
+
+      if (interaction.isChatInputCommand()) {
+        const cmd = client.commands.get(interaction.commandName);
+        if (!cmd) {
+          return interaction.reply({ content: "❌ Command not found.", ephemeral: true });
+        }
+        return await cmd.execute(interaction, client);
+      }
+
+      if (cid) {
+        console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
+      }
+    } catch (err) {
+      console.error("❌ INTERACTION ERROR:", err);
+      const payload = {
+        content: "❌ Wystąpił błąd systemu. Spróbuj ponownie później.",
+        ephemeral: true
+      };
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.followUp(payload).catch(() => {});
+        } else {
+          await interaction.reply(payload).catch(() => {});
+        }
+      } catch (_) {}
     }
-  } catch (err) {
-    console.error(`[DAILY] Błąd checkDailyDM dla ${userId}:`, err);
-    return false;
-  } finally {
-    setTimeout(() => dmLock.delete(userId), 10000);
   }
-}
-
-// ====================== PO ODEBRANIU ======================
-function onDailyClaimed(userId) {
-  try {
-    const db = loadProfile();
-    const user = db.users?.[userId];
-    if (!user) return;
-    const daily = ensureDailyState(user);
-    daily.notified = false;
-    daily.lastNotifyAttemptAt = 0;
-    dmCooldown.delete(userId);
-    saveProfile();
-    console.log(`[DAILY] Status zresetowany po odebraniu → ${userId}`);
-  } catch (err) {
-    console.error("Błąd onDailyClaimed:", err);
-  }
-}
-
-module.exports = {
-  checkDailyDM,
-  onDailyClaimed,
-  buildDailyEmbed,
-  ensureDailyState
 };
+
+// ====================== DAILY CLAIM HANDLER (TYLKO NA SERWERZE – BEZ DM) ======================
+async function handleDailyClaim(interaction) {
+  const userId = interaction.user.id;
+
+  if (interaction.replied || interaction.deferred) return;
+
+  await interaction.deferUpdate().catch(() => {});
+
+  try {
+    // BLOKADA DM – daily claim tylko na serwerze
+    if (!interaction.guild) {
+      return await interaction.editReply({
+        content: "❌ Daily claim działa **tylko na serwerze**, nie w prywatnych wiadomościach (DM).",
+        embeds: [],
+        components: []
+      });
+    }
+
+    if (!isDailyReady(userId)) {
+      return await interaction.editReply({
+        content: "❌ Twój Daily Quest nie jest jeszcze gotowy.",
+        embeds: [],
+        components: []
+      });
+    }
+
+    const member = interaction.member || interaction.guild.members.cache.get(userId);
+    const result = await claimDaily(userId, member);
+
+    if (!result?.success) {
+      return await interaction.editReply({
+        content: result?.message || "❌ Nie udało się odebrać daily.",
+        embeds: [],
+        components: []
+      });
+    }
+
+    onDailyClaimed(userId);
+
+    const successEmbed = new EmbedBuilder()
+      .setColor("#22c55e")
+      .setTitle("✅ Daily Quest odebrany!")
+      .setDescription(result.message || "Gratulacje! Otrzymałeś dzisiejszą nagrodę.")
+      .addFields(
+        { name: "Nagroda", value: result.reward || `${result.xp || 0} XP`, inline: true },
+        { name: "Streak", value: `\`${result.streak || "?"} dni 🔥\``, inline: true }
+      )
+      .setTimestamp();
+
+    await interaction.editReply({
+      embeds: [successEmbed],
+      components: []
+    });
+
+    console.log(`[DAILY] SUCCESS → ${interaction.user.tag} | Streak: ${result.streak}`);
+
+  } catch (err) {
+    console.error(`[DAILY] BŁĄD claim dla ${userId}:`, err);
+    await interaction.editReply({
+      content: "❌ Wystąpił nieoczekiwany błąd podczas odbierania daily.",
+      embeds: [],
+      components: []
+    }).catch(() => {});
+  }
+}
