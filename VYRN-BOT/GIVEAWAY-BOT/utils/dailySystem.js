@@ -9,14 +9,14 @@ const {
   loadProfile,
   isDailyReady,
   saveProfile,
-  getDailyReward   // bierzemy z profileSystem (jedno źródło prawdy)
+  getDailyReward
 } = require("./profileSystem");
 
 // ====================== CONFIG ======================
 const BLACK_COLOR = "#0a0a0a";
 const READY_COLOR = "#22c55e";
 
-// ====================== POMOCNICZE ======================
+// ====================== ENSURE STATE ======================
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
   const d = user.daily;
@@ -29,9 +29,9 @@ function ensureDailyState(user) {
   return d;
 }
 
-// ====================== BUILD EMBED (kluczowe) ======================
+// ====================== BUILD EMBED (NAJWAŻNIEJSZE) ======================
 function buildDailyEmbed(userId) {
-  // ZAWSZE ładujemy najświeższe dane z dysku
+  // ZAWSZE pobieramy najświeższe dane z pliku
   const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
@@ -44,8 +44,8 @@ function buildDailyEmbed(userId) {
     .setTitle("🌙 Daily Quest — VYRN")
     .setDescription(
       ready
-        ? "**Wszystkie wymagania spełnione!** Czas odebrać nagrodę."
-        : "Wykonaj codzienne cele, aby zdobyć nagrodę."
+        ? "**Wszystkie wymagania spełnione!** Kliknij przycisk poniżej, aby odebrać nagrodę."
+        : "Wbij wymagane progi i wróć po nagrodę."
     )
     .addFields(
       {
@@ -80,7 +80,7 @@ function buildDailyEmbed(userId) {
   return { embed, components };
 }
 
-// ====================== PO ODEBRANIU ======================
+// ====================== PO ODEBRANIU (reset) ======================
 function onDailyClaimed(userId) {
   try {
     const db = loadProfile();
@@ -89,23 +89,24 @@ function onDailyClaimed(userId) {
 
     const daily = ensureDailyState(user);
 
-    // Tylko resetujemy flagi (msgs i vc resetuje już claimDaily)
+    // Resetujemy tylko flagi powiadomień
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
 
     saveProfile();
 
-    console.log(`[DAILY] Status zresetowany po odebraniu → ${userId} | Aktualny streak: ${daily.streak}`);
+    console.log(`[DAILY] onDailyClaimed → ${userId} | Streak po resecie: ${daily.streak}`);
   } catch (err) {
     console.error("[DAILY] Błąd onDailyClaimed:", err);
   }
 }
 
-// ====================== STUB DM ======================
-async function checkDailyDM(member) {
-  return false; // DM wyłączone
+// ====================== STUB (DM wyłączone) ======================
+async function checkDailyDM() {
+  return false;
 }
 
+// ====================== EXPORTS ======================
 module.exports = {
   buildDailyEmbed,
   onDailyClaimed,
