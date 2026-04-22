@@ -1,4 +1,15 @@
-const { loadProfile, isDailyReady, saveProfile } = require("./profileSystem");
+const {
+  EmbedBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle
+} = require("discord.js");
+
+const {
+  loadProfile,
+  isDailyReady,
+  saveProfile
+} = require("./profileSystem");
 
 // ====================== POMOCNICZE ======================
 function ensureDailyState(user) {
@@ -48,7 +59,7 @@ function buildDailyEmbed(userId) {
   };
 }
 
-// ====================== CHECK DAILY DM (WYŁĄCZONY) ======================
+// ====================== CHECK DAILY DM (CAŁKOWICIE WYŁĄCZONY) ======================
 async function checkDailyDM(member) {
   // DM całkowicie usunięte – funkcja nic nie robi
   return false;
