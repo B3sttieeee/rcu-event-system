@@ -141,20 +141,32 @@ function getDailyTier(streak = 0) {
   return { vcRequired: 30, msgRequired: 50 };
 }
 
+// ====================== POPRAWIONE isDailyReady (z cooldown 24h) ======================
 function isDailyReady(userId) {
   const user = ensureUser(userId);
   if (!user) return false;
+
   const tier = getDailyTier(user.daily.streak);
   const vcMinutes = Math.floor(user.daily.vc / 60);
-  const ready = (vcMinutes >= tier.vcRequired && user.daily.msgs >= tier.msgRequired);
-  console.log(`[DAILY CHECK] ${userId} | Msg: ${user.daily.msgs}/${tier.msgRequired} | VC: ${vcMinutes}/${tier.vcRequired} | Ready: ${ready} | Streak: ${user.daily.streak}`);
+  const msgsOk = user.daily.msgs >= tier.msgRequired;
+  const vcOk = vcMinutes >= tier.vcRequired;
+
+  // Sprawdzenie cooldownu 24h
+  const now = Date.now();
+  const lastClaim = user.daily.lastClaim || 0;
+  const cooldownOk = (now - lastClaim) >= 86_400_000; // 24 godziny
+
+  const ready = msgsOk && vcOk && cooldownOk;
+
+  console.log(`[DAILY CHECK] ${userId} | Msg: ${user.daily.msgs}/${tier.msgRequired} | VC: ${vcMinutes}/${tier.vcRequired} | Cooldown OK: ${cooldownOk} | Ready: ${ready} | Streak: ${user.daily.streak}`);
+
   return ready;
 }
 
-// ====================== SPÓJNA NAGRODA ======================
+// ====================== NAGRODA ======================
 function getDailyReward(streak) {
   const baseXP = 150;
-  const streakBonus = Math.min(streak * 50, 500); // max +500 XP
+  const streakBonus = Math.min(streak * 50, 500);
   const totalXP = baseXP + streakBonus;
   return {
     xp: totalXP,
@@ -168,11 +180,6 @@ async function claimDaily(userId, member = null) {
 
   if (!isDailyReady(userId)) {
     return { success: false, error: "not_ready", message: "Daily Quest nie jest jeszcze gotowy." };
-  }
-
-  const now = Date.now();
-  if (now - (user.daily.lastClaim || 0) < 86_400_000) {
-    return { success: false, error: "cooldown", message: "Daily już dzisiaj odebrane." };
   }
 
   user.daily.streak += 1;
@@ -189,9 +196,10 @@ async function claimDaily(userId, member = null) {
     }
   }
 
+  // Reset po odebraniu
   user.daily.msgs = 0;
   user.daily.vc = 0;
-  user.daily.lastClaim = now;
+  user.daily.lastClaim = Date.now();
   user.daily.notified = false;
   user.daily.lastNotifyAttemptAt = 0;
 
