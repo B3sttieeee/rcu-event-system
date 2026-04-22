@@ -11,6 +11,10 @@ const {
   saveProfile
 } = require("./profileSystem");
 
+// ====================== CONFIG ======================
+const BLACK_COLOR = "#0a0a0a";        // Twój czarny motyw
+const READY_COLOR = "#22c55e";
+
 // ====================== POMOCNICZE ======================
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
@@ -24,45 +28,59 @@ function ensureDailyState(user) {
   return d;
 }
 
+/**
+ * Tworzy embed z postępem Daily Quest (czarny motyw)
+ */
 function buildDailyEmbed(userId) {
   const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
   const ready = isDailyReady(userId);
 
-  return {
-    embed: new EmbedBuilder()
-      .setColor(ready ? "#22c55e" : "#1e293b")
-      .setTitle(ready ? "Daily Quest gotowy!" : "Postęp Daily Quest")
-      .setDescription(
-        ready
-          ? "Wymagania zostały spełnione.\nKliknij przycisk poniżej, aby odebrać nagrodę."
-          : "Wbij wymagane progi i wróć po nagrodę."
-      )
-      .addFields(
-        { name: "Wiadomości", value: `\`${Math.min(daily.msgs, 50)}/50\``, inline: true },
-        { name: "Voice Chat", value: `\`${Math.min(Math.floor(daily.vc / 60), 30)}/30 min\``, inline: true },
-        { name: "Streak", value: `\`${daily.streak} dni\``, inline: true }
-      )
-      .setFooter({ text: ready ? "Nagroda czeka na odbiór • VYRN" : "Daily System • VYRN" })
-      .setTimestamp(),
+  const embed = new EmbedBuilder()
+    .setColor(ready ? READY_COLOR : BLACK_COLOR)
+    .setTitle(ready ? "🎉 Daily Quest Gotowy!" : "📊 Postęp Daily Quest")
+    .setDescription(
+      ready
+        ? "**Wymagania spełnione!** Kliknij przycisk poniżej, aby odebrać nagrodę."
+        : "Wbij wymagane progi i wróć po nagrodę."
+    )
+    .addFields(
+      {
+        name: "💬 Wiadomości",
+        value: `\`${Math.min(daily.msgs, 50)} / 50\``,
+        inline: true
+      },
+      {
+        name: "🎤 Voice Chat",
+        value: `\`${Math.min(Math.floor(daily.vc / 60), 30)} / 30 min\``,
+        inline: true
+      },
+      {
+        name: "🔥 Streak",
+        value: `\`${daily.streak} dni\``,
+        inline: true
+      }
+    )
+    .setFooter({ text: "VYRN • Daily System" })
+    .setTimestamp();
 
-    components: ready ? [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId("daily_claim")
-          .setLabel("Odbierz daily")
-          .setStyle(ButtonStyle.Success)
-          .setEmoji("🎁")
-      )
-    ] : []
-  };
+  const components = ready ? [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId("daily_claim")
+        .setLabel("Odbierz nagrodę")
+        .setStyle(ButtonStyle.Success)
+        .setEmoji("🎁")
+    )
+  ] : [];
+
+  return { embed, components };
 }
 
-// ====================== CHECK DAILY DM (CAŁKOWICIE WYŁĄCZONY) ======================
+// ====================== CHECK DAILY DM (WYŁĄCZONE) ======================
 async function checkDailyDM(member) {
-  // DM całkowicie usunięte – funkcja nic nie robi
-  return false;
+  return false; // DM całkowicie wyłączone
 }
 
 // ====================== PO ODEBRANIU ======================
@@ -71,9 +89,11 @@ function onDailyClaimed(userId) {
     const db = loadProfile();
     const user = db.users?.[userId];
     if (!user) return;
+
     const daily = ensureDailyState(user);
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
+
     saveProfile();
     console.log(`[DAILY] Status zresetowany po odebraniu → ${userId}`);
   } catch (err) {
@@ -82,8 +102,8 @@ function onDailyClaimed(userId) {
 }
 
 module.exports = {
+  buildDailyEmbed,
   checkDailyDM,
   onDailyClaimed,
-  buildDailyEmbed,
   ensureDailyState
 };
