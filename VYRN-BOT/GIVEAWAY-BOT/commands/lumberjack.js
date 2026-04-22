@@ -6,21 +6,21 @@ const {
 } = require("discord.js");
 
 // ====================== CONFIG ======================
-const EXPEDITION_LOCATIONS = {
-  "Wood":       { name: "🌲 Wood (Spawn/Farm)",     emoji: "🌲" },
-  "Cactus":     { name: "🌵 Cactus (Desert)",      emoji: "🌵" },
-  "Nuclear":    { name: "☢️ Nuclear",               emoji: "☢️" },
-  "Atlantis":   { name: "🌊 Atlantis",              emoji: "🌊" },
-  "Royal":      { name: "👑 Royal (Kingdom)",       emoji: "👑" },
-  "Hacker":     { name: "💻 Hacker (City)",         emoji: "💻" },
-  "Diamond":    { name: "💎 Diamond (Cave)",        emoji: "💎" },
-  "Lava":       { name: "🌋 Lava (Volcano)",        emoji: "🌋" },
-  "Heaven":     { name: "☁️ Heaven",                emoji: "☁️" },
-  "Magic":      { name: "✨ Magic",                  emoji: "✨" },
-  "Circus":     { name: "🎪 Circus",                emoji: "🎪" },
-  "Jungle":     { name: "🌴 Jungle",                emoji: "🌴" },
-  "Steampunk":  { name: "⚙️ Steampunk",             emoji: "⚙️" },
-  "Sakura":     { name: "🌸 Sakura",                emoji: "🌸" }
+const LOCATIONS = {
+  "Wood":      { name: "🌲 Wood (Spawn/Farm)",     emoji: "🌲" },
+  "Cactus":    { name: "🌵 Cactus (Desert)",      emoji: "🌵" },
+  "Nuclear":   { name: "☢️ Nuclear",               emoji: "☢️" },
+  "Atlantis":  { name: "🌊 Atlantis",              emoji: "🌊" },
+  "Royal":     { name: "👑 Royal (Kingdom)",       emoji: "👑" },
+  "Hacker":    { name: "💻 Hacker (City)",         emoji: "💻" },
+  "Diamond":   { name: "💎 Diamond (Cave)",        emoji: "💎" },
+  "Lava":      { name: "🌋 Lava (Volcano)",        emoji: "🌋" },
+  "Heaven":    { name: "☁️ Heaven",                emoji: "☁️" },
+  "Magic":     { name: "✨ Magic",                  emoji: "✨" },
+  "Circus":    { name: "🎪 Circus",                emoji: "🎪" },
+  "Jungle":    { name: "🌴 Jungle",                emoji: "🌴" },
+  "Steampunk": { name: "⚙️ Steampunk",             emoji: "⚙️" },
+  "Sakura":    { name: "🌸 Sakura",                emoji: "🌸" }
 };
 
 const DURATIONS = [
@@ -35,23 +35,23 @@ const expeditions = new Map(); // userId => { location, endTime }
 // ====================== KOMENDA ======================
 module.exports = {
   data: new SlashCommandBuilder()
-    .setName("expedition")
+    .setName("lumberjack")
     .setDescription("Wyślij swojego Lumberjacka na ekspedycję"),
 
   async execute(interaction) {
     const embed = new EmbedBuilder()
       .setColor("#0a0a0a")
       .setTitle("🪓 Lumberjack House")
-      .setDescription("Wybierz lokację i czas swojego Lumberjacka.\nPo zakończeniu otrzymasz powiadomienie na DM.")
+      .setDescription("Wybierz lokację i czas ekspedycji swojego Lumberjacka.\nPo zakończeniu otrzymasz powiadomienie na DM.")
       .setImage("https://imgur.com/d410WPL.png")
       .setFooter({ text: "VYRN • Lumberjack System" })
       .setTimestamp();
 
     const locationMenu = new StringSelectMenuBuilder()
-      .setCustomId("expedition_location")
+      .setCustomId("lumberjack_location")
       .setPlaceholder("Wybierz lokację...")
       .addOptions(
-        Object.entries(EXPEDITION_LOCATIONS).map(([key, loc]) => ({
+        Object.entries(LOCATIONS).map(([key, loc]) => ({
           label: loc.name,
           value: key,
           emoji: loc.emoji
@@ -59,7 +59,7 @@ module.exports = {
       );
 
     const durationMenu = new StringSelectMenuBuilder()
-      .setCustomId("expedition_duration")
+      .setCustomId("lumberjack_duration")
       .setPlaceholder("Wybierz czas trwania...")
       .addOptions(
         DURATIONS.map(d => ({
@@ -76,23 +76,11 @@ module.exports = {
       components: [row1, row2],
       ephemeral: true
     });
-  },
-
-  // Obsługa wyboru lokacji + czasu
-  async handleExpeditionSelect(interaction) {
-    const customId = interaction.customId;
-
-    // Jeśli to dopiero wybór lokacji lub czasu – czekamy na drugi wybór
-    if (!expeditions.has(interaction.user.id)) {
-      return interaction.deferUpdate(); // czekamy na drugi wybór
-    }
-
-    // Tutaj wchodzimy tylko gdy oba wybory są zrobione (obsługujemy w innym miejscu)
   }
 };
 
-// ====================== OBSŁUGA WYBORU LOKACJI I CZASU ======================
-async function handleExpeditionSelection(interaction) {
+// ====================== OBSŁUGA WYBORU ======================
+async function handleLumberjackSelect(interaction) {
   const userId = interaction.user.id;
   const customId = interaction.customId;
   const value = interaction.values[0];
@@ -103,18 +91,18 @@ async function handleExpeditionSelection(interaction) {
 
   const data = expeditions.get(userId);
 
-  if (customId === "expedition_location") {
+  if (customId === "lumberjack_location") {
     data.location = value;
-  } else if (customId === "expedition_duration") {
+  } else if (customId === "lumberjack_duration") {
     data.duration = parseInt(value);
   }
 
-  // Jeśli mamy już lokację i czas – startujemy ekspedycję
+  // Jeśli mamy obie wartości – startujemy ekspedycję
   if (data.location && data.duration) {
     const endTime = Date.now() + data.duration * 60 * 1000;
     data.endTime = endTime;
 
-    const locName = EXPEDITION_LOCATIONS[data.location].name;
+    const locName = LOCATIONS[data.location].name;
 
     await interaction.update({
       content: `🪓 **${locName}** — ekspedycja rozpoczęta na **${data.duration} minut**!\n\nOtrzymasz powiadomienie na DM po zakończeniu.`,
@@ -138,5 +126,4 @@ async function handleExpeditionSelection(interaction) {
   }
 }
 
-// Eksportujemy też funkcję obsługi select menu
-module.exports.handleExpeditionSelect = handleExpeditionSelection;
+module.exports.handleLumberjackSelect = handleLumberjackSelect;
