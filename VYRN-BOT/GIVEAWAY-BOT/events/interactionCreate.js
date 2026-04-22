@@ -1,16 +1,19 @@
-const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
+const { EmbedBuilder, Events } = require("discord.js");
 
 // ====================== SYSTEMS ======================
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleLumberjackSelect } = require("../commands/lumberjack");
+
 const {
   isDailyReady,
   claimDaily,
   onDailyClaimed
 } = require("../utils/dailySystem");
+
 const embedCommand = require("../commands/embed");
+
 const {
   handlePrivatePanel,
   handlePrivateUserAction,
@@ -27,35 +30,51 @@ module.exports = {
                  interaction.isButton() ? `BUTTON:${cid || "NONE"}` :
                  interaction.isStringSelectMenu() ? `SELECT:${cid || "NONE"}` :
                  interaction.isModalSubmit() ? `MODAL:${cid || "NONE"}` : "UNKNOWN";
+
     try {
       console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
+      // 1. EMBED BUILDER
       if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
         return await embedCommand.handleModal(interaction);
       }
       if (interaction.isButton() && interaction.customId.startsWith("embed_")) {
         return await embedCommand.handleButton(interaction);
       }
+
+      // 2. GIVEAWAY
       if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
+
+      // 3. EVENT SYSTEM
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
       if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
         return await handleEventInteraction(interaction);
       }
+
+      // 4. LUMBERJACK
       if (interaction.isStringSelectMenu() &&
           (cid === "lumberjack_location" || cid === "lumberjack_duration")) {
         return await handleLumberjackSelect(interaction);
       }
+
+      // 5. DAILY QUEST
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
+
+      // 6. PRIVATE CHANNEL PANEL
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
+
+      // 7. PRIVATE CHANNEL – USER SELECT (kick/ban/unban)
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_") && interaction.customId.includes("_user_")) {
         return await handlePrivateUserAction(interaction);
       }
+
+      // 8. PRIVATE CHANNEL – MODALS (rename & limit)
       if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith("private_rename_")) {
           return await handlePrivateRename(interaction);
@@ -64,6 +83,8 @@ module.exports = {
           return await handlePrivateLimit(interaction);
         }
       }
+
+      // 9. TICKET SYSTEM
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -77,6 +98,8 @@ module.exports = {
       ) {
         return await ticketSystem.handle(interaction, client);
       }
+
+      // 10. SLASH COMMANDS
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
@@ -84,9 +107,12 @@ module.exports = {
         }
         return await cmd.execute(interaction, client);
       }
+
+      // FALLBACK
       if (cid) {
         console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
       }
+
     } catch (err) {
       console.error("❌ INTERACTION ERROR:", err);
       const payload = {
@@ -104,7 +130,7 @@ module.exports = {
   }
 };
 
-// ====================== DAILY CLAIM HANDLER (CZYSTY – BEZ DM) ======================
+// ====================== DAILY CLAIM HANDLER ======================
 async function handleDailyClaim(interaction) {
   const userId = interaction.user.id;
   if (interaction.replied || interaction.deferred) return;
