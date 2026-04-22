@@ -90,15 +90,11 @@ module.exports = {
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
-          return interaction.reply({
-            content: "❌ Command not found.",
-            ephemeral: true
-          });
+          return interaction.reply({ content: "❌ Command not found.", ephemeral: true });
         }
         return await cmd.execute(interaction, client);
       }
 
-      // Unhandled interaction
       if (cid) {
         console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
       }
@@ -176,10 +172,7 @@ async function handlePrivatePanel(interaction) {
 
   const channel = interaction.guild.channels.cache.get(channelId);
   if (!channel) {
-    return interaction.reply({
-      content: "❌ Kanał nie istnieje lub został już usunięty.",
-      ephemeral: true
-    });
+    return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
   }
 
   const isOwner = channel.permissionOverwrites.cache.some(perm =>
@@ -187,56 +180,43 @@ async function handlePrivatePanel(interaction) {
   );
 
   if (!isOwner) {
-    return interaction.reply({
-      content: "❌ Nie jesteś właścicielem tego kanału.",
-      ephemeral: true
-    });
+    return interaction.reply({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
   }
 
-  try {
-    // Akcje z modalem (rename i limit)
-    if (action === "rename" || action === "limit") {
-      const modal = new ModalBuilder()
-        .setCustomId(`private_${action}_${channel.id}`)
-        .setTitle(action === "rename" ? "Zmiana nazwy kanału" : "Zmiana limitu osób");
+  // Dla rename i limit pokazujemy modal BEZ deferUpdate
+  if (action === "rename" || action === "limit") {
+    const modal = new ModalBuilder()
+      .setCustomId(`private_${action}_${channel.id}`)
+      .setTitle(action === "rename" ? "Zmiana nazwy kanału" : "Zmiana limitu osób");
 
-      const input = new TextInputBuilder()
-        .setCustomId(action === "rename" ? "new_name" : "new_limit")
-        .setLabel(action === "rename" ? "Nowa nazwa kanału" : "Nowy limit osób (1-99)")
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder(action === "rename" ? "Np. Fiflak's Chill Zone" : "10")
-        .setRequired(true);
+    const input = new TextInputBuilder()
+      .setCustomId(action === "rename" ? "new_name" : "new_limit")
+      .setLabel(action === "rename" ? "Nowa nazwa kanału" : "Nowy limit osób (1-99)")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder(action === "rename" ? "Np. Fiflak's Chill Zone" : "10")
+      .setRequired(true);
 
-      if (action === "limit") input.setMaxLength(2);
+    if (action === "limit") input.setMaxLength(2);
 
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
 
-      return await interaction.showModal(modal);
-    }
+    return await interaction.showModal(modal);
+  }
 
-    // Pozostałe akcje (delete itp.)
-    await interaction.deferUpdate().catch(() => {});
+  // Dla pozostałych akcji deferujemy
+  await interaction.deferUpdate().catch(() => {});
 
-    if (action === "delete") {
-      await channel.delete().catch(() => {});
-      userChannels.delete(interaction.user.id); // Czyszczenie mapy
-      await interaction.followUp({
-        content: "🗑️ Kanał został pomyślnie usunięty.",
-        ephemeral: true
-      });
-    } else {
-      await interaction.followUp({
-        content: `✅ Wybrano akcję: **${action}**\nPełna obsługa tej funkcji zostanie dodana wkrótce.`,
-        ephemeral: true
-      });
-    }
-  } catch (err) {
-    console.error("[PrivatePanel] Błąd:", err);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: "❌ Wystąpił błąd podczas wykonywania akcji.",
-        ephemeral: true
-      }).catch(() => {});
-    }
+  if (action === "delete") {
+    await channel.delete().catch(() => {});
+    userChannels.delete(interaction.user.id);
+    await interaction.followUp({
+      content: "🗑️ Kanał został pomyślnie usunięty.",
+      ephemeral: true
+    });
+  } else {
+    await interaction.followUp({
+      content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
+      ephemeral: true
+    });
   }
 }
