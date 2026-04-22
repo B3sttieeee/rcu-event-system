@@ -151,6 +151,17 @@ function isDailyReady(userId) {
   return ready;
 }
 
+// ====================== NOWA, SPÓJNA NAGRODA ======================
+function getDailyReward(streak) {
+  const baseXP = 150;
+  const streakBonus = Math.min(streak * 50, 500); // max +500 XP
+  const totalXP = baseXP + streakBonus;
+  return {
+    xp: totalXP,
+    rewardText: `+${totalXP} XP (base ${baseXP} + ${streakBonus} za streak)`
+  };
+}
+
 async function claimDaily(userId, member = null) {
   const user = ensureUser(userId);
   if (!user) return { success: false, error: "invalid_user" };
@@ -165,13 +176,13 @@ async function claimDaily(userId, member = null) {
   }
 
   user.daily.streak += 1;
-  const xp = 150 + Math.floor(Math.random() * 150);
+  const reward = getDailyReward(user.daily.streak);
 
   if (member && !member.user?.bot) {
     try {
       const { addXP } = require("./levelSystem");
       if (typeof addXP === "function") {
-        await addXP(member, xp);
+        await addXP(member, reward.xp);
       }
     } catch (error) {
       console.error(`[PROFILE] XP ERROR: ${error.message}`);
@@ -188,10 +199,10 @@ async function claimDaily(userId, member = null) {
 
   return {
     success: true,
-    xp,
+    xp: reward.xp,
     streak: user.daily.streak,
-    message: `Otrzymałeś **${xp} XP** i przedłużyłeś streak do **${user.daily.streak} dni**!`,
-    reward: `${xp} XP`
+    message: `Otrzymałeś **${reward.xp} XP** i przedłużyłeś streak do **${user.daily.streak} dni**!`,
+    reward: `${reward.xp} XP`
   };
 }
 
