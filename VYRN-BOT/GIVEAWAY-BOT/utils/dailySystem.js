@@ -1,185 +1,78 @@
-const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
+const { loadProfile, isDailyReady, saveProfile } = require("./profileSystem");
 
-// ====================== SYSTEMS ======================
-const ticketSystem = require("../utils/ticketSystem");
-const { handleEventInteraction } = require("../utils/eventSystem");
-const { handleGiveaway } = require("../utils/giveawaySystem");
-const { handleLumberjackSelect } = require("../commands/lumberjack");
+// ====================== POMOCNICZE ======================
+function ensureDailyState(user) {
+  if (!user.daily) user.daily = {};
+  const d = user.daily;
+  d.msgs = Number(d.msgs) || 0;
+  d.vc = Number(d.vc) || 0;
+  d.streak = Number(d.streak) || 0;
+  d.lastClaim = Number(d.lastClaim) || 0;
+  d.notified = Boolean(d.notified);
+  d.lastNotifyAttemptAt = Number(d.lastNotifyAttemptAt) || 0;
+  return d;
+}
 
-const {
-  isDailyReady,
-  claimDaily,
-  onDailyClaimed
-} = require("../utils/dailySystem");
+function buildDailyEmbed(userId) {
+  const db = loadProfile();
+  const user = db.users?.[userId] || {};
+  const daily = ensureDailyState(user);
+  const ready = isDailyReady(userId);
 
-const embedCommand = require("../commands/embed");
-
-const {
-  handlePrivatePanel,
-  handlePrivateUserAction,
-  handlePrivateRename,
-  handlePrivateLimit
-} = require("../utils/privateChannelSystem");
-
-// ====================== MAIN ======================
-module.exports = {
-  name: Events.InteractionCreate,
-  async execute(interaction, client) {
-    const cid = interaction.customId;
-    const type = interaction.isChatInputCommand() ? "SLASH" :
-                 interaction.isButton() ? `BUTTON:${cid || "NONE"}` :
-                 interaction.isStringSelectMenu() ? `SELECT:${cid || "NONE"}` :
-                 interaction.isModalSubmit() ? `MODAL:${cid || "NONE"}` : "UNKNOWN";
-
-    try {
-      console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
-
-      if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
-        return await embedCommand.handleModal(interaction);
-      }
-      if (interaction.isButton() && interaction.customId.startsWith("embed_")) {
-        return await embedCommand.handleButton(interaction);
-      }
-
-      if (interaction.isButton() && cid?.startsWith("gw_")) {
-        return await handleGiveaway(interaction);
-      }
-
-      const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
-      if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
-        return await handleEventInteraction(interaction);
-      }
-
-      if (interaction.isStringSelectMenu() &&
-          (cid === "lumberjack_location" || cid === "lumberjack_duration")) {
-        return await handleLumberjackSelect(interaction);
-      }
-
-      if (interaction.isButton() && cid === "daily_claim") {
-        return await handleDailyClaim(interaction);
-      }
-
-      if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
-        return await handlePrivatePanel(interaction);
-      }
-
-      if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_") && interaction.customId.includes("_user_")) {
-        return await handlePrivateUserAction(interaction);
-      }
-
-      if (interaction.isModalSubmit()) {
-        if (interaction.customId.startsWith("private_rename_")) {
-          return await handlePrivateRename(interaction);
-        }
-        if (interaction.customId.startsWith("private_limit_")) {
-          return await handlePrivateLimit(interaction);
-        }
-      }
-
-      const ticketIds = [
-        "open_ticket_vyrn",
-        "open_ticket_v2rn",
-        "close_ticket",
-        "ticket_modal_vyrn",
-        "ticket_modal_v2rn"
-      ];
-      if (
-        (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()) &&
-        (ticketIds.includes(cid) || cid === "clan_ticket_select" || cid?.startsWith("ticket_modal_"))
-      ) {
-        return await ticketSystem.handle(interaction, client);
-      }
-
-      if (interaction.isChatInputCommand()) {
-        const cmd = client.commands.get(interaction.commandName);
-        if (!cmd) {
-          return interaction.reply({ content: "❌ Command not found.", ephemeral: true });
-        }
-        return await cmd.execute(interaction, client);
-      }
-
-      if (cid) {
-        console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
-      }
-    } catch (err) {
-      console.error("❌ INTERACTION ERROR:", err);
-      const payload = {
-        content: "❌ Wystąpił błąd systemu. Spróbuj ponownie później.",
-        ephemeral: true
-      };
-      try {
-        if (interaction.deferred || interaction.replied) {
-          await interaction.followUp(payload).catch(() => {});
-        } else {
-          await interaction.reply(payload).catch(() => {});
-        }
-      } catch (_) {}
-    }
-  }
-};
-
-// ====================== DAILY CLAIM HANDLER (TYLKO NA SERWERZE – BEZ DM) ======================
-async function handleDailyClaim(interaction) {
-  const userId = interaction.user.id;
-
-  if (interaction.replied || interaction.deferred) return;
-
-  await interaction.deferUpdate().catch(() => {});
-
-  try {
-    // BLOKADA DM – daily claim tylko na serwerze
-    if (!interaction.guild) {
-      return await interaction.editReply({
-        content: "❌ Daily claim działa **tylko na serwerze**, nie w prywatnych wiadomościach (DM).",
-        embeds: [],
-        components: []
-      });
-    }
-
-    if (!isDailyReady(userId)) {
-      return await interaction.editReply({
-        content: "❌ Twój Daily Quest nie jest jeszcze gotowy.",
-        embeds: [],
-        components: []
-      });
-    }
-
-    const member = interaction.member || interaction.guild.members.cache.get(userId);
-    const result = await claimDaily(userId, member);
-
-    if (!result?.success) {
-      return await interaction.editReply({
-        content: result?.message || "❌ Nie udało się odebrać daily.",
-        embeds: [],
-        components: []
-      });
-    }
-
-    onDailyClaimed(userId);
-
-    const successEmbed = new EmbedBuilder()
-      .setColor("#22c55e")
-      .setTitle("✅ Daily Quest odebrany!")
-      .setDescription(result.message || "Gratulacje! Otrzymałeś dzisiejszą nagrodę.")
-      .addFields(
-        { name: "Nagroda", value: result.reward || `${result.xp || 0} XP`, inline: true },
-        { name: "Streak", value: `\`${result.streak || "?"} dni 🔥\``, inline: true }
+  return {
+    embed: new EmbedBuilder()
+      .setColor(ready ? "#22c55e" : "#1e293b")
+      .setTitle(ready ? "Daily Quest gotowy!" : "Postęp Daily Quest")
+      .setDescription(
+        ready
+          ? "Wymagania zostały spełnione.\nKliknij przycisk poniżej, aby odebrać nagrodę."
+          : "Wbij wymagane progi i wróć po nagrodę."
       )
-      .setTimestamp();
+      .addFields(
+        { name: "Wiadomości", value: `\`${Math.min(daily.msgs, 50)}/50\``, inline: true },
+        { name: "Voice Chat", value: `\`${Math.min(Math.floor(daily.vc / 60), 30)}/30 min\``, inline: true },
+        { name: "Streak", value: `\`${daily.streak} dni\``, inline: true }
+      )
+      .setFooter({ text: ready ? "Nagroda czeka na odbiór • VYRN" : "Daily System • VYRN" })
+      .setTimestamp(),
 
-    await interaction.editReply({
-      embeds: [successEmbed],
-      components: []
-    });
+    components: ready ? [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId("daily_claim")
+          .setLabel("Odbierz daily")
+          .setStyle(ButtonStyle.Success)
+          .setEmoji("🎁")
+      )
+    ] : []
+  };
+}
 
-    console.log(`[DAILY] SUCCESS → ${interaction.user.tag} | Streak: ${result.streak}`);
+// ====================== CHECK DAILY DM (WYŁĄCZONY) ======================
+async function checkDailyDM(member) {
+  // DM całkowicie usunięte – funkcja nic nie robi
+  return false;
+}
 
+// ====================== PO ODEBRANIU ======================
+function onDailyClaimed(userId) {
+  try {
+    const db = loadProfile();
+    const user = db.users?.[userId];
+    if (!user) return;
+    const daily = ensureDailyState(user);
+    daily.notified = false;
+    daily.lastNotifyAttemptAt = 0;
+    saveProfile();
+    console.log(`[DAILY] Status zresetowany po odebraniu → ${userId}`);
   } catch (err) {
-    console.error(`[DAILY] BŁĄD claim dla ${userId}:`, err);
-    await interaction.editReply({
-      content: "❌ Wystąpił nieoczekiwany błąd podczas odbierania daily.",
-      embeds: [],
-      components: []
-    }).catch(() => {});
+    console.error("Błąd onDailyClaimed:", err);
   }
 }
+
+module.exports = {
+  checkDailyDM,
+  onDailyClaimed,
+  buildDailyEmbed,
+  ensureDailyState
+};
