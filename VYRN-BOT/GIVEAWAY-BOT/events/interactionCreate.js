@@ -6,7 +6,7 @@ const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleLumberjackSelect } = require("../commands/lumberjack");
 
-// Daily System
+// Daily System - poprawione importy
 const {
   isDailyReady,
   claimDaily
@@ -112,7 +112,7 @@ module.exports = {
   }
 };
 
-// ====================== DAILY CLAIM HANDLER (Z LOGAMI) ======================
+// ====================== DAILY CLAIM HANDLER ======================
 async function handleDailyClaim(interaction) {
   const userId = interaction.user.id;
   console.log(`[DAILY] === KLIKNIĘTO PRZYCISK daily_claim przez ${interaction.user.tag} ===`);
