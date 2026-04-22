@@ -1,11 +1,8 @@
 const { Events } = require("discord.js");
 
-// poprawna ścieżka do utils
 const {
   handlePrivateChannelCreation
 } = require("../utils/privateChannelSystem");
-
-const CREATE_CHANNEL_ID = "1496280414237491220";
 
 module.exports = {
   name: Events.VoiceStateUpdate,
@@ -14,21 +11,12 @@ module.exports = {
     const member = newState.member;
     if (!member || member.user.bot) return;
 
-    const oldChannel = oldState.channel;
-    const newChannel = newState.channel;
-
-    // join create channel only once
-    const joinedCreate =
-      newChannel &&
-      newChannel.id === CREATE_CHANNEL_ID &&
-      oldChannel?.id !== CREATE_CHANNEL_ID;
-
-    if (!joinedCreate) return;
-
-    try {
+    if (
+      !oldState.channel &&
+      newState.channel &&
+      newState.channel.id === "1496280414237491220"
+    ) {
       await handlePrivateChannelCreation(member);
-    } catch (err) {
-      console.error("[VOICE SYSTEM ERROR]", err);
     }
   }
 };
