@@ -5,15 +5,12 @@ const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleLumberjackSelect } = require("../commands/lumberjack");
-
 const {
   isDailyReady,
   claimDaily,
   onDailyClaimed
 } = require("../utils/dailySystem");
-
 const embedCommand = require("../commands/embed");
-
 const {
   handlePrivatePanel,
   handlePrivateUserAction,
@@ -30,7 +27,6 @@ module.exports = {
                  interaction.isButton() ? `BUTTON:${cid || "NONE"}` :
                  interaction.isStringSelectMenu() ? `SELECT:${cid || "NONE"}` :
                  interaction.isModalSubmit() ? `MODAL:${cid || "NONE"}` : "UNKNOWN";
-
     try {
       console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
@@ -40,33 +36,26 @@ module.exports = {
       if (interaction.isButton() && interaction.customId.startsWith("embed_")) {
         return await embedCommand.handleButton(interaction);
       }
-
       if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
-
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
       if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
         return await handleEventInteraction(interaction);
       }
-
       if (interaction.isStringSelectMenu() &&
           (cid === "lumberjack_location" || cid === "lumberjack_duration")) {
         return await handleLumberjackSelect(interaction);
       }
-
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
-
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
-
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_") && interaction.customId.includes("_user_")) {
         return await handlePrivateUserAction(interaction);
       }
-
       if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith("private_rename_")) {
           return await handlePrivateRename(interaction);
@@ -75,7 +64,6 @@ module.exports = {
           return await handlePrivateLimit(interaction);
         }
       }
-
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -89,7 +77,6 @@ module.exports = {
       ) {
         return await ticketSystem.handle(interaction, client);
       }
-
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
@@ -97,7 +84,6 @@ module.exports = {
         }
         return await cmd.execute(interaction, client);
       }
-
       if (cid) {
         console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
       }
@@ -118,24 +104,13 @@ module.exports = {
   }
 };
 
-// ====================== DAILY CLAIM HANDLER (TYLKO NA SERWERZE – BEZ DM) ======================
+// ====================== DAILY CLAIM HANDLER (CZYSTY – BEZ DM) ======================
 async function handleDailyClaim(interaction) {
   const userId = interaction.user.id;
-
   if (interaction.replied || interaction.deferred) return;
-
   await interaction.deferUpdate().catch(() => {});
 
   try {
-    // BLOKADA DM – daily claim tylko na serwerze
-    if (!interaction.guild) {
-      return await interaction.editReply({
-        content: "❌ Daily claim działa **tylko na serwerze**, nie w prywatnych wiadomościach (DM).",
-        embeds: [],
-        components: []
-      });
-    }
-
     if (!isDailyReady(userId)) {
       return await interaction.editReply({
         content: "❌ Twój Daily Quest nie jest jeszcze gotowy.",
@@ -144,7 +119,7 @@ async function handleDailyClaim(interaction) {
       });
     }
 
-    const member = interaction.member || interaction.guild.members.cache.get(userId);
+    const member = interaction.member || (interaction.guild ? interaction.guild.members.cache.get(userId) : null);
     const result = await claimDaily(userId, member);
 
     if (!result?.success) {
