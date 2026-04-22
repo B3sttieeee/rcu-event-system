@@ -1,11 +1,4 @@
-const {
-  SlashCommandBuilder,
-  EmbedBuilder,
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle
-} = require("discord.js");
-
+const { SlashCommandBuilder } = require("discord.js");
 const { buildDailyEmbed } = require("../utils/dailySystem");
 
 module.exports = {
@@ -22,23 +15,16 @@ module.exports = {
 
       await interaction.editReply({
         embeds: [embed],
-        components: components
+        components: components || []
       });
 
     } catch (err) {
       console.error("[DAILY CMD] Błąd:", err);
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({
-          content: "❌ Wystąpił błąd podczas ładowania daily.",
-          embeds: [],
-          components: []
-        }).catch(() => {});
-      } else {
-        await interaction.reply({
-          content: "❌ Wystąpił błąd podczas ładowania daily.",
-          ephemeral: true
-        }).catch(() => {});
-      }
+      await interaction.editReply({
+        content: "❌ Wystąpił błąd podczas ładowania daily.",
+        embeds: [],
+        components: []
+      }).catch(() => {});
     }
   }
 };
