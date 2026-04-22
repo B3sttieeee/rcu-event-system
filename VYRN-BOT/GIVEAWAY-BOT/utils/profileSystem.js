@@ -95,7 +95,7 @@ function saveProfile() {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        dbCache = null; // kluczowe - czyszczenie cache
+        dbCache = null;
         console.log(`[PROFILE] Saved and cache cleared`);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
@@ -112,7 +112,6 @@ async function flushProfile() {
   }
 }
 
-// ====================== USER MANAGEMENT ======================
 function ensureUser(userId) {
   if (!userId) return null;
   const db = loadProfile();
@@ -154,7 +153,7 @@ function getVoiceMinutes(userId) {
   return user ? Math.floor(user.voice / 60) : 0;
 }
 
-// ====================== DAILY LOGIC ======================
+// ====================== DAILY ======================
 function getDailyTier(streak = 0) {
   return { vcRequired: 30, msgRequired: 50 };
 }
@@ -187,19 +186,15 @@ async function claimDaily(userId, member = null) {
   user.daily.streak += 1;
   const reward = getDailyReward(user.daily.streak);
 
-  // Przyznaj XP
   if (member && !member.user?.bot) {
     try {
       const { addXP } = require("./levelSystem");
-      if (typeof addXP === "function") {
-        await addXP(member, reward.xp);
-      }
+      if (typeof addXP === "function") await addXP(member, reward.xp);
     } catch (error) {
       console.error(`[PROFILE] XP ERROR: ${error.message}`);
     }
   }
 
-  // Reset daily
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
@@ -218,7 +213,6 @@ async function claimDaily(userId, member = null) {
   };
 }
 
-// ====================== RESET ======================
 function runDailyReset() {
   const db = loadProfile();
   let count = 0;
@@ -248,11 +242,9 @@ function startDailyReset() {
   console.log(`[PROFILE] Daily reset watcher started (${RESET_TIMEZONE})`);
 }
 
-// ====================== PROCESS EXIT ======================
 process.on("SIGINT", async () => { await flushProfile(); process.exit(0); });
 process.on("SIGTERM", async () => { await flushProfile(); process.exit(0); });
 
-// ====================== EXPORTS ======================
 module.exports = {
   loadProfile,
   saveProfile,
@@ -264,7 +256,7 @@ module.exports = {
   getDailyTier,
   isDailyReady,
   claimDaily,
-  getDailyReward,        // <--- dodane
+  getDailyReward,
   startDailyReset,
   runDailyReset
 };
