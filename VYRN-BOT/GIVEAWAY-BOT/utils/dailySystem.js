@@ -40,7 +40,7 @@ function ensureDailyState(user) {
 }
 
 function buildDailyEmbed(userId) {
-  const db = loadProfile();           // zawsze świeże dane
+  const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
   const ready = isDailyReady(userId);
@@ -89,7 +89,7 @@ function buildDailyEmbed(userId) {
 
 // ====================== WYŁĄCZONE DM ======================
 async function checkDailyDM(member) {
-  return false; // DM całkowicie wyłączone
+  return false;
 }
 
 // ====================== PO ODEBRANIU ======================
