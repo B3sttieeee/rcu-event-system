@@ -45,8 +45,9 @@ let dbCache = null;
 let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
+
 const xpCooldown = new Map();
-const dailyCheckCooldown = new Map();   // <--- Nowe zabezpieczenie
+const dailyCheckCooldown = new Map(); // cooldown na sprawdzanie daily
 
 // =====================================================
 // HELPERS
@@ -63,7 +64,7 @@ const logError = (scope, error) => {
 };
 
 // =====================================================
-// TRIGGER DAILY CHECK (z cooldownem - zapobiega spamowi)
+// TRIGGER DAILY CHECK (z cooldownem)
 // =====================================================
 const triggerDailyCheck = async (member) => {
   if (!member || member.user?.bot) return;
@@ -71,7 +72,7 @@ const triggerDailyCheck = async (member) => {
   const userId = member.id;
   const now = Date.now();
 
-  // Cooldown 30 sekund - nie sprawdzamy daily co minutę
+  // Cooldown 30 sekund – nie spamujemy daily co minutę
   if (dailyCheckCooldown.has(userId) && now - dailyCheckCooldown.get(userId) < 30000) {
     return;
   }
@@ -327,7 +328,7 @@ function startVoiceXP(client) {
           processedUsers.add(member.id);
           addVoiceTime(member.id, 60);
           await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => null);
-          await triggerDailyCheck(member);
+          await triggerDailyCheck(member);   // tu jest cooldown, więc nie spamuje
         }
       }
     }
