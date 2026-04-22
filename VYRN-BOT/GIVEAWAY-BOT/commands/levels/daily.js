@@ -18,7 +18,7 @@ module.exports = {
         components: components || []
       });
 
-      console.log(`[DAILY CMD] Wyświetlono daily dla ${interaction.user.tag}`);
+      console.log(`[DAILY CMD] Wyświetlono daily dla ${interaction.user.tag} (streak: ${embed.data.fields?.find(f => f.name === "🔥 Streak")?.value || "?"})`);
 
     } catch (err) {
       console.error("[DAILY CMD] Błąd:", err);
