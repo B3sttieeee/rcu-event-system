@@ -22,7 +22,6 @@ userChannels.clear();
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
-  // Ochrona przed duplikatami
   if (userChannels.has(member.id)) {
     const existing = guild.channels.cache.get(userChannels.get(member.id));
     if (existing) {
@@ -32,10 +31,8 @@ async function handlePrivateChannelCreation(member) {
     userChannels.delete(member.id);
   }
 
-  // Czekamy 5 sekund
   await new Promise(resolve => setTimeout(resolve, 5000));
 
-  // Sprawdzenie czy nadal jest na kanale tworzenia
   if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) {
     return;
   }
@@ -63,20 +60,15 @@ async function handlePrivateChannelCreation(member) {
 
     userChannels.set(member.id, channel.id);
 
-    // Przeniesienie użytkownika
     if (member.voice?.channel) {
       await member.voice.setChannel(channel).catch(() => {});
     }
 
-    // Powitalna wiadomość
     await channel.send({
       content: `> **${member}** Twój prywatny kanał został stworzony!`
     }).catch(() => {});
 
-    // Panel sterowania
     await sendControlPanel(channel, member);
-
-    // Watcher pustego kanału
     startEmptyChannelWatcher(channel, member.id);
 
   } catch (err) {
@@ -129,7 +121,7 @@ async function sendControlPanel(channel, owner) {
   await channel.send({ embeds: [embed], components: [row] }).catch(console.error);
 }
 
-// ====================== OBSŁUGA PANELU (Select Menu + Modale) ======================
+// ====================== OBSŁUGA PANELU ======================
 async function handlePrivatePanel(interaction) {
   const channelId = interaction.customId.split("_")[2];
   const action = interaction.values[0];
@@ -148,7 +140,6 @@ async function handlePrivatePanel(interaction) {
   }
 
   try {
-    // Modale dla rename i limit
     if (action === "rename" || action === "limit") {
       const modal = new ModalBuilder()
         .setCustomId(`private_${action}_${channel.id}`)
@@ -164,20 +155,15 @@ async function handlePrivatePanel(interaction) {
       if (action === "limit") input.setMaxLength(2);
 
       modal.addComponents(new ActionRowBuilder().addComponents(input));
-
       return await interaction.showModal(modal);
     }
 
-    // Pozostałe akcje
     await interaction.deferUpdate().catch(() => {});
 
     if (action === "delete") {
       await channel.delete().catch(() => {});
       userChannels.delete(interaction.user.id);
-      await interaction.followUp({
-        content: "🗑️ Kanał został pomyślnie usunięty.",
-        ephemeral: true
-      });
+      await interaction.followUp({ content: "🗑️ Kanał został pomyślnie usunięty.", ephemeral: true });
     } else {
       await interaction.followUp({
         content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
