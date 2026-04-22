@@ -15,21 +15,19 @@ const {
 const BLACK_COLOR = "#0a0a0a";
 const READY_COLOR = "#22c55e";
 
-// ====================== NAGRODY ======================
+// ====================== NAGRODY (SPÓJNE) ======================
 function getDailyReward(streak) {
   const baseXP = 150;
-  const streakBonus = Math.min(streak * 50, 500); // max +500 XP za streak
+  const streakBonus = Math.min(streak * 50, 500); // max +500 XP
   const totalXP = baseXP + streakBonus;
 
   return {
     xp: totalXP,
-    baseXP,
-    streakBonus,
-    message: `+${totalXP} XP (${baseXP} bazowo + ${streakBonus} za streak)`
+    text: `**${totalXP} XP** (150 base + ${streakBonus} za streak)`
   };
 }
 
-// ====================== POMOCNICZE ======================
+// ====================== HELPERS ======================
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
   const d = user.daily;
@@ -37,6 +35,8 @@ function ensureDailyState(user) {
   d.vc = Number(d.vc) || 0;
   d.streak = Number(d.streak) || 0;
   d.lastClaim = Number(d.lastClaim) || 0;
+  d.notified = Boolean(d.notified);
+  d.lastNotifyAttemptAt = Number(d.lastNotifyAttemptAt) || 0;
   return d;
 }
 
@@ -45,7 +45,6 @@ function buildDailyEmbed(userId) {
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
   const ready = isDailyReady(userId);
-
   const reward = getDailyReward(daily.streak);
 
   const embed = new EmbedBuilder()
@@ -53,27 +52,24 @@ function buildDailyEmbed(userId) {
     .setTitle("🌙 Daily Quest — VYRN")
     .setDescription(
       ready
-        ? "**Wszystkie wymagania zostały spełnione!**\nCzas odebrać nagrodę."
+        ? "**Wszystkie wymagania spełnione!** Czas odebrać nagrodę."
         : "Wykonaj codzienne cele, aby zdobyć nagrodę."
     )
     .addFields(
-      {
-        name: "📌 Wymagania",
-        value: `• Wiadomości: \`${Math.min(daily.msgs, 50)}/50\`\n` +
-               `• Voice Chat: \`${Math.min(Math.floor(daily.vc / 60), 30)}/30 min\``,
-        inline: false
+      { 
+        name: "📌 Wymagania", 
+        value: `• Wiadomości: \`${Math.min(daily.msgs, 50)}/50\`\n• Voice Chat: \`${Math.min(Math.floor(daily.vc / 60), 30)}/30 min\``,
+        inline: false 
       },
-      {
-        name: "🏆 Nagroda",
-        value: `**${reward.xp} XP**\n` +
-               `Base: ${reward.baseXP} XP\n` +
-               `Streak Bonus: +${reward.streakBonus} XP`,
-        inline: false
+      { 
+        name: "🏆 Nagroda", 
+        value: reward.text,
+        inline: false 
       },
-      {
-        name: "🔥 Aktualny Streak",
-        value: `\`${daily.streak} dni` + (daily.streak >= 5 ? " 🔥" : "") + "`",
-        inline: true
+      { 
+        name: "🔥 Streak", 
+        value: `\`${daily.streak} dni\``,
+        inline: true 
       }
     )
     .setFooter({ text: "VYRN • Daily System" })
@@ -97,7 +93,6 @@ async function checkDailyDM(member) {
   return false;
 }
 
-// ====================== PO ODEBRANIU ======================
 function onDailyClaimed(userId) {
   try {
     const db = loadProfile();
@@ -107,7 +102,7 @@ function onDailyClaimed(userId) {
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
     saveProfile();
-    console.log(`[DAILY] Nagroda odebrana i zresetowana → ${userId}`);
+    console.log(`[DAILY] Nagroda odebrana → ${userId}`);
   } catch (err) {
     console.error("Błąd onDailyClaimed:", err);
   }
