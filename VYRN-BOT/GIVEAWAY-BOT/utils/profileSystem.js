@@ -151,14 +151,14 @@ function isDailyReady(userId) {
   return ready;
 }
 
-// ====================== NOWA, SPÓJNA NAGRODA ======================
+// ====================== SPÓJNA NAGRODA ======================
 function getDailyReward(streak) {
   const baseXP = 150;
   const streakBonus = Math.min(streak * 50, 500); // max +500 XP
   const totalXP = baseXP + streakBonus;
   return {
     xp: totalXP,
-    rewardText: `+${totalXP} XP (base ${baseXP} + ${streakBonus} za streak)`
+    text: `**${totalXP} XP** (150 base + ${streakBonus} za streak)`
   };
 }
 
