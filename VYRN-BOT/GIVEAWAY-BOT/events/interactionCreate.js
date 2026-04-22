@@ -1,292 +1,181 @@
-const fs = require("fs");
-const path = require("path");
+const { EmbedBuilder, Events, PermissionFlagsBits } = require("discord.js");
 
-const DATA_DIR = process.env.DATA_DIR || "/data";
-const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
-const PROFILE_TMP_PATH = `${PROFILE_PATH}.tmp`;
-const RESET_TIMEZONE = process.env.RESET_TIMEZONE || "Europe/Warsaw";
-const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true";
+// ====================== SYSTEMS ======================
+const ticketSystem = require("../utils/ticketSystem");
+const { handleEventInteraction } = require("../utils/eventSystem");
+const { handleGiveaway } = require("../utils/giveawaySystem");
+const { handleLumberjackSelect } = require("../commands/lumberjack");
 
-// =====================================================
-// INIT
-// =====================================================
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  console.log(`[PROFILE] Data directory created: ${DATA_DIR}`);
-}
-
-// =====================================================
-// CACHE & WRITE QUEUE
-// =====================================================
-let dbCache = null;
-let writeQueue = Promise.resolve();
-let resetInterval = null;
-let lastResetDayKey = null;
-
-// =====================================================
-// HELPERS
-// =====================================================
-const toSafeNumber = (value, fallback = 0) => {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-};
-
-const normalizeDaily = (daily = {}) => ({
-  msgs: toSafeNumber(daily.msgs, 0),
-  vc: toSafeNumber(daily.vc, 0),
-  streak: toSafeNumber(daily.streak, 0),
-  lastClaim: toSafeNumber(daily.lastClaim, 0),
-  notified: Boolean(daily.notified),
-  lastNotifyAttemptAt: toSafeNumber(daily.lastNotifyAttemptAt, 0)
-});
-
-const normalizeUser = (user = {}) => ({
-  voice: toSafeNumber(user.voice, 0),
-  daily: normalizeDaily(user.daily)
-});
-
-const normalizeDb = (db = {}) => {
-  const normalized = { users: {} };
-  if (!db.users || typeof db.users !== "object") return normalized;
-  for (const [userId, userData] of Object.entries(db.users)) {
-    normalized.users[userId] = normalizeUser(userData);
-  }
-  return normalized;
-};
-
-const getCurrentDayKey = () =>
-  new Intl.DateTimeFormat("en-CA", {
-    timeZone: RESET_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(new Date());
-
-// =====================================================
-// LOAD & SAVE
-// =====================================================
-function loadProfile() {
-  if (dbCache) return dbCache;
-  try {
-    if (!fs.existsSync(PROFILE_PATH)) {
-      dbCache = { users: {} };
-      fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
-      console.log(`[PROFILE] New database created: ${PROFILE_PATH}`);
-      return dbCache;
-    }
-    const raw = fs.readFileSync(PROFILE_PATH, "utf8");
-    const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
-    dbCache = normalizeDb(parsed);
-    return dbCache;
-  } catch (error) {
-    console.error(`[PROFILE] LOAD ERROR: ${error.message}`);
-    dbCache = { users: {} };
-    return dbCache;
-  }
-}
-
-function saveProfile() {
-  if (!dbCache) return writeQueue;
-  const snapshot = JSON.stringify(dbCache, null, 2);
-  writeQueue = writeQueue
-    .catch(() => null)
-    .then(async () => {
-      try {
-        await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
-        await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-      } catch (error) {
-        console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
-      }
-    });
-  return writeQueue;
-}
-
-async function flushProfile() {
-  try {
-    await writeQueue;
-  } catch (e) {
-    console.error("[PROFILE] Flush error:", e.message);
-  }
-}
-
-// =====================================================
-// USER MANAGEMENT
-// =====================================================
-function ensureUser(userId) {
-  if (!userId) return null;
-  const db = loadProfile();
-  if (!db.users[userId]) {
-    db.users[userId] = normalizeUser();
-    saveProfile();
-  } else {
-    db.users[userId] = normalizeUser(db.users[userId]);
-  }
-  return db.users[userId];
-}
-
-// =====================================================
-// STATS UPDATERS
-// =====================================================
-function addVoiceTime(userId, seconds) {
-  const amount = Math.floor(Number(seconds));
-  if (!userId || !Number.isFinite(amount) || amount <= 0) return false;
-  const user = ensureUser(userId);
-  if (!user) return false;
-  user.voice += amount;
-  user.daily.vc += amount;
-  if (DEBUG_PROFILE_VOICE) {
-    console.log(`[PROFILE][VOICE] ${userId} +${amount}s | Total: ${user.voice}s | Daily: ${user.daily.vc}s`);
-  }
-  saveProfile();
-  return true;
-}
-
-function addMessage(userId) {
-  if (!userId) return false;
-  const user = ensureUser(userId);
-  if (!user) return false;
-  user.daily.msgs += 1;
-  saveProfile();
-  return true;
-}
-
-function getVoiceMinutes(userId) {
-  const user = ensureUser(userId);
-  return user ? Math.floor(user.voice / 60) : 0;
-}
-
-// =====================================================
-// DAILY LOGIC
-// =====================================================
-function getDailyTier(streak = 0) {
-  const safeStreak = toSafeNumber(streak, 0);
-  return {
-    vcRequired: 30,
-    msgRequired: 50
-  };
-}
-
-function isDailyReady(userId) {
-  const user = ensureUser(userId);
-  if (!user) return false;
-
-  const tier = getDailyTier(user.daily.streak);
-  const vcMinutes = Math.floor(user.daily.vc / 60);
-
-  const ready = (
-    vcMinutes >= tier.vcRequired &&
-    user.daily.msgs >= tier.msgRequired
-  );
-
-  console.log(`[DAILY CHECK] ${userId} | Msg: ${user.daily.msgs}/${tier.msgRequired} | VC: ${vcMinutes}/${tier.vcRequired} | Ready: ${ready} | Streak: ${user.daily.streak}`);
-  return ready;
-}
-
-// =====================================================
-// CLAIM DAILY
-// =====================================================
-async function claimDaily(userId, member = null) {
-  const user = ensureUser(userId);
-  if (!user) return { success: false, error: "invalid_user" };
-
-  if (!isDailyReady(userId)) {
-    return { success: false, error: "not_ready", message: "Daily Quest nie jest jeszcze gotowy." };
-  }
-
-  const now = Date.now();
-  if (now - (user.daily.lastClaim || 0) < 86_400_000) {
-    return { success: false, error: "cooldown", message: "Daily już dzisiaj odebrane." };
-  }
-
-  user.daily.streak += 1;
-  const xp = 150 + Math.floor(Math.random() * 150);
-
-  if (member && !member.user?.bot) {
-    try {
-      const { addXP } = require("./levelSystem");
-      if (typeof addXP === "function") {
-        await addXP(member, xp);
-      }
-    } catch (error) {
-      console.error(`[PROFILE] XP ERROR: ${error.message}`);
-    }
-  }
-
-  user.daily.msgs = 0;
-  user.daily.vc = 0;
-  user.daily.lastClaim = now;
-  user.daily.notified = false;
-  user.daily.lastNotifyAttemptAt = 0;
-
-  saveProfile();
-
-  return {
-    success: true,
-    xp,
-    streak: user.daily.streak,
-    message: `Otrzymałeś **${xp} XP** i przedłużyłeś streak do **${user.daily.streak} dni**!`,
-    reward: `${xp} XP`
-  };
-}
-
-// =====================================================
-// DAILY RESET
-// =====================================================
-function runDailyReset() {
-  const db = loadProfile();
-  let count = 0;
-  for (const user of Object.values(db.users)) {
-    if (!user?.daily) continue;
-    user.daily.msgs = 0;
-    user.daily.vc = 0;
-    user.daily.notified = false;
-    user.daily.lastNotifyAttemptAt = 0;
-    count++;
-  }
-  saveProfile();
-  console.log(`[PROFILE] Daily reset completed for ${count} users`);
-}
-
-function startDailyReset() {
-  if (resetInterval) return;
-  loadProfile();
-  lastResetDayKey = getCurrentDayKey();
-  resetInterval = setInterval(() => {
-    const currentDayKey = getCurrentDayKey();
-    if (currentDayKey !== lastResetDayKey) {
-      lastResetDayKey = currentDayKey;
-      runDailyReset();
-    }
-  }, 60_000);
-  console.log(`[PROFILE] Daily reset watcher started (${RESET_TIMEZONE})`);
-}
-
-// =====================================================
-// PROCESS EXIT
-// =====================================================
-process.on("SIGINT", async () => {
-  await flushProfile();
-  process.exit(0);
-});
-process.on("SIGTERM", async () => {
-  await flushProfile();
-  process.exit(0);
-});
-
-// =====================================================
-// EXPORTS
-// =====================================================
-module.exports = {
-  loadProfile,
-  saveProfile,
-  flushProfile,
-  ensureUser,
-  addVoiceTime,
-  addMessage,
-  getVoiceMinutes,
-  getDailyTier,
+const {
   isDailyReady,
-  claimDaily,           // ← musi być tutaj
-  startDailyReset,
-  runDailyReset
+  claimDaily,
+  onDailyClaimed
+} = require("../utils/dailySystem");
+
+const embedCommand = require("../commands/embed");
+
+const {
+  handlePrivatePanel,
+  handlePrivateUserAction,
+  handlePrivateRename,
+  handlePrivateLimit
+} = require("../utils/privateChannelSystem");
+
+// ====================== MAIN ======================
+module.exports = {
+  name: Events.InteractionCreate,
+  async execute(interaction, client) {
+    const cid = interaction.customId;
+    const type = interaction.isChatInputCommand() ? "SLASH" :
+                 interaction.isButton() ? `BUTTON:${cid || "NONE"}` :
+                 interaction.isStringSelectMenu() ? `SELECT:${cid || "NONE"}` :
+                 interaction.isModalSubmit() ? `MODAL:${cid || "NONE"}` : "UNKNOWN";
+
+    try {
+      console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
+
+      if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
+        return await embedCommand.handleModal(interaction);
+      }
+      if (interaction.isButton() && interaction.customId.startsWith("embed_")) {
+        return await embedCommand.handleButton(interaction);
+      }
+
+      if (interaction.isButton() && cid?.startsWith("gw_")) {
+        return await handleGiveaway(interaction);
+      }
+
+      const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
+      if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
+        return await handleEventInteraction(interaction);
+      }
+
+      if (interaction.isStringSelectMenu() &&
+          (cid === "lumberjack_location" || cid === "lumberjack_duration")) {
+        return await handleLumberjackSelect(interaction);
+      }
+
+      if (interaction.isButton() && cid === "daily_claim") {
+        return await handleDailyClaim(interaction);
+      }
+
+      if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
+        return await handlePrivatePanel(interaction);
+      }
+
+      if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_") && interaction.customId.includes("_user_")) {
+        return await handlePrivateUserAction(interaction);
+      }
+
+      if (interaction.isModalSubmit()) {
+        if (interaction.customId.startsWith("private_rename_")) {
+          return await handlePrivateRename(interaction);
+        }
+        if (interaction.customId.startsWith("private_limit_")) {
+          return await handlePrivateLimit(interaction);
+        }
+      }
+
+      const ticketIds = [
+        "open_ticket_vyrn",
+        "open_ticket_v2rn",
+        "close_ticket",
+        "ticket_modal_vyrn",
+        "ticket_modal_v2rn"
+      ];
+      if (
+        (interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()) &&
+        (ticketIds.includes(cid) || cid === "clan_ticket_select" || cid?.startsWith("ticket_modal_"))
+      ) {
+        return await ticketSystem.handle(interaction, client);
+      }
+
+      if (interaction.isChatInputCommand()) {
+        const cmd = client.commands.get(interaction.commandName);
+        if (!cmd) {
+          return interaction.reply({ content: "❌ Command not found.", ephemeral: true });
+        }
+        return await cmd.execute(interaction, client);
+      }
+
+      if (cid) {
+        console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
+      }
+    } catch (err) {
+      console.error("❌ INTERACTION ERROR:", err);
+      const payload = {
+        content: "❌ Wystąpił błąd systemu. Spróbuj ponownie później.",
+        ephemeral: true
+      };
+      try {
+        if (interaction.deferred || interaction.replied) {
+          await interaction.followUp(payload).catch(() => {});
+        } else {
+          await interaction.reply(payload).catch(() => {});
+        }
+      } catch (_) {}
+    }
+  }
 };
+
+// ====================== DAILY CLAIM HANDLER (NAPRAWIONY – działa z DM!) ======================
+async function handleDailyClaim(interaction) {
+  const userId = interaction.user.id;
+
+  if (interaction.replied || interaction.deferred) return;
+
+  await interaction.deferUpdate().catch(() => {});
+
+  try {
+    if (!isDailyReady(userId)) {
+      return await interaction.editReply({
+        content: "❌ Twój Daily Quest nie jest jeszcze gotowy.",
+        embeds: [],
+        components: []
+      });
+    }
+
+    // NAPRAWA: bezpieczne pobieranie member (działa w DM i na serwerze)
+    let member = interaction.member;
+    if (!member && interaction.guild) {
+      member = interaction.guild.members.cache.get(userId) || null;
+    }
+
+    const result = await claimDaily(userId, member);
+
+    if (!result?.success) {
+      return await interaction.editReply({
+        content: result?.message || "❌ Nie udało się odebrać daily.",
+        embeds: [],
+        components: []
+      });
+    }
+
+    onDailyClaimed(userId);
+
+    const successEmbed = new EmbedBuilder()
+      .setColor("#22c55e")
+      .setTitle("✅ Daily Quest odebrany!")
+      .setDescription(result.message || "Gratulacje! Otrzymałeś dzisiejszą nagrodę.")
+      .addFields(
+        { name: "Nagroda", value: result.reward || `${result.xp || 0} XP`, inline: true },
+        { name: "Streak", value: `\`${result.streak || "?"} dni 🔥\``, inline: true }
+      )
+      .setTimestamp();
+
+    await interaction.editReply({
+      embeds: [successEmbed],
+      components: []
+    });
+
+    console.log(`[DAILY] SUCCESS → ${interaction.user.tag} | Streak: ${result.streak}`);
+
+  } catch (err) {
+    console.error(`[DAILY] BŁĄD claim dla ${userId}:`, err);
+    await interaction.editReply({
+      content: "❌ Wystąpił nieoczekiwany błąd podczas odbierania daily.",
+      embeds: [],
+      components: []
+    }).catch(() => {});
+  }
+}
