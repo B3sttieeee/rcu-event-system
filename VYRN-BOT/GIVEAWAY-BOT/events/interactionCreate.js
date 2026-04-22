@@ -37,7 +37,7 @@ module.exports = {
     try {
       console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
-      // 1. EMBED BUILDER
+      // ==================== EMBED BUILDER ====================
       if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
         return await embedCommand.handleModal(interaction);
       }
@@ -45,33 +45,33 @@ module.exports = {
         return await embedCommand.handleButton(interaction);
       }
 
-      // 2. GIVEAWAY
+      // ==================== GIVEAWAY ====================
       if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
 
-      // 3. EVENT SYSTEM
+      // ==================== EVENT SYSTEM ====================
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
       if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
         return await handleEventInteraction(interaction);
       }
 
-      // 4. EXPEDITION
+      // ==================== EXPEDITION ====================
       if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
         return await handleExpeditionSelect(interaction);
       }
 
-      // 5. DAILY QUEST
+      // ==================== DAILY QUEST ====================
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
 
-      // 6. PRIVATE CHANNEL PANEL
+      // ==================== PRIVATE CHANNEL PANEL ====================
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
 
-      // 7. TICKET SYSTEM
+      // ==================== TICKET SYSTEM ====================
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -86,15 +86,19 @@ module.exports = {
         return await ticketSystem.handle(interaction, client);
       }
 
-      // 8. SLASH COMMANDS
+      // ==================== SLASH COMMANDS ====================
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
-          return interaction.reply({ content: "❌ Command not found.", ephemeral: true });
+          return interaction.reply({
+            content: "❌ Command not found.",
+            ephemeral: true
+          });
         }
         return await cmd.execute(interaction, client);
       }
 
+      // Unhandled
       if (cid) {
         console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
       }
@@ -183,40 +187,50 @@ async function handlePrivatePanel(interaction) {
     return interaction.reply({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
   }
 
-  // Dla rename i limit pokazujemy modal BEZ deferUpdate
-  if (action === "rename" || action === "limit") {
-    const modal = new ModalBuilder()
-      .setCustomId(`private_${action}_${channel.id}`)
-      .setTitle(action === "rename" ? "Zmiana nazwy kanału" : "Zmiana limitu osób");
+  try {
+    // === MODALE (rename & limit) ===
+    if (action === "rename" || action === "limit") {
+      const modal = new ModalBuilder()
+        .setCustomId(`private_${action}_${channel.id}`)
+        .setTitle(action === "rename" ? "Zmiana nazwy kanału" : "Zmiana limitu osób");
 
-    const input = new TextInputBuilder()
-      .setCustomId(action === "rename" ? "new_name" : "new_limit")
-      .setLabel(action === "rename" ? "Nowa nazwa kanału" : "Nowy limit osób (1-99)")
-      .setStyle(TextInputStyle.Short)
-      .setPlaceholder(action === "rename" ? "Np. Fiflak's Chill Zone" : "10")
-      .setRequired(true);
+      const input = new TextInputBuilder()
+        .setCustomId(action === "rename" ? "new_name" : "new_limit")
+        .setLabel(action === "rename" ? "Nowa nazwa kanału" : "Nowy limit osób (1-99)")
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder(action === "rename" ? "Np. Fiflak's Chill Zone" : "10")
+        .setRequired(true);
 
-    if (action === "limit") input.setMaxLength(2);
+      if (action === "limit") input.setMaxLength(2);
 
-    modal.addComponents(new ActionRowBuilder().addComponents(input));
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
 
-    return await interaction.showModal(modal);
-  }
+      return await interaction.showModal(modal);
+    }
 
-  // Dla pozostałych akcji deferujemy
-  await interaction.deferUpdate().catch(() => {});
+    // === Pozostałe akcje ===
+    await interaction.deferUpdate().catch(() => {});
 
-  if (action === "delete") {
-    await channel.delete().catch(() => {});
-    userChannels.delete(interaction.user.id);
-    await interaction.followUp({
-      content: "🗑️ Kanał został pomyślnie usunięty.",
-      ephemeral: true
-    });
-  } else {
-    await interaction.followUp({
-      content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
-      ephemeral: true
-    });
+    if (action === "delete") {
+      await channel.delete().catch(() => {});
+      userChannels.delete(interaction.user.id); // czyszczenie mapy
+      await interaction.followUp({
+        content: "🗑️ Kanał został pomyślnie usunięty.",
+        ephemeral: true
+      });
+    } else {
+      await interaction.followUp({
+        content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
+        ephemeral: true
+      });
+    }
+  } catch (err) {
+    console.error("[PrivatePanel] Błąd:", err);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "❌ Wystąpił błąd podczas wykonywania akcji.",
+        ephemeral: true
+      }).catch(() => {});
+    }
   }
 }
