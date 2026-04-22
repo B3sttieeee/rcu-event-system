@@ -16,7 +16,7 @@ const {
 const BLACK_COLOR = "#0a0a0a";
 const READY_COLOR = "#22c55e";
 
-// ====================== ENSURE STATE ======================
+// ====================== ENSURE ======================
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
   const d = user.daily;
@@ -29,11 +29,13 @@ function ensureDailyState(user) {
   return d;
 }
 
-// ====================== BUILD EMBED (agresywne odświeżanie) ======================
+// ====================== BUILD EMBED (NAJAGRESYWNIEJSZE) ======================
 function buildDailyEmbed(userId) {
-  // Agresywne czyszczenie cache przed każdym odczytem
-  loadProfile();           // wymuszamy reload
-  const db = loadProfile(); // drugie wywołanie = na pewno świeże dane z pliku
+  // 3x loadProfile + cache clear - to ma rozwalić cache na amen
+  loadProfile();
+  loadProfile();
+  const db = loadProfile();
+
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
 
@@ -81,10 +83,10 @@ function buildDailyEmbed(userId) {
   return { embed, components };
 }
 
-// ====================== PO ODEBRANIU (reset) ======================
+// ====================== PO ODEBRANIU ======================
 function onDailyClaimed(userId) {
   try {
-    // Agresywne odświeżenie cache
+    loadProfile();
     loadProfile();
     const db = loadProfile();
     const user = db.users?.[userId];
@@ -92,7 +94,6 @@ function onDailyClaimed(userId) {
 
     const daily = ensureDailyState(user);
 
-    // Resetujemy tylko flagi (msgs i vc resetuje już claimDaily w profileSystem)
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
 
@@ -108,7 +109,6 @@ async function checkDailyDM() {
   return false;
 }
 
-// ====================== EXPORTS ======================
 module.exports = {
   buildDailyEmbed,
   onDailyClaimed,
