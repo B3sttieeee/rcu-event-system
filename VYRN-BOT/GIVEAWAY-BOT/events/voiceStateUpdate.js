@@ -15,7 +15,6 @@ const PRIVATE_CATEGORY_ID = "1496281285780574268";
 
 const userChannels = new Map(); // userId => channelId
 
-// ====================== INICJALIZACJA ======================
 console.log("[PrivateChannel] System uruchomiony - mapa userChannels wyczyszczona");
 userChannels.clear();
 
@@ -28,7 +27,7 @@ module.exports = {
     console.log(`[VoiceDebug] ${member.user.tag} | ${oldState.channel?.id || 'none'} → ${newState.channel?.id || 'none'}`);
 
     if (!oldState.channel && newState.channel && newState.channel.id === CREATE_CHANNEL_ID) {
-      console.log(`[PrivateChannel] Rozpoczynam tworzenie kanału dla ${member.user.tag}`);
+      console.log(`[PrivateChannel] Rozpoczynam tworzenie dla ${member.user.tag}`);
       await handlePrivateChannelCreation(member);
     }
   }
@@ -38,23 +37,19 @@ module.exports = {
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
-  // Ochrona przed duplikatami
   if (userChannels.has(member.id)) {
     const existing = guild.channels.cache.get(userChannels.get(member.id));
     if (existing) {
       await member.voice.setChannel(existing).catch(() => {});
-      console.log(`[PrivateChannel] Użytkownik ${member.user.tag} ma już aktywny kanał - przeniesiono`);
       return;
     }
     userChannels.delete(member.id);
   }
 
-  // Czekamy 5 sekund
-  await new Promise(resolve => setTimeout(resolve, 5000));
+  await new Promise(r => setTimeout(r, 5000));
 
-  // Sprawdzenie czy nadal jest na kanale tworzenia
   if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) {
-    console.log(`[PrivateChannel] Użytkownik ${member.user.tag} wyszedł przed 5 sekundami - anulowano`);
+    console.log(`[PrivateChannel] Użytkownik wyszedł przed 5s - anuluję`);
     return;
   }
 
@@ -81,26 +76,19 @@ async function handlePrivateChannelCreation(member) {
 
     userChannels.set(member.id, channel.id);
 
-    // Przeniesienie użytkownika na jego kanał
-    await member.voice.setChannel(channel).catch(() => {
-      console.log(`[PrivateChannel] Nie udało się przenieść ${member.user.tag}`);
-    });
+    await member.voice.setChannel(channel).catch(() => {});
 
-    // Powitalna wiadomość
     await channel.send({
       content: `> **${member}** Twój prywatny kanał został stworzony!`
     }).catch(() => {});
 
-    // Panel sterowania
     await sendControlPanel(channel, member);
-
-    // Watcher pustego kanału
     startEmptyChannelWatcher(channel, member.id);
 
-    console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name} (${channel.id})`);
+    console.log(`[PrivateChannel] Kanał stworzony: ${channel.name}`);
 
   } catch (err) {
-    console.error(`[PrivateChannel] Błąd tworzenia kanału dla ${member.user.tag}:`, err);
+    console.error(`[PrivateChannel] Błąd tworzenia dla ${member.user.tag}:`, err);
   }
 }
 
@@ -146,7 +134,7 @@ async function sendControlPanel(channel, owner) {
   await channel.send({ embeds: [embed], components: [row] }).catch(console.error);
 }
 
-// ====================== OBSŁUGA PANELU (Select Menu + Modale) ======================
+// ====================== OBSŁUGA PANELU ======================
 async function handlePrivatePanel(interaction) {
   const channelId = interaction.customId.split("_")[2];
   const action = interaction.values[0];
@@ -164,48 +152,122 @@ async function handlePrivatePanel(interaction) {
     return interaction.reply({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
   }
 
+  // Modale
+  if (action === "rename" || action === "limit") {
+    const modal = new ModalBuilder()
+      .setCustomId(`private_${action}_${channel.id}`)
+      .setTitle(action === "rename" ? "Zmiana nazwy kanału" : "Zmiana limitu osób");
+
+    const input = new TextInputBuilder()
+      .setCustomId(action === "rename" ? "new_name" : "new_limit")
+      .setLabel(action === "rename" ? "Nowa nazwa kanału" : "Nowy limit osób (1-99)")
+      .setStyle(TextInputStyle.Short)
+      .setPlaceholder(action === "rename" ? "Np. Fiflak's Chill Zone" : "10")
+      .setRequired(true);
+
+    if (action === "limit") input.setMaxLength(2);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return await interaction.showModal(modal);
+  }
+
+  // Kick, Ban, Unban - dynamiczne menu
+  if (action === "kick" || action === "ban" || action === "unban") {
+    return await showUserSelectMenu(interaction, channel, action);
+  }
+
+  // Lock, Unlock, Delete
+  await interaction.deferUpdate().catch(() => {});
+
+  if (action === "lock") {
+    await channel.permissionOverwrites.edit(channel.guild.id, { Connect: false });
+    await interaction.followUp({ content: "🔒 Kanał zablokowany (tylko Ty masz dostęp).", ephemeral: true });
+  } else if (action === "unlock") {
+    await channel.permissionOverwrites.edit(channel.guild.id, { Connect: null });
+    await interaction.followUp({ content: "🔓 Kanał odblokowany.", ephemeral: true });
+  } else if (action === "delete") {
+    await channel.delete().catch(() => {});
+    userChannels.delete(interaction.user.id);
+    await interaction.followUp({ content: "🗑️ Kanał został usunięty.", ephemeral: true });
+  }
+}
+
+// ====================== DYNAMICZNE MENU DLA KICK/BAN/UNBAN ======================
+async function showUserSelectMenu(interaction, channel, action) {
+  let options = [];
+
+  if (action === "kick" || action === "ban") {
+    options = Array.from(channel.members.values())
+      .filter(m => m.id !== interaction.user.id)
+      .map(m => ({
+        label: m.displayName || m.user.username,
+        value: m.id,
+        description: m.user.tag
+      }));
+  } else if (action === "unban") {
+    const banned = channel.permissionOverwrites.cache.filter(perm =>
+      perm.type === 1 && perm.deny.has(PermissionFlagsBits.Connect)
+    );
+    options = banned.map(perm => {
+      const member = interaction.guild.members.cache.get(perm.id);
+      return {
+        label: member ? (member.displayName || member.user.username) : "Nieznany",
+        value: perm.id,
+        description: "Zbanowany"
+      };
+    });
+  }
+
+  if (options.length === 0) {
+    return interaction.reply({
+      content: action === "unban" ? "✅ Nie ma zbanowanych osób." : "❌ Na kanale nie ma nikogo innego.",
+      ephemeral: true
+    });
+  }
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`private_${action}_user_${channel.id}`)
+    .setPlaceholder(`Wybierz kogo ${action === "kick" ? "wyrzucić" : action === "ban" ? "zbanować" : "odbanować"}`)
+    .addOptions(options.slice(0, 25));
+
+  const row = new ActionRowBuilder().addComponents(select);
+
+  await interaction.reply({
+    content: `Wybierz użytkownika do **${action === "kick" ? "wyrzucenia" : action === "ban" ? "zbanowania" : "odbanowania"}**:`,
+    components: [row],
+    ephemeral: true
+  });
+}
+
+// ====================== OBSŁUGA AKCJI NA UŻYTKOWNIKU ======================
+async function handlePrivateUserAction(interaction) {
+  const parts = interaction.customId.split("_");
+  const action = parts[1]; // kick / ban / unban
+  const channelId = parts[3];
+  const targetId = interaction.values[0];
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+
+  await interaction.deferUpdate().catch(() => {});
+
   try {
-    // Modale dla rename i limit
-    if (action === "rename" || action === "limit") {
-      const modal = new ModalBuilder()
-        .setCustomId(`private_${action}_${channel.id}`)
-        .setTitle(action === "rename" ? "Zmiana nazwy kanału" : "Zmiana limitu osób");
-
-      const input = new TextInputBuilder()
-        .setCustomId(action === "rename" ? "new_name" : "new_limit")
-        .setLabel(action === "rename" ? "Nowa nazwa kanału" : "Nowy limit osób (1-99)")
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder(action === "rename" ? "Np. Fiflak's Chill Zone" : "10")
-        .setRequired(true);
-
-      if (action === "limit") input.setMaxLength(2);
-
-      modal.addComponents(new ActionRowBuilder().addComponents(input));
-
-      return await interaction.showModal(modal);
-    }
-
-    // Pozostałe akcje
-    await interaction.deferUpdate().catch(() => {});
-
-    if (action === "delete") {
-      await channel.delete().catch(() => {});
-      userChannels.delete(interaction.user.id);
-      await interaction.followUp({
-        content: "🗑️ Kanał został pomyślnie usunięty.",
-        ephemeral: true
-      });
-    } else {
-      await interaction.followUp({
-        content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
-        ephemeral: true
-      });
+    if (action === "kick") {
+      const member = await interaction.guild.members.fetch(targetId).catch(() => null);
+      if (member) await member.voice.disconnect().catch(() => {});
+      await interaction.followUp({ content: `🚪 Wyrzucono użytkownika z kanału.`, ephemeral: true });
+    } 
+    else if (action === "ban") {
+      await channel.permissionOverwrites.edit(targetId, { Connect: false });
+      await interaction.followUp({ content: `🔨 Użytkownik został zbanowany na kanale.`, ephemeral: true });
+    } 
+    else if (action === "unban") {
+      await channel.permissionOverwrites.delete(targetId).catch(() => {});
+      await interaction.followUp({ content: `🔓 Użytkownik został odbanowany.`, ephemeral: true });
     }
   } catch (err) {
-    console.error("[PrivatePanel] Błąd:", err);
-    if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: "❌ Wystąpił błąd.", ephemeral: true }).catch(() => {});
-    }
+    console.error(`[PrivateUserAction] Błąd ${action}:`, err);
+    await interaction.followUp({ content: "❌ Nie udało się wykonać akcji.", ephemeral: true });
   }
 }
 
@@ -213,12 +275,12 @@ async function handlePrivatePanel(interaction) {
 function startEmptyChannelWatcher(channel, ownerId) {
   const interval = setInterval(async () => {
     try {
-      const freshChannel = await channel.guild.channels.fetch(channel.id).catch(() => null);
-      if (!freshChannel || freshChannel.members.size === 0) {
-        await freshChannel?.delete().catch(() => {});
+      const fresh = await channel.guild.channels.fetch(channel.id).catch(() => null);
+      if (!fresh || fresh.members.size === 0) {
+        await fresh?.delete().catch(() => {});
         userChannels.delete(ownerId);
         clearInterval(interval);
-        console.log(`[PrivateChannel] Kanał ${channel.name} został usunięty (pusty)`);
+        console.log(`[PrivateChannel] Kanał ${channel.name} usunięty (pusty)`);
       }
     } catch (e) {
       clearInterval(interval);
