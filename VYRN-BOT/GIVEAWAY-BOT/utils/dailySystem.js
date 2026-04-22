@@ -15,19 +15,18 @@ const {
 const BLACK_COLOR = "#0a0a0a";
 const READY_COLOR = "#22c55e";
 
-// ====================== NAGRODY (SPÓJNE) ======================
+// ====================== NAGRODA ======================
 function getDailyReward(streak) {
   const baseXP = 150;
-  const streakBonus = Math.min(streak * 50, 500); // max +500 XP
+  const streakBonus = Math.min(streak * 50, 500);
   const totalXP = baseXP + streakBonus;
-
   return {
     xp: totalXP,
     text: `**${totalXP} XP** (150 base + ${streakBonus} za streak)`
   };
 }
 
-// ====================== HELPERS ======================
+// ====================== POMOCNICZE ======================
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
   const d = user.daily;
@@ -41,7 +40,7 @@ function ensureDailyState(user) {
 }
 
 function buildDailyEmbed(userId) {
-  const db = loadProfile();
+  const db = loadProfile();           // zawsze świeże dane
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
   const ready = isDailyReady(userId);
@@ -56,20 +55,20 @@ function buildDailyEmbed(userId) {
         : "Wykonaj codzienne cele, aby zdobyć nagrodę."
     )
     .addFields(
-      { 
-        name: "📌 Wymagania", 
+      {
+        name: "📌 Wymagania",
         value: `• Wiadomości: \`${Math.min(daily.msgs, 50)}/50\`\n• Voice Chat: \`${Math.min(Math.floor(daily.vc / 60), 30)}/30 min\``,
-        inline: false 
+        inline: false
       },
-      { 
-        name: "🏆 Nagroda", 
+      {
+        name: "🏆 Nagroda",
         value: reward.text,
-        inline: false 
+        inline: false
       },
-      { 
-        name: "🔥 Streak", 
+      {
+        name: "🔥 Streak",
         value: `\`${daily.streak} dni\``,
-        inline: true 
+        inline: true
       }
     )
     .setFooter({ text: "VYRN • Daily System" })
@@ -90,9 +89,10 @@ function buildDailyEmbed(userId) {
 
 // ====================== WYŁĄCZONE DM ======================
 async function checkDailyDM(member) {
-  return false;
+  return false; // DM całkowicie wyłączone
 }
 
+// ====================== PO ODEBRANIU ======================
 function onDailyClaimed(userId) {
   try {
     const db = loadProfile();
@@ -102,7 +102,7 @@ function onDailyClaimed(userId) {
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
     saveProfile();
-    console.log(`[DAILY] Nagroda odebrana → ${userId}`);
+    console.log(`[DAILY] Status zresetowany po odebraniu → ${userId}`);
   } catch (err) {
     console.error("Błąd onDailyClaimed:", err);
   }
