@@ -9,7 +9,7 @@ const {
 const CREATE_CHANNEL_ID = "1496280414237491220";
 const PRIVATE_CATEGORY_ID = "1496281285780574268";
 
-const userChannels = new Map(); // userId => channelId
+const userChannels = new Map();
 
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
@@ -25,10 +25,8 @@ async function handlePrivateChannelCreation(member) {
     userChannels.delete(member.id);
   }
 
-  // czekaj 5 sekund
   await new Promise(r => setTimeout(r, 5000));
 
-  // jeśli wyszedł z create room
   if (!member.voice.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) return;
 
   try {
@@ -63,7 +61,7 @@ async function handlePrivateChannelCreation(member) {
 
     startEmptyWatcher(channel, member.id);
   } catch (err) {
-    console.error("Błąd tworzenia kanału:", err);
+    console.error(err);
   }
 }
 
@@ -71,9 +69,7 @@ async function sendPanel(member, channel) {
   const embed = new EmbedBuilder()
     .setColor("Blue")
     .setTitle("🔒 Private Channel Panel")
-    .setDescription(
-      `Twój kanał: <#${channel.id}>\n\nWybierz opcję z menu.`
-    );
+    .setDescription(`Twój kanał: <#${channel.id}>`);
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`private_${channel.id}`)
@@ -155,53 +151,4 @@ function startEmptyWatcher(channel, ownerId) {
 module.exports = {
   handlePrivateChannelCreation,
   handlePrivatePanel
-};
-```
-
----
-
-## `events/voiceStateUpdate.js`
-
-```js
-const { Events } = require("discord.js");
-const { handlePrivateChannelCreation } = require("../utils/privateChannelSystem");
-
-const CREATE_CHANNEL_ID = "1496280414237491220";
-
-module.exports = {
-  name: Events.VoiceStateUpdate,
-
-  async execute(oldState, newState) {
-    const member = newState.member;
-    if (!member || member.user.bot) return;
-
-    if (
-      newState.channel &&
-      newState.channel.id === CREATE_CHANNEL_ID &&
-      oldState.channel?.id !== CREATE_CHANNEL_ID
-    ) {
-      await handlePrivateChannelCreation(member);
-    }
-  }
-};
-```
-
----
-
-## `events/interactionCreate.js`
-
-```js
-const { Events } = require("discord.js");
-const { handlePrivatePanel } = require("../utils/privateChannelSystem");
-
-module.exports = {
-  name: Events.InteractionCreate,
-
-  async execute(interaction) {
-    if (interaction.isStringSelectMenu()) {
-      if (interaction.customId.startsWith("private_")) {
-        await handlePrivatePanel(interaction);
-      }
-    }
-  }
 };
