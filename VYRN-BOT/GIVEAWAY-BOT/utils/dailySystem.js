@@ -7,13 +7,14 @@ const {
 
 const {
   loadProfile,
-  isDailyReady,
-  saveProfile
+  isDailyReady,     // <-- musi być zaimportowane z profileSystem
+  saveProfile,
+  claimDaily        // <-- opcjonalnie, jeśli chcesz używać wersji z profileSystem
 } = require("./profileSystem");
 
 // ====================== CONFIG ======================
 const DM_RETRY_COOLDOWN_MS = 25 * 60 * 1000;   // 25 minut
-const DM_FAILED_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 godzin przy zamkniętych DM
+const DM_FAILED_COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 godzin przy zablokowanych DM
 
 const dmLock = new Set();
 const dmCooldown = new Map();
@@ -35,7 +36,8 @@ function buildDailyEmbed(userId) {
   const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
-  const ready = isDailyReady(userId);
+
+  const ready = isDailyReady(userId);   // <-- teraz działa, bo jest zaimportowane
 
   return {
     embed: new EmbedBuilder()
@@ -53,6 +55,7 @@ function buildDailyEmbed(userId) {
       )
       .setFooter({ text: ready ? "Nagroda czeka na odbiór • VYRN" : "Daily System • VYRN" })
       .setTimestamp(),
+
     components: ready ? [
       new ActionRowBuilder().addComponents(
         new ButtonBuilder()
@@ -62,6 +65,7 @@ function buildDailyEmbed(userId) {
           .setEmoji("🎁")
       )
     ] : [],
+
     ready
   };
 }
@@ -72,6 +76,7 @@ async function checkDailyDM(member) {
 
   const userId = member.id;
   if (dmLock.has(userId)) return false;
+
   dmLock.add(userId);
 
   try {
@@ -82,19 +87,18 @@ async function checkDailyDM(member) {
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
-    // === NAJWAŻNIEJSZE ZABEZPIECZENIE ===
+    // === ZABEZPIECZENIE – nie wysyłaj jeśli nie gotowe ===
     if (!ready) {
       if (daily.notified) {
         daily.notified = false;
         daily.lastNotifyAttemptAt = 0;
         dmCooldown.delete(userId);
         saveProfile();
-        console.log(`[DAILY] RESET NOTIFIED (nie gotowy) → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30 | Streak: ${daily.streak}`);
+        console.log(`[DAILY] RESET NOTIFIED (nie gotowy) → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
       }
       return false;
     }
 
-    // Już powiadomiony
     if (daily.notified) {
       console.log(`[DAILY] Już powiadomiony → ${member.user.tag}`);
       return false;
@@ -106,16 +110,10 @@ async function checkDailyDM(member) {
       dmCooldown.get(userId) || 0
     );
 
-    const cooldown = (now - lastAttempt < DM_RETRY_COOLDOWN_MS * 2)
-      ? DM_FAILED_COOLDOWN_MS
-      : DM_RETRY_COOLDOWN_MS;
-
-    if (now - lastAttempt < cooldown) {
-      console.log(`[DAILY] Jeszcze cooldown → ${member.user.tag}`);
+    if (now - lastAttempt < DM_RETRY_COOLDOWN_MS) {
       return false;
     }
 
-    // Wysyłamy DM
     daily.lastNotifyAttemptAt = now;
     dmCooldown.set(userId, now);
     saveProfile();
@@ -133,18 +131,17 @@ async function checkDailyDM(member) {
       saveProfile();
 
       console.log(`[DAILY] DM WYSŁANY → ${member.user.tag} | Streak: ${daily.streak} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
-      return true;
 
+      return true;
     } catch (sendErr) {
       if (sendErr.code === 50007) {
         console.log(`[DAILY] DM ZABLOKOWANE → ${member.user.tag}`);
-        dmCooldown.set(userId, now + DM_FAILED_COOLDOWN_MS - DM_RETRY_COOLDOWN_MS);
+        dmCooldown.set(userId, now + DM_FAILED_COOLDOWN_MS);
       } else {
         console.error(`[DAILY] Błąd wysyłania DM:`, sendErr.message);
       }
       return false;
     }
-
   } catch (err) {
     console.error(`[DAILY] Błąd checkDailyDM dla ${userId}:`, err);
     return false;
