@@ -39,6 +39,12 @@ module.exports = {
     try {
       console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
+      // ====================== DAILY CLAIM - NAJWYŻSZY PRIORYTET ======================
+      if (interaction.isButton() && cid === "daily_claim") {
+        console.log(`[DAILY] === KLIKNIĘTO PRZYCISK daily_claim przez ${interaction.user.tag} ===`);
+        return await handleDailyClaim(interaction);
+      }
+
       // 1. EMBED BUILDER
       if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
         return await embedCommand.handleModal(interaction);
@@ -55,28 +61,20 @@ module.exports = {
         return await handleEventInteraction(interaction);
       }
 
-      // 4. LUMBERJACK / EXPEDITION
+      // 4. LUMBERJACK
       if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
         return await handleLumberjackSelect(interaction);
       }
 
-      // 5. PRIVATE CHANNEL PANEL
+      // 5. PRIVATE CHANNEL
       if (interaction.isStringSelectMenu() && cid.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
-
       if (interaction.isModalSubmit() && cid.startsWith("private_rename_")) {
         return await handlePrivateRename(interaction);
       }
-
       if (interaction.isModalSubmit() && cid.startsWith("private_limit_")) {
         return await handlePrivateLimit(interaction);
-      }
-
-      // ====================== DAILY CLAIM HANDLER ======================
-      if (interaction.isButton() && cid === "daily_claim") {
-        console.log(`[DAILY] Kliknięto daily_claim przez ${interaction.user.tag}`);
-        return await handleDailyClaim(interaction);
       }
 
       // 6. TICKET SYSTEM
@@ -143,10 +141,10 @@ async function handleDailyClaim(interaction) {
     const successEmbed = new EmbedBuilder()
       .setColor("#22c55e")
       .setTitle("✅ Daily Quest odebrany!")
-      .setDescription(result.message || "Gratulacje! Otrzymałeś dzisiejszą nagrodę.")
+      .setDescription(result.message)
       .addFields(
-        { name: "Nagroda", value: result.reward || `${result.xp || 0} XP`, inline: true },
-        { name: "Streak", value: `\`${result.streak || "?"} dni 🔥\``, inline: true }
+        { name: "Nagroda", value: result.reward, inline: true },
+        { name: "Streak", value: `\`${result.streak} dni 🔥\``, inline: true }
       )
       .setTimestamp();
 
