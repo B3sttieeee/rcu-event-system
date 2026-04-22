@@ -135,7 +135,7 @@ module.exports = {
   }
 };
 
-// ====================== DAILY CLAIM HANDLER (POPRAWIONY) ======================
+// ====================== DAILY CLAIM HANDLER (BEZPIECZNY DLA DM I SERWERA) ======================
 async function handleDailyClaim(interaction) {
   const userId = interaction.user.id;
 
@@ -152,7 +152,10 @@ async function handleDailyClaim(interaction) {
       });
     }
 
-    const result = claimDaily(userId);
+    // Przekazujemy member jeśli istnieje (potrzebne do przyznawania XP)
+    const member = interaction.member || interaction.guild?.members.cache.get(userId);
+
+    const result = await claimDaily(userId, member);
 
     if (!result?.success) {
       return await interaction.editReply({
