@@ -6,32 +6,54 @@ const {
   TextInputBuilder,
   TextInputStyle,
   PermissionFlagsBits,
-  ChannelType
+  ChannelType,
+  Events
 } = require("discord.js");
 
 const CREATE_CHANNEL_ID = "1496280414237491220";
 const PRIVATE_CATEGORY_ID = "1496281285780574268";
 
-const userChannels = new Map();
+const userChannels = new Map(); // userId => channelId
 
-async function handlePrivateChannelCreation(member) {
+console.log("[PrivateChannel] System uruchomiony");
+userChannels.clear();
+
+module.exports = {
+  name: Events.VoiceStateUpdate,
+
+  async execute(oldState, newState) {
+    const member = newState.member;
+    if (!member || member.user.bot) return;
+
+    // wejście na kanał create-to-voice
+    if (
+      !oldState.channel &&
+      newState.channel &&
+      newState.channel.id === CREATE_CHANNEL_ID
+    ) {
+      await handleCreate(member);
+    }
+  }
+};
+
+// ===================== CREATE CHANNEL =====================
+async function handleCreate(member) {
   const guild = member.guild;
 
+  // anty duplikaty
   if (userChannels.has(member.id)) {
-    const oldChannel = guild.channels.cache.get(userChannels.get(member.id));
-
-    if (oldChannel) {
-      await member.voice.setChannel(oldChannel).catch(() => {});
+    const old = guild.channels.cache.get(userChannels.get(member.id));
+    if (old) {
+      await member.voice.setChannel(old).catch(() => {});
       return;
     }
-
     userChannels.delete(member.id);
   }
 
   await wait(5000);
 
-  if (!member.voice.channel) return;
-  if (member.voice.channel.id !== CREATE_CHANNEL_ID) return;
+  if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID)
+    return;
 
   try {
     const channel = await guild.channels.create({
@@ -39,35 +61,20 @@ async function handlePrivateChannelCreation(member) {
       type: ChannelType.GuildVoice,
       parent: PRIVATE_CATEGORY_ID,
       userLimit: 10,
+
       permissionOverwrites: [
         {
           id: guild.id,
-          deny: [
-            PermissionFlagsBits.Connect
-          ]
+          deny: [PermissionFlagsBits.Connect]
         },
         {
           id: member.id,
           allow: [
             PermissionFlagsBits.Connect,
-            PermissionFlagsBits.ViewChannel,
             PermissionFlagsBits.Speak,
-            PermissionFlagsBits.MoveMembers,
-            PermissionFlagsBits.ManageChannels,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory
-          ]
-        },
-        {
-          id: guild.members.me.id,
-          allow: [
             PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.Connect,
-            PermissionFlagsBits.MoveMembers,
             PermissionFlagsBits.ManageChannels,
-            PermissionFlagsBits.SendMessages,
-            PermissionFlagsBits.ReadMessageHistory,
-            PermissionFlagsBits.EmbedLinks
+            PermissionFlagsBits.MoveMembers
           ]
         }
       ]
@@ -77,212 +84,157 @@ async function handlePrivateChannelCreation(member) {
 
     await member.voice.setChannel(channel).catch(() => {});
 
-    await sendControlPanel(channel, member);
+    await channel.send({
+      content: `> 👑 ${member} Twój prywatny kanał został utworzony!`
+    });
 
-    startEmptyWatcher(channel, member.id);
+    await sendPanel(channel, member);
+    startWatcher(channel, member.id);
+
   } catch (err) {
-    console.error("[PRIVATE CHANNEL ERROR]", err);
+    console.error("[CREATE ERROR]", err);
   }
 }
 
-async function sendControlPanel(channel, member) {
+// ===================== PANEL (NA VOICE CHANNELU) =====================
+async function sendPanel(channel, member) {
   const embed = new EmbedBuilder()
     .setColor("#2b2d31")
-    .setTitle("🔒 Private Channel Panel")
+    .setTitle("🔒 Private Voice Panel")
     .setDescription(
       `👑 Owner: ${member}\n` +
       `🎤 Channel: <#${channel.id}>\n\n` +
-      `Choose an option below.`
+      `Wybierz akcję poniżej`
     )
-    .setFooter({ text: "Private Channel System" });
+    .setFooter({ text: "Private Voice System" });
 
   const menu = new StringSelectMenuBuilder()
     .setCustomId(`private_panel_${channel.id}`)
-    .setPlaceholder("Select action...")
+    .setPlaceholder("Wybierz akcję")
     .addOptions([
-      {
-        label: "Rename Channel",
-        value: "rename",
-        emoji: "✏️"
-      },
-      {
-        label: "Change Limit",
-        value: "limit",
-        emoji: "👥"
-      },
-      {
-        label: "Lock Channel",
-        value: "lock",
-        emoji: "🔒"
-      },
-      {
-        label: "Unlock Channel",
-        value: "unlock",
-        emoji: "🔓"
-      },
-      {
-        label: "Delete Channel",
-        value: "delete",
-        emoji: "🗑️"
-      }
+      { label: "Rename", value: "rename", emoji: "✏️" },
+      { label: "Limit", value: "limit", emoji: "👥" },
+      { label: "Lock", value: "lock", emoji: "🔒" },
+      { label: "Unlock", value: "unlock", emoji: "🔓" },
+      { label: "Delete", value: "delete", emoji: "🗑️" }
     ]);
 
-  const row = new ActionRowBuilder().addComponents(menu);
-
   await channel.send({
-    content: `${member}`,
     embeds: [embed],
-    components: [row]
-  }).catch(console.error);
-}
-
-async function handlePrivatePanel(interaction) {
-  const channelId = interaction.customId.split("_")[2];
-  const action = interaction.values[0];
-
-  const channel = interaction.guild.channels.cache.get(channelId);
-
-  if (!channel) {
-    return interaction.reply({
-      content: "❌ Channel not found.",
-      ephemeral: true
-    });
-  }
-
-  if (action === "rename") {
-    const modal = new ModalBuilder()
-      .setCustomId(`private_rename_${channel.id}`)
-      .setTitle("Rename Channel");
-
-    const input = new TextInputBuilder()
-      .setCustomId("name")
-      .setLabel("New channel name")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(input)
-    );
-
-    return interaction.showModal(modal);
-  }
-
-  if (action === "limit") {
-    const modal = new ModalBuilder()
-      .setCustomId(`private_limit_${channel.id}`)
-      .setTitle("Change Limit");
-
-    const input = new TextInputBuilder()
-      .setCustomId("limit")
-      .setLabel("Enter limit 1-99")
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true);
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(input)
-    );
-
-    return interaction.showModal(modal);
-  }
-
-  if (action === "lock") {
-    await channel.permissionOverwrites.edit(
-      interaction.guild.id,
-      {
-        Connect: false
-      }
-    );
-
-    return interaction.reply({
-      content: "🔒 Channel locked.",
-      ephemeral: true
-    });
-  }
-
-  if (action === "unlock") {
-    await channel.permissionOverwrites.edit(
-      interaction.guild.id,
-      {
-        Connect: true
-      }
-    );
-
-    return interaction.reply({
-      content: "🔓 Channel unlocked.",
-      ephemeral: true
-    });
-  }
-
-  if (action === "delete") {
-    await channel.delete().catch(() => {});
-    userChannels.delete(interaction.user.id);
-
-    return interaction.reply({
-      content: "🗑️ Channel deleted.",
-      ephemeral: true
-    });
-  }
-}
-
-async function handlePrivateRename(interaction) {
-  const id = interaction.customId.split("_")[2];
-  const value = interaction.fields.getTextInputValue("name");
-
-  const channel = interaction.guild.channels.cache.get(id);
-  if (!channel) return;
-
-  await channel.setName(value);
-
-  return interaction.reply({
-    content: "✏️ Channel renamed.",
-    ephemeral: true
+    components: [new ActionRowBuilder().addComponents(menu)]
   });
 }
 
-async function handlePrivateLimit(interaction) {
-  const id = interaction.customId.split("_")[2];
-  const value = parseInt(
-    interaction.fields.getTextInputValue("limit")
-  );
+// ===================== INTERACTION HANDLER =====================
+async function handleInteraction(interaction) {
+  if (!interaction.isStringSelectMenu() && !interaction.isModalSubmit()) return;
 
-  const channel = interaction.guild.channels.cache.get(id);
-  if (!channel) return;
+  // ================= MENU =================
+  if (interaction.isStringSelectMenu()) {
+    const channelId = interaction.customId.split("_")[2];
+    const action = interaction.values[0];
 
-  await channel.setUserLimit(value);
+    const channel = interaction.guild.channels.cache.get(channelId);
+    if (!channel) return interaction.reply({ content: "❌ No channel", ephemeral: true });
 
-  return interaction.reply({
-    content: `👥 Limit set to ${value}.`,
-    ephemeral: true
-  });
-}
+    if (action === "rename") {
+      const modal = new ModalBuilder()
+        .setCustomId(`private_rename_${channel.id}`)
+        .setTitle("Rename Channel");
 
-function startEmptyWatcher(channel, ownerId) {
-  const interval = setInterval(async () => {
-    const fresh = await channel.guild.channels
-      .fetch(channel.id)
-      .catch(() => null);
+      const input = new TextInputBuilder()
+        .setCustomId("value")
+        .setLabel("New name")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
 
-    if (!fresh) {
-      userChannels.delete(ownerId);
-      clearInterval(interval);
-      return;
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return interaction.showModal(modal);
     }
 
-    if (fresh.members.size === 0) {
-      await fresh.delete().catch(() => {});
+    if (action === "limit") {
+      const modal = new ModalBuilder()
+        .setCustomId(`private_limit_${channel.id}`)
+        .setTitle("Set Limit");
+
+      const input = new TextInputBuilder()
+        .setCustomId("value")
+        .setLabel("1-99")
+        .setStyle(TextInputStyle.Short)
+        .setRequired(true);
+
+      modal.addComponents(new ActionRowBuilder().addComponents(input));
+      return interaction.showModal(modal);
+    }
+
+    if (action === "lock") {
+      await channel.permissionOverwrites.edit(interaction.guild.id, {
+        Connect: false
+      });
+
+      return interaction.reply({ content: "🔒 Locked", ephemeral: true });
+    }
+
+    if (action === "unlock") {
+      await channel.permissionOverwrites.edit(interaction.guild.id, {
+        Connect: true
+      });
+
+      return interaction.reply({ content: "🔓 Unlocked", ephemeral: true });
+    }
+
+    if (action === "delete") {
+      userChannels.delete(getOwner(channel.id));
+      await channel.delete().catch(() => {});
+      return interaction.reply({ content: "🗑️ Deleted", ephemeral: true });
+    }
+  }
+
+  // ================= MODALS =================
+  if (interaction.isModalSubmit()) {
+    const [type, action, channelId] = interaction.customId.split("_");
+    const channel = interaction.guild.channels.cache.get(channelId);
+    if (!channel) return;
+
+    const value = interaction.fields.getTextInputValue("value");
+
+    if (action === "rename") {
+      await channel.setName(value);
+      return interaction.reply({ content: "✏️ Renamed", ephemeral: true });
+    }
+
+    if (action === "limit") {
+      await channel.setUserLimit(parseInt(value));
+      return interaction.reply({ content: "👥 Limit set", ephemeral: true });
+    }
+  }
+}
+
+// ===================== WATCHER =====================
+function startWatcher(channel, ownerId) {
+  const interval = setInterval(async () => {
+    const fresh = await channel.guild.channels.fetch(channel.id).catch(() => null);
+
+    if (!fresh || fresh.members.size === 0) {
+      await fresh?.delete().catch(() => {});
       userChannels.delete(ownerId);
       clearInterval(interval);
     }
   }, 15000);
 }
 
+// ===================== HELPERS =====================
 function wait(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(r => setTimeout(r, ms));
 }
 
-module.exports = {
-  handlePrivateChannelCreation,
-  handlePrivatePanel,
-  handlePrivateRename,
-  handlePrivateLimit
-};
+// (opcjonalnie jeśli chcesz ownership stabilny)
+function getOwner(channelId) {
+  for (const [userId, chId] of userChannels) {
+    if (chId === channelId) return userId;
+  }
+  return null;
+}
+
+// ===================== EXPORT =====================
+module.exports.handleInteraction = handleInteraction;
