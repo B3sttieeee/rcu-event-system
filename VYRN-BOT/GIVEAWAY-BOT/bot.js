@@ -132,7 +132,7 @@ async function loadSystems() {
     console.error("❌ RulesPanel error:", e.message);
   }
 
-  // 6. Ticket Panel (z opóźnieniem)
+  // 6. Ticket Panel
   setTimeout(async () => {
     try {
       const { createTicketPanel } = require("./utils/ticketSystem");
@@ -142,6 +142,9 @@ async function loadSystems() {
       console.error("❌ TicketSystem error:", e.message);
     }
   }, 5000);
+
+  // Private Channel jest ładowany automatycznie przez events/voiceStateUpdate.js
+  console.log("🔒 Private Channel System załadowany (przez voiceStateUpdate)");
 }
 
 // ====================== READY EVENT ======================
