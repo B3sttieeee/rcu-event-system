@@ -4,7 +4,8 @@ const {
   PermissionFlagsBits,
   ModalBuilder,
   TextInputBuilder,
-  TextInputStyle
+  TextInputStyle,
+  ActionRowBuilder   // ← DODANE
 } = require("discord.js");
 
 // ====================== SYSTEMS ======================
@@ -36,7 +37,7 @@ module.exports = {
     try {
       console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
-      // ====================== 1. EMBED BUILDER ======================
+      // 1. EMBED BUILDER
       if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
         return await embedCommand.handleModal(interaction);
       }
@@ -44,33 +45,33 @@ module.exports = {
         return await embedCommand.handleButton(interaction);
       }
 
-      // ====================== 2. GIVEAWAY ======================
+      // 2. GIVEAWAY
       if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
 
-      // ====================== 3. EVENT SYSTEM ======================
+      // 3. EVENT SYSTEM
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
       if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
         return await handleEventInteraction(interaction);
       }
 
-      // ====================== 4. EXPEDITION ======================
+      // 4. EXPEDITION
       if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
         return await handleExpeditionSelect(interaction);
       }
 
-      // ====================== 5. DAILY QUEST ======================
+      // 5. DAILY QUEST
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
 
-      // ====================== 6. PRIVATE CHANNEL PANEL ======================
+      // 6. PRIVATE CHANNEL PANEL
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
 
-      // ====================== 7. TICKET SYSTEM ======================
+      // 7. TICKET SYSTEM
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -85,7 +86,7 @@ module.exports = {
         return await ticketSystem.handle(interaction, client);
       }
 
-      // ====================== 8. SLASH COMMANDS ======================
+      // 8. SLASH COMMANDS
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
@@ -97,7 +98,6 @@ module.exports = {
         return await cmd.execute(interaction, client);
       }
 
-      // ====================== UNHANDLED ======================
       if (cid) {
         console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
       }
@@ -168,7 +168,7 @@ async function handleDailyClaim(interaction) {
   }
 }
 
-// ====================== PRIVATE CHANNEL PANEL HANDLER (z modalami) ======================
+// ====================== PRIVATE CHANNEL PANEL HANDLER ======================
 async function handlePrivatePanel(interaction) {
   await interaction.deferUpdate().catch(() => {});
 
@@ -223,7 +223,7 @@ async function handlePrivatePanel(interaction) {
       });
     } else {
       await interaction.followUp({
-        content: `✅ Wybrano akcję: **${action}**\n\nPełna obsługa tej funkcji zostanie dodana wkrótce.`,
+        content: `✅ Wybrano akcję: **${action}**\nPełna obsługa tej funkcji zostanie dodana wkrótce.`,
         ephemeral: true
       });
     }
