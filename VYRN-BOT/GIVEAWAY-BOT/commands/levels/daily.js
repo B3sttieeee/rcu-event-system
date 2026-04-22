@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { SlashCommandBuilder } = require("discord.js");
 const { buildDailyEmbed } = require("../../utils/dailySystem");
 
 module.exports = {
@@ -11,8 +11,6 @@ module.exports = {
       await interaction.deferReply({ ephemeral: true });
 
       const userId = interaction.user.id;
-
-      // Zawsze ładujemy świeżą wersję embeda
       const { embed, components } = buildDailyEmbed(userId);
 
       await interaction.editReply({
@@ -20,15 +18,9 @@ module.exports = {
         components: components || []
       });
 
-      // Lepsze logowanie streak (bezpieczniejsze)
-      const streakField = embed.data.fields?.find(f => f.name.includes("Streak") || f.name.includes("🔥"));
-      const streakValue = streakField ? streakField.value.replace(/[^0-9]/g, '') : "?";
-
-      console.log(`[DAILY CMD] Wyświetlono daily dla ${interaction.user.tag} | Streak: ${streakValue}`);
-
+      console.log(`[DAILY CMD] Wyświetlono daily dla ${interaction.user.tag}`);
     } catch (err) {
       console.error("[DAILY CMD] Błąd:", err);
-
       await interaction.editReply({
         content: "❌ Wystąpił błąd podczas ładowania daily.",
         embeds: [],
