@@ -5,7 +5,7 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder   // ← DODANE
+  ActionRowBuilder
 } = require("discord.js");
 
 // ====================== SYSTEMS ======================
@@ -98,6 +98,7 @@ module.exports = {
         return await cmd.execute(interaction, client);
       }
 
+      // Unhandled interaction
       if (cid) {
         console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
       }
@@ -166,18 +167,16 @@ async function handleDailyClaim(interaction) {
       components: []
     }).catch(() => {});
   }
-}
+};
 
 // ====================== PRIVATE CHANNEL PANEL HANDLER ======================
 async function handlePrivatePanel(interaction) {
-  await interaction.deferUpdate().catch(() => {});
-
   const channelId = interaction.customId.split("_")[2];
   const action = interaction.values[0];
 
   const channel = interaction.guild.channels.cache.get(channelId);
   if (!channel) {
-    return interaction.followUp({
+    return interaction.reply({
       content: "❌ Kanał nie istnieje lub został już usunięty.",
       ephemeral: true
     });
@@ -188,13 +187,14 @@ async function handlePrivatePanel(interaction) {
   );
 
   if (!isOwner) {
-    return interaction.followUp({
+    return interaction.reply({
       content: "❌ Nie jesteś właścicielem tego kanału.",
       ephemeral: true
     });
   }
 
   try {
+    // Akcje z modalem (rename i limit)
     if (action === "rename" || action === "limit") {
       const modal = new ModalBuilder()
         .setCustomId(`private_${action}_${channel.id}`)
@@ -210,13 +210,16 @@ async function handlePrivatePanel(interaction) {
       if (action === "limit") input.setMaxLength(2);
 
       modal.addComponents(new ActionRowBuilder().addComponents(input));
-      await interaction.showModal(modal);
-      return;
+
+      return await interaction.showModal(modal);
     }
 
-    // Pozostałe akcje
+    // Pozostałe akcje (delete itp.)
+    await interaction.deferUpdate().catch(() => {});
+
     if (action === "delete") {
       await channel.delete().catch(() => {});
+      userChannels.delete(interaction.user.id); // Czyszczenie mapy
       await interaction.followUp({
         content: "🗑️ Kanał został pomyślnie usunięty.",
         ephemeral: true
@@ -229,9 +232,11 @@ async function handlePrivatePanel(interaction) {
     }
   } catch (err) {
     console.error("[PrivatePanel] Błąd:", err);
-    await interaction.followUp({
-      content: "❌ Wystąpił błąd podczas wykonywania akcji.",
-      ephemeral: true
-    }).catch(() => {});
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({
+        content: "❌ Wystąpił błąd podczas wykonywania akcji.",
+        ephemeral: true
+      }).catch(() => {});
+    }
   }
 }
