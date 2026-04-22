@@ -5,7 +5,8 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder
+  ActionRowBuilder,
+  StringSelectMenuBuilder   // Dodane do dynamicznych menu (kick/ban/unban)
 } = require("discord.js");
 
 // ====================== SYSTEMS ======================
@@ -193,7 +194,7 @@ async function handlePrivatePanel(interaction) {
     return interaction.reply({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
   }
 
-  // Modale
+  // Modale dla rename i limit
   if (action === "rename" || action === "limit") {
     const modal = new ModalBuilder()
       .setCustomId(`private_${action}_${channel.id}`)
@@ -209,20 +210,27 @@ async function handlePrivatePanel(interaction) {
     if (action === "limit") input.setMaxLength(2);
 
     modal.addComponents(new ActionRowBuilder().addComponents(input));
-
     return await interaction.showModal(modal);
   }
 
-  // Pozostałe akcje
+  // Kick, Ban, Unban – dynamiczne menu użytkowników
+  if (action === "kick" || action === "ban" || action === "unban") {
+    return await showUserSelectMenu(interaction, channel, action);
+  }
+
+  // Pozostałe akcje (lock, unlock, delete)
   await interaction.deferUpdate().catch(() => {});
 
-  if (action === "delete") {
+  if (action === "lock") {
+    await channel.permissionOverwrites.edit(channel.guild.id, { Connect: false });
+    await interaction.followUp({ content: "🔒 Kanał został zablokowany dla wszystkich oprócz Ciebie.", ephemeral: true });
+  } else if (action === "unlock") {
+    await channel.permissionOverwrites.edit(channel.guild.id, { Connect: null });
+    await interaction.followUp({ content: "🔓 Kanał został odblokowany.", ephemeral: true });
+  } else if (action === "delete") {
     await channel.delete().catch(() => {});
     userChannels.delete(interaction.user.id);
-    await interaction.followUp({
-      content: "🗑️ Kanał został pomyślnie usunięty.",
-      ephemeral: true
-    });
+    await interaction.followUp({ content: "🗑️ Kanał został pomyślnie usunięty.", ephemeral: true });
   } else {
     await interaction.followUp({
       content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
@@ -231,30 +239,70 @@ async function handlePrivatePanel(interaction) {
   }
 };
 
+// ====================== DYNAMICZNE MENU UŻYTKOWNIKÓW (Kick / Ban / Unban) ======================
+async function showUserSelectMenu(interaction, channel, action) {
+  let options = [];
+
+  if (action === "kick" || action === "ban") {
+    // Osoby aktualnie na kanale (oprócz właściciela)
+    options = channel.members
+      .filter(m => m.id !== interaction.user.id)
+      .map(m => ({
+        label: m.displayName || m.user.username,
+        value: m.id,
+        description: m.user.tag
+      }));
+  } else if (action === "unban") {
+    // Osoby zbanowane na kanale
+    const banned = channel.permissionOverwrites.cache.filter(perm =>
+      perm.type === 1 && perm.deny.has(PermissionFlagsBits.Connect)
+    );
+    options = banned.map(perm => {
+      const member = interaction.guild.members.cache.get(perm.id);
+      return {
+        label: member ? (member.displayName || member.user.username) : "Nieznany użytkownik",
+        value: perm.id,
+        description: "Zbanowany"
+      };
+    });
+  }
+
+  if (options.length === 0) {
+    return interaction.reply({
+      content: action === "unban" ? "✅ Nie ma zbanowanych osób na tym kanale." : "❌ Na kanale nie ma nikogo innego.",
+      ephemeral: true
+    });
+  }
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`private_${action}_user_${channel.id}`)
+    .setPlaceholder(`Wybierz kogo ${action === "kick" ? "wyrzucić" : action === "ban" ? "zbanować" : "odbanować"}`)
+    .addOptions(options.slice(0, 25)); // limit Discorda
+
+  const row = new ActionRowBuilder().addComponents(select);
+
+  await interaction.reply({
+    content: `Wybierz użytkownika do **${action === "kick" ? "wyrzucenia" : action === "ban" ? "zbanowania" : "odbanowania"}**:`,
+    components: [row],
+    ephemeral: true
+  });
+}
+
 // ====================== PRIVATE RENAME MODAL ======================
 async function handlePrivateRename(interaction) {
   const channelId = interaction.customId.split("_")[2];
   const newName = interaction.fields.getTextInputValue("new_name");
 
   const channel = interaction.guild.channels.cache.get(channelId);
-  if (!channel) {
-    return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
-  }
+  if (!channel) return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
 
   try {
     await channel.setName(newName);
-    await interaction.reply({
-      content: `✅ Nazwa kanału zmieniona na: **${newName}**`,
-      ephemeral: true
-    });
+    await interaction.reply({ content: `✅ Nazwa kanału zmieniona na: **${newName}**`, ephemeral: true });
   } catch (err) {
-    console.error("[PrivateRename] Błąd:", err);
-    await interaction.reply({
-      content: "❌ Nie udało się zmienić nazwy kanału (sprawdź długość lub uprawnienia).",
-      ephemeral: true
-    });
+    await interaction.reply({ content: "❌ Nie udało się zmienić nazwy (sprawdź długość lub uprawnienia).", ephemeral: true });
   }
-};
+}
 
 // ====================== PRIVATE LIMIT MODAL ======================
 async function handlePrivateLimit(interaction) {
@@ -262,9 +310,7 @@ async function handlePrivateLimit(interaction) {
   const newLimit = parseInt(interaction.fields.getTextInputValue("new_limit"));
 
   const channel = interaction.guild.channels.cache.get(channelId);
-  if (!channel) {
-    return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
-  }
+  if (!channel) return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
 
   if (isNaN(newLimit) || newLimit < 1 || newLimit > 99) {
     return interaction.reply({ content: "❌ Limit musi być liczbą od 1 do 99.", ephemeral: true });
@@ -272,15 +318,8 @@ async function handlePrivateLimit(interaction) {
 
   try {
     await channel.setUserLimit(newLimit);
-    await interaction.reply({
-      content: `✅ Limit osób na kanale zmieniony na: **${newLimit}**`,
-      ephemeral: true
-    });
+    await interaction.reply({ content: `✅ Limit zmieniony na: **${newLimit}** osób`, ephemeral: true });
   } catch (err) {
-    console.error("[PrivateLimit] Błąd:", err);
-    await interaction.reply({
-      content: "❌ Nie udało się zmienić limitu kanału.",
-      ephemeral: true
-    });
+    await interaction.reply({ content: "❌ Nie udało się zmienić limitu.", ephemeral: true });
   }
 }
