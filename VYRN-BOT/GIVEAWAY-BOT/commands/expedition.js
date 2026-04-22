@@ -42,7 +42,7 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor("#0a0a0a")
       .setTitle("🪓 Lumberjack House")
-      .setDescription("Wybierz lokację i czas ekspedycji swojego Lumberjacka.\nPo zakończeniu otrzymasz powiadomienie na DM.")
+      .setDescription("Wybierz lokację i czas swojego Lumberjacka.\nPo zakończeniu otrzymasz powiadomienie na DM.")
       .setImage("https://imgur.com/d410WPL.png")
       .setFooter({ text: "VYRN • Lumberjack System" })
       .setTimestamp();
