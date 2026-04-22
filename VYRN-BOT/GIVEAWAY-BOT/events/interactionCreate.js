@@ -152,8 +152,9 @@ async function handleDailyClaim(interaction) {
       });
     }
 
-    // Przekazujemy member jeśli istnieje (potrzebne do przyznawania XP)
-    const member = interaction.member || interaction.guild?.members.cache.get(userId);
+    // Pobieramy member (działa zarówno w DM jak i na serwerze)
+    const member = interaction.member || 
+                   (interaction.guild ? interaction.guild.members.cache.get(userId) : null);
 
     const result = await claimDaily(userId, member);
 
