@@ -48,7 +48,6 @@ const normalizeUser = (user = {}) => ({
 const normalizeDb = (db = {}) => {
   const normalized = { users: {} };
   if (!db.users || typeof db.users !== "object") return normalized;
-
   for (const [userId, userData] of Object.entries(db.users)) {
     normalized.users[userId] = normalizeUser(userData);
   }
@@ -68,7 +67,6 @@ const getCurrentDayKey = () =>
 // =====================================================
 function loadProfile() {
   if (dbCache) return dbCache;
-
   try {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
@@ -76,7 +74,6 @@ function loadProfile() {
       console.log(`[PROFILE] New database created: ${PROFILE_PATH}`);
       return dbCache;
     }
-
     const raw = fs.readFileSync(PROFILE_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
     dbCache = normalizeDb(parsed);
@@ -90,7 +87,6 @@ function loadProfile() {
 
 function saveProfile() {
   if (!dbCache) return writeQueue;
-
   const snapshot = JSON.stringify(dbCache, null, 2);
   writeQueue = writeQueue
     .catch(() => null)
@@ -102,7 +98,6 @@ function saveProfile() {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
       }
     });
-
   return writeQueue;
 }
 
@@ -119,16 +114,13 @@ async function flushProfile() {
 // =====================================================
 function ensureUser(userId) {
   if (!userId) return null;
-
   const db = loadProfile();
-
   if (!db.users[userId]) {
     db.users[userId] = normalizeUser();
     saveProfile();
   } else {
     db.users[userId] = normalizeUser(db.users[userId]);
   }
-
   return db.users[userId];
 }
 
@@ -169,13 +161,13 @@ function getVoiceMinutes(userId) {
 }
 
 // =====================================================
-// DAILY LOGIC
+// DAILY LOGIC - NAPRAWIONA WERSJA
 // =====================================================
 function getDailyTier(streak = 0) {
   const safeStreak = toSafeNumber(streak, 0);
   return {
-    vcRequired: 30 + safeStreak * 5,
-    msgRequired: safeStreak >= 5 ? 20 + safeStreak * 2 : 50
+    vcRequired: 30,                    // zawsze 30 minut VC
+    msgRequired: 50                    // zawsze 50 wiadomości (bez obniżania przy streaku)
   };
 }
 
@@ -186,10 +178,15 @@ function isDailyReady(userId) {
   const tier = getDailyTier(user.daily.streak);
   const vcMinutes = Math.floor(user.daily.vc / 60);
 
-  return (
+  const ready = (
     vcMinutes >= tier.vcRequired &&
     user.daily.msgs >= tier.msgRequired
   );
+
+  // Debug log przy każdym sprawdzeniu
+  console.log(`[DAILY CHECK] ${userId} | Msg: ${user.daily.msgs}/${tier.msgRequired} | VC: ${vcMinutes}/${tier.vcRequired} | Ready: ${ready} | Streak: ${user.daily.streak}`);
+
+  return ready;
 }
 
 // =====================================================
@@ -222,6 +219,7 @@ async function claimDaily(userId, member = null) {
     }
   }
 
+  // Reset daily
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
@@ -261,7 +259,6 @@ function runDailyReset() {
 
 function startDailyReset() {
   if (resetInterval) return;
-
   loadProfile();
   lastResetDayKey = getCurrentDayKey();
 
