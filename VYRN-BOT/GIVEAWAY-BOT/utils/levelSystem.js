@@ -1,7 +1,6 @@
 const fs = require("fs");
 const path = require("path");
 const { ChannelType, EmbedBuilder } = require("discord.js");
-
 const { getCurrentBoost } = require("./boostSystem");
 const { addVoiceTime, addMessage } = require("./profileSystem");
 const { addCoins } = require("./economySystem");
@@ -10,8 +9,7 @@ const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "levels.json");
 const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 const DB_TMP_PATH = `${DB_PATH}.tmp`;
-
-const LEVEL_UP_CHANNEL_ID = "1475999590716018719"; // Twój kanał level-up
+const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 
 const DEFAULT_CONFIG = {
   messageXP: 5,
@@ -22,11 +20,9 @@ const DEFAULT_CONFIG = {
   boostRole: "1476000398107217980"
 };
 
-// =====================================================
-// ROLE REWARDS (Twoje role)
-// =====================================================
+// Role za poziomy
 const LEVEL_ROLES = {
-  5:  "1476000458987278397",
+  5: "1476000458987278397",
   15: "1476000995501670534",
   30: "1476000459595448442",
   45: "1476000991206707221",
@@ -49,8 +45,8 @@ let dbCache = null;
 let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
-
 const xpCooldown = new Map();
+const dailyCheckCooldown = new Map();   // <--- Nowe zabezpieczenie
 
 // =====================================================
 // HELPERS
@@ -66,11 +62,30 @@ const logError = (scope, error) => {
   else console.error(error);
 };
 
+// =====================================================
+// TRIGGER DAILY CHECK (z cooldownem - zapobiega spamowi)
+// =====================================================
 const triggerDailyCheck = async (member) => {
+  if (!member || member.user?.bot) return;
+
+  const userId = member.id;
+  const now = Date.now();
+
+  // Cooldown 30 sekund - nie sprawdzamy daily co minutę
+  if (dailyCheckCooldown.has(userId) && now - dailyCheckCooldown.get(userId) < 30000) {
+    return;
+  }
+
+  dailyCheckCooldown.set(userId, now);
+
   try {
     const { checkDailyDM } = require("./dailySystem");
-    if (typeof checkDailyDM === "function") await checkDailyDM(member);
-  } catch (e) {}
+    if (typeof checkDailyDM === "function") {
+      await checkDailyDM(member);
+    }
+  } catch (e) {
+    // ciche łapanie błędów
+  }
 };
 
 const isEligibleVoiceMember = (member) => {
@@ -90,20 +105,18 @@ function getRank(level) {
   if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
   if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
   if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
-  if (level >= 5)  return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
+  if (level >= 5) return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
   return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
 // =====================================================
-// LEVEL UP MESSAGE - Ładny embed
+// LEVEL UP MESSAGE
 // =====================================================
 async function sendLevelUpMessage(member, newLevel, xpGained) {
   if (!member || member.user.bot) return;
 
   const rank = getRank(newLevel);
   const coinReward = 50;
-
-  // Dodaj monety za level up
   addCoins(member.id, coinReward);
 
   const embed = new EmbedBuilder()
@@ -124,7 +137,6 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
 
   try {
     const levelUpChannel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
-    
     if (levelUpChannel) {
       await levelUpChannel.send({
         content: `> **${member}** just leveled up!`,
@@ -145,7 +157,6 @@ function loadDB() {
     if (!fs.existsSync(DB_PATH)) {
       dbCache = { xp: {} };
       fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
-      console.log("[LEVEL] Utworzono nowy levels.json");
       return dbCache;
     }
     const raw = fs.readFileSync(DB_PATH, "utf8");
@@ -154,7 +165,6 @@ function loadDB() {
     for (const [userId, userData] of Object.entries(parsed.xp || {})) {
       dbCache.xp[userId] = normalizeUserXP(userData);
     }
-    console.log(`[LEVEL] Załadowano poziomy dla ${Object.keys(dbCache.xp).length} użytkowników`);
     return dbCache;
   } catch (error) {
     logError("DB LOAD ERROR", error);
@@ -245,8 +255,8 @@ async function addXP(member, base = 0, length = 0, options = {}) {
 
   let gain = safeBase;
   if ((length || 0) >= cfg.lengthThreshold) gain *= 1 + cfg.lengthBonus;
-
   gain = Math.floor(gain * getMultiplier(member));
+
   if (gain <= 0) return null;
 
   const user = db.xp[member.id];
@@ -260,12 +270,11 @@ async function addXP(member, base = 0, length = 0, options = {}) {
   }
 
   if (leveled) {
-    await checkRoles(member, user.level);           // Nadawanie ról
-    await sendLevelUpMessage(member, user.level, gain); // Powiadomienie
+    await checkRoles(member, user.level);
+    await sendLevelUpMessage(member, user.level, gain);
   }
 
   saveDB();
-
   return {
     leveledUp: leveled,
     level: user.level,
@@ -275,12 +284,12 @@ async function addXP(member, base = 0, length = 0, options = {}) {
 }
 
 // =====================================================
-// ROLE REWARDS (Twoje role)
+// ROLE REWARDS
 // =====================================================
 async function checkRoles(member, level) {
   for (const [reqLevel, roleId] of Object.entries(LEVEL_ROLES)) {
     if (level >= Number(reqLevel) && !member.roles.cache.has(roleId)) {
-      await member.roles.add(roleId).catch(err => 
+      await member.roles.add(roleId).catch(err =>
         console.error(`[LEVEL] Failed to add role ${roleId} to ${member.user.tag}:`, err.message)
       );
     }
@@ -325,9 +334,20 @@ function startVoiceXP(client) {
   }, 60_000);
 }
 
-// Config setters
-function setMessageXP(value) { /* Twój kod */ }
-function setVoiceXP(value) { /* Twój kod */ }
+// =====================================================
+// CONFIG SETTERS
+// =====================================================
+function setMessageXP(value) {
+  const cfg = loadConfig();
+  cfg.messageXP = Number(value) || DEFAULT_CONFIG.messageXP;
+  saveConfig();
+}
+
+function setVoiceXP(value) {
+  const cfg = loadConfig();
+  cfg.voiceXP = Number(value) || DEFAULT_CONFIG.voiceXP;
+  saveConfig();
+}
 
 // ====================== EXPORT ======================
 module.exports = {
