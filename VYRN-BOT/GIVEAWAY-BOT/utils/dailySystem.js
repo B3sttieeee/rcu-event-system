@@ -16,7 +16,7 @@ const {
 const BLACK_COLOR = "#0a0a0a";
 const READY_COLOR = "#22c55e";
 
-// ====================== ENSURE STATE ======================
+// ====================== ENSURE ======================
 function ensureDailyState(user) {
   if (!user.daily) user.daily = {};
   const d = user.daily;
@@ -29,10 +29,11 @@ function ensureDailyState(user) {
   return d;
 }
 
-// ====================== BUILD EMBED (NAJWAŻNIEJSZE) ======================
+// ====================== BUILD EMBED ======================
 function buildDailyEmbed(userId) {
-  // ZAWSZE pobieramy najświeższe dane z pliku
-  const db = loadProfile();
+  // AGRESYWNE CZYSZCZENIE CACHE - to jest klucz
+  loadProfile();           // wymuszamy odświeżenie
+  const db = loadProfile(); // drugie wywołanie = na pewno świeże dane
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
 
@@ -45,7 +46,7 @@ function buildDailyEmbed(userId) {
     .setDescription(
       ready
         ? "**Wszystkie wymagania spełnione!** Kliknij przycisk poniżej, aby odebrać nagrodę."
-        : "Wbij wymagane progi i wróć po nagrodę."
+        : "Wykonaj codzienne cele, aby zdobyć nagrodę."
     )
     .addFields(
       {
@@ -80,16 +81,16 @@ function buildDailyEmbed(userId) {
   return { embed, components };
 }
 
-// ====================== PO ODEBRANIU (reset) ======================
+// ====================== PO ODEBRANIU ======================
 function onDailyClaimed(userId) {
   try {
+    loadProfile(); // wymuszamy odświeżenie
     const db = loadProfile();
     const user = db.users?.[userId];
     if (!user) return;
 
     const daily = ensureDailyState(user);
 
-    // Resetujemy tylko flagi powiadomień
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
 
@@ -101,12 +102,10 @@ function onDailyClaimed(userId) {
   }
 }
 
-// ====================== STUB (DM wyłączone) ======================
 async function checkDailyDM() {
   return false;
 }
 
-// ====================== EXPORTS ======================
 module.exports = {
   buildDailyEmbed,
   onDailyClaimed,
