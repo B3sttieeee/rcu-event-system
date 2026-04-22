@@ -1,13 +1,10 @@
-// =====================================================
-// VYRN BOT - HYBRID MODULAR ARCHITECTURE
-// =====================================================
+// src/bot.js
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 
-require("dotenv").config(); // tylko do lokalnego developmentu
+require("dotenv").config();
 
-// ====================== CLIENT ======================
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
@@ -20,53 +17,48 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Rate limit logging
 client.rest.on("rateLimited", (info) => {
   console.warn(`[RATE LIMIT] ${info.method} ${info.url} — ${info.timeToReset}ms`);
 });
 
-// ====================== LOAD COMMANDS ======================
+// Load Commands
 function loadCommands() {
   const commandsPath = path.join(__dirname, "commands");
-  if (!fs.existsSync(commandsPath)) return console.warn("⚠️ Folder 'commands' nie istnieje!");
+  if (!fs.existsSync(commandsPath)) return console.warn("⚠️ Brak folderu commands");
 
-  let loaded = 0;
+  let count = 0;
   const loadFile = (filePath) => {
     try {
       const cmd = require(filePath);
       if (cmd?.data?.name && typeof cmd.execute === "function") {
         client.commands.set(cmd.data.name, cmd);
-        console.log(`✅ Loaded command: /${cmd.data.name}`);
-        loaded++;
+        console.log(`✅ Command: /${cmd.data.name}`);
+        count++;
       }
     } catch (e) {
-      console.error(`❌ CMD ERROR ${filePath}:`, e.message);
+      console.error(`❌ CMD ERROR: ${filePath}`, e.message);
     }
   };
 
   const items = fs.readdirSync(commandsPath);
   for (const item of items) {
     const itemPath = path.join(commandsPath, item);
-    const stat = fs.statSync(itemPath);
-
-    if (stat.isDirectory()) {
-      fs.readdirSync(itemPath)
-        .filter(f => f.endsWith(".js"))
-        .forEach(f => loadFile(path.join(itemPath, f)));
+    if (fs.statSync(itemPath).isDirectory()) {
+      fs.readdirSync(itemPath).filter(f => f.endsWith(".js")).forEach(f => loadFile(path.join(itemPath, f)));
     } else if (item.endsWith(".js")) {
       loadFile(itemPath);
     }
   }
-  console.log(`📊 Załadowano ${loaded} komend`);
+  console.log(`📊 Załadowano ${count} komend`);
 }
 
-// ====================== LOAD EVENTS ======================
+// Load Events
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
-  if (!fs.existsSync(eventsPath)) return console.warn("⚠️ Folder 'events' nie istnieje!");
+  if (!fs.existsSync(eventsPath)) return console.warn("⚠️ Brak folderu events");
 
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
-  let loaded = 0;
+  let count = 0;
 
   for (const file of files) {
     try {
@@ -74,82 +66,59 @@ function loadEvents() {
       if (!event?.name || typeof event.execute !== "function") continue;
 
       const runner = (...args) => event.execute(...args, client);
+      if (event.once) client.once(event.name, runner);
+      else client.on(event.name, runner);
 
-      if (event.once) {
-        client.once(event.name, runner);
-      } else {
-        client.on(event.name, runner);
-      }
-
-      console.log(`✅ Loaded event: ${event.name}`);
-      loaded++;
+      console.log(`✅ Event: ${event.name}`);
+      count++;
     } catch (e) {
       console.error(`❌ EVENT ERROR ${file}:`, e.message);
     }
   }
-  console.log(`📊 Załadowano ${loaded} eventów`);
+  console.log(`📊 Załadowano ${count} eventów`);
 }
 
-// ====================== LOAD SYSTEMS ======================
+// Load Systems
 async function loadSystems() {
-  console.log("\n🚀 Ładowanie systemów modularnych...");
+  console.log("\n🚀 Ładowanie systemów...");
 
-  const systemsList = [
-    { name: "log",        path: "./systems/log" },
-    { name: "economy",    path: "./systems/economy" },
-    { name: "boost",      path: "./systems/boost" },
-    { name: "profile",    path: "./systems/profile" },
-    { name: "level",      path: "./systems/level" },
-    { name: "clan",       path: "./systems/clan" },
-    { name: "rules",      path: "./systems/rules" },
-    { name: "event",      path: "./systems/event" },
-    { name: "giveaway",   path: "./systems/giveaway" },
-    { name: "tickets",    path: "./systems/tickets" },
-    { name: "privatevc",  path: "./systems/privatevc" },
+  const systems = [
+    "log", "economy", "boost", "profile", "level", "clan", 
+    "rules", "event", "giveaway", "tickets", "privatevc"
   ];
 
-  for (const sys of systemsList) {
+  for (const sysName of systems) {
     try {
-      const system = require(sys.path);
-      if (typeof system.init === "function") {
-        await system.init(client);
-        console.log(`✅ ${sys.name.padEnd(10)} → załadowany`);
-      } else {
-        console.log(`✅ ${sys.name.padEnd(10)} → załadowany (bez init)`);
+      const sys = require(`./systems/${sysName}`);
+      if (typeof sys.init === "function") {
+        await sys.init(client);
+        console.log(`✅ ${sysName.padEnd(10)} → OK`);
       }
     } catch (e) {
-      console.error(`❌ ${sys.name.padEnd(10)} → błąd: ${e.message}`);
+      console.error(`❌ ${sysName.padEnd(10)} → BŁĄD: ${e.message}`);
     }
   }
-
-  console.log("🎉 Wszystkie systemy modularne załadowane pomyślnie!\n");
+  console.log("🎉 Systemy załadowane!\n");
 }
 
-// ====================== READY ======================
+// Ready
 client.once("ready", async () => {
   console.log("================================");
-  console.log(`🔥 Bot zalogowany jako: ${client.user.tag}`);
-  console.log(`📊 Serwery: ${client.guilds.cache.size}`);
+  console.log(`🔥 ${client.user.tag} jest online`);
   console.log("================================");
 
   loadCommands();
   loadEvents();
   await loadSystems();
 
-  console.log("✅ VYRN BOT w pełni gotowy do działania!");
+  console.log("✅ BOT W PEŁNI GOTOWY!");
 });
 
-// ====================== GLOBAL ERROR HANDLING ======================
-process.on("unhandledRejection", (err) => console.error("❌ Unhandled Rejection:", err));
-process.on("uncaughtException", (err) => {
-  console.error("❌ Uncaught Exception:", err);
+// Error handling
+process.on("unhandledRejection", err => console.error("Unhandled Rejection:", err));
+process.on("uncaughtException", err => {
+  console.error("Uncaught Exception:", err);
   process.exit(1);
 });
 
-// ====================== LOGIN ======================
-client.login(process.env.TOKEN)
-  .then(() => console.log("🔑 Logowanie zakończone sukcesem"))
-  .catch(err => {
-    console.error("❌ BŁĄD LOGOWANIA:", err.message);
-    process.exit(1);
-  });
+client.login(process.env.TOKEN);
