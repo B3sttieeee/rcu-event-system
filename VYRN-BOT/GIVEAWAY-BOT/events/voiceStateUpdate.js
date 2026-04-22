@@ -25,10 +25,8 @@ module.exports = {
     const member = newState.member;
     if (!member || member.user.bot) return;
 
-    // Debug log (możesz wyłączyć później)
     console.log(`[VoiceDebug] ${member.user.tag} | ${oldState.channel?.id || 'none'} → ${newState.channel?.id || 'none'}`);
 
-    // Ktoś dołączył do kanału tworzenia prywatnego kanału
     if (!oldState.channel && newState.channel && newState.channel.id === CREATE_CHANNEL_ID) {
       console.log(`[PrivateChannel] Rozpoczynam tworzenie kanału dla ${member.user.tag}`);
       await handlePrivateChannelCreation(member);
@@ -36,19 +34,19 @@ module.exports = {
   }
 };
 
-// ====================== TWORZENIE PRYWATNEGO KANAŁU ======================
+// ====================== TWORZENIE KANAŁU ======================
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
   // Ochrona przed duplikatami
   if (userChannels.has(member.id)) {
-    const existingChannel = guild.channels.cache.get(userChannels.get(member.id));
-    if (existingChannel) {
-      await member.voice.setChannel(existingChannel).catch(() => {});
+    const existing = guild.channels.cache.get(userChannels.get(member.id));
+    if (existing) {
+      await member.voice.setChannel(existing).catch(() => {});
       console.log(`[PrivateChannel] Użytkownik ${member.user.tag} ma już aktywny kanał - przeniesiono`);
       return;
     }
-    userChannels.delete(member.id); // Usuń martwy wpis
+    userChannels.delete(member.id);
   }
 
   // Czekamy 5 sekund
@@ -56,7 +54,7 @@ async function handlePrivateChannelCreation(member) {
 
   // Sprawdzenie czy nadal jest na kanale tworzenia
   if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) {
-    console.log(`[PrivateChannel] Użytkownik ${member.user.tag} wyszedł przed upływem 5 sekund - anulowano`);
+    console.log(`[PrivateChannel] Użytkownik ${member.user.tag} wyszedł przed 5 sekundami - anulowano`);
     return;
   }
 
@@ -83,20 +81,20 @@ async function handlePrivateChannelCreation(member) {
 
     userChannels.set(member.id, channel.id);
 
-    // Automatyczne przeniesienie użytkownika na jego kanał
+    // Przeniesienie użytkownika na jego kanał
     await member.voice.setChannel(channel).catch(() => {
       console.log(`[PrivateChannel] Nie udało się przenieść ${member.user.tag}`);
     });
 
     // Powitalna wiadomość
     await channel.send({
-      content: `> **${member}** Twój prywatny kanał został pomyślnie stworzony!`
+      content: `> **${member}** Twój prywatny kanał został stworzony!`
     }).catch(() => {});
 
-    // Wysyłamy panel sterowania
+    // Panel sterowania
     await sendControlPanel(channel, member);
 
-    // Watcher usuwania pustego kanału
+    // Watcher pustego kanału
     startEmptyChannelWatcher(channel, member.id);
 
     console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name} (${channel.id})`);
@@ -148,7 +146,7 @@ async function sendControlPanel(channel, owner) {
   await channel.send({ embeds: [embed], components: [row] }).catch(console.error);
 }
 
-// ====================== OBSŁUGA PANELU (Select Menu) ======================
+// ====================== OBSŁUGA PANELU (Select Menu + Modale) ======================
 async function handlePrivatePanel(interaction) {
   const channelId = interaction.customId.split("_")[2];
   const action = interaction.values[0];
@@ -167,6 +165,7 @@ async function handlePrivatePanel(interaction) {
   }
 
   try {
+    // Modale dla rename i limit
     if (action === "rename" || action === "limit") {
       const modal = new ModalBuilder()
         .setCustomId(`private_${action}_${channel.id}`)
@@ -182,16 +181,20 @@ async function handlePrivatePanel(interaction) {
       if (action === "limit") input.setMaxLength(2);
 
       modal.addComponents(new ActionRowBuilder().addComponents(input));
+
       return await interaction.showModal(modal);
     }
 
-    // Dla pozostałych akcji deferujemy
+    // Pozostałe akcje
     await interaction.deferUpdate().catch(() => {});
 
     if (action === "delete") {
       await channel.delete().catch(() => {});
       userChannels.delete(interaction.user.id);
-      await interaction.followUp({ content: "🗑️ Kanał został pomyślnie usunięty.", ephemeral: true });
+      await interaction.followUp({
+        content: "🗑️ Kanał został pomyślnie usunięty.",
+        ephemeral: true
+      });
     } else {
       await interaction.followUp({
         content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
