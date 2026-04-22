@@ -37,7 +37,7 @@ module.exports = {
     try {
       console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
-      // EMBED BUILDER
+      // 1. EMBED BUILDER
       if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
         return await embedCommand.handleModal(interaction);
       }
@@ -45,33 +45,43 @@ module.exports = {
         return await embedCommand.handleButton(interaction);
       }
 
-      // GIVEAWAY
+      // 2. GIVEAWAY
       if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
 
-      // EVENT SYSTEM
+      // 3. EVENT SYSTEM
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
       if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
         return await handleEventInteraction(interaction);
       }
 
-      // EXPEDITION
+      // 4. EXPEDITION
       if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
         return await handleExpeditionSelect(interaction);
       }
 
-      // DAILY QUEST
+      // 5. DAILY QUEST
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
 
-      // PRIVATE CHANNEL PANEL
+      // 6. PRIVATE CHANNEL PANEL (Select Menu)
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
 
-      // TICKET SYSTEM
+      // 7. PRIVATE CHANNEL MODALS (rename & limit)
+      if (interaction.isModalSubmit()) {
+        if (interaction.customId.startsWith("private_rename_")) {
+          return await handlePrivateRename(interaction);
+        }
+        if (interaction.customId.startsWith("private_limit_")) {
+          return await handlePrivateLimit(interaction);
+        }
+      }
+
+      // 8. TICKET SYSTEM
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -86,7 +96,7 @@ module.exports = {
         return await ticketSystem.handle(interaction, client);
       }
 
-      // SLASH COMMANDS
+      // 9. SLASH COMMANDS
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
@@ -165,7 +175,7 @@ async function handleDailyClaim(interaction) {
   }
 };
 
-// ====================== PRIVATE CHANNEL PANEL HANDLER ======================
+// ====================== PRIVATE CHANNEL SELECT MENU ======================
 async function handlePrivatePanel(interaction) {
   const channelId = interaction.customId.split("_")[2];
   const action = interaction.values[0];
@@ -183,7 +193,7 @@ async function handlePrivatePanel(interaction) {
     return interaction.reply({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
   }
 
-  // MODALE – ważne: NIE deferujemy przed showModal!
+  // Modale
   if (action === "rename" || action === "limit") {
     const modal = new ModalBuilder()
       .setCustomId(`private_${action}_${channel.id}`)
@@ -216,6 +226,60 @@ async function handlePrivatePanel(interaction) {
   } else {
     await interaction.followUp({
       content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
+      ephemeral: true
+    });
+  }
+};
+
+// ====================== PRIVATE RENAME MODAL ======================
+async function handlePrivateRename(interaction) {
+  const channelId = interaction.customId.split("_")[2];
+  const newName = interaction.fields.getTextInputValue("new_name");
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) {
+    return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+  }
+
+  try {
+    await channel.setName(newName);
+    await interaction.reply({
+      content: `✅ Nazwa kanału zmieniona na: **${newName}**`,
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error("[PrivateRename] Błąd:", err);
+    await interaction.reply({
+      content: "❌ Nie udało się zmienić nazwy kanału (sprawdź długość lub uprawnienia).",
+      ephemeral: true
+    });
+  }
+};
+
+// ====================== PRIVATE LIMIT MODAL ======================
+async function handlePrivateLimit(interaction) {
+  const channelId = interaction.customId.split("_")[2];
+  const newLimit = parseInt(interaction.fields.getTextInputValue("new_limit"));
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) {
+    return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+  }
+
+  if (isNaN(newLimit) || newLimit < 1 || newLimit > 99) {
+    return interaction.reply({ content: "❌ Limit musi być liczbą od 1 do 99.", ephemeral: true });
+  }
+
+  try {
+    await channel.setUserLimit(newLimit);
+    await interaction.reply({
+      content: `✅ Limit osób na kanale zmieniony na: **${newLimit}**`,
+      ephemeral: true
+    });
+  } catch (err) {
+    console.error("[PrivateLimit] Błąd:", err);
+    await interaction.reply({
+      content: "❌ Nie udało się zmienić limitu kanału.",
       ephemeral: true
     });
   }
