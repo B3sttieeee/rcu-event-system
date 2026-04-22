@@ -6,7 +6,7 @@ const {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
-  StringSelectMenuBuilder   // Dodane do dynamicznych menu (kick/ban/unban)
+  StringSelectMenuBuilder
 } = require("discord.js");
 
 // ====================== SYSTEMS ======================
@@ -38,7 +38,7 @@ module.exports = {
     try {
       console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
-      // 1. EMBED BUILDER
+      // EMBED BUILDER
       if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
         return await embedCommand.handleModal(interaction);
       }
@@ -46,33 +46,38 @@ module.exports = {
         return await embedCommand.handleButton(interaction);
       }
 
-      // 2. GIVEAWAY
+      // GIVEAWAY
       if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
 
-      // 3. EVENT SYSTEM
+      // EVENT SYSTEM
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
       if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
         return await handleEventInteraction(interaction);
       }
 
-      // 4. EXPEDITION
+      // EXPEDITION
       if (interaction.isStringSelectMenu() && cid === "expedition_time_select") {
         return await handleExpeditionSelect(interaction);
       }
 
-      // 5. DAILY QUEST
+      // DAILY QUEST
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
 
-      // 6. PRIVATE CHANNEL PANEL (Select Menu)
+      // PRIVATE CHANNEL - SELECT MENU
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
 
-      // 7. PRIVATE CHANNEL MODALS (rename & limit)
+      // PRIVATE CHANNEL - USER SELECT (kick/ban/unban)
+      if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_") && interaction.customId.includes("_user_")) {
+        return await handlePrivateUserAction(interaction);
+      }
+
+      // PRIVATE CHANNEL - MODALS (rename & limit)
       if (interaction.isModalSubmit()) {
         if (interaction.customId.startsWith("private_rename_")) {
           return await handlePrivateRename(interaction);
@@ -82,7 +87,7 @@ module.exports = {
         }
       }
 
-      // 8. TICKET SYSTEM
+      // TICKET SYSTEM
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -97,7 +102,7 @@ module.exports = {
         return await ticketSystem.handle(interaction, client);
       }
 
-      // 9. SLASH COMMANDS
+      // SLASH COMMANDS
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
@@ -194,7 +199,6 @@ async function handlePrivatePanel(interaction) {
     return interaction.reply({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
   }
 
-  // Modale dla rename i limit
   if (action === "rename" || action === "limit") {
     const modal = new ModalBuilder()
       .setCustomId(`private_${action}_${channel.id}`)
@@ -213,17 +217,17 @@ async function handlePrivatePanel(interaction) {
     return await interaction.showModal(modal);
   }
 
-  // Kick, Ban, Unban – dynamiczne menu użytkowników
+  // Kick, Ban, Unban → pokazujemy listę użytkowników
   if (action === "kick" || action === "ban" || action === "unban") {
     return await showUserSelectMenu(interaction, channel, action);
   }
 
-  // Pozostałe akcje (lock, unlock, delete)
+  // Lock / Unlock / Delete
   await interaction.deferUpdate().catch(() => {});
 
   if (action === "lock") {
     await channel.permissionOverwrites.edit(channel.guild.id, { Connect: false });
-    await interaction.followUp({ content: "🔒 Kanał został zablokowany dla wszystkich oprócz Ciebie.", ephemeral: true });
+    await interaction.followUp({ content: "🔒 Kanał został zablokowany (tylko Ty masz dostęp).", ephemeral: true });
   } else if (action === "unlock") {
     await channel.permissionOverwrites.edit(channel.guild.id, { Connect: null });
     await interaction.followUp({ content: "🔓 Kanał został odblokowany.", ephemeral: true });
@@ -233,19 +237,18 @@ async function handlePrivatePanel(interaction) {
     await interaction.followUp({ content: "🗑️ Kanał został pomyślnie usunięty.", ephemeral: true });
   } else {
     await interaction.followUp({
-      content: `✅ Wybrano akcję: **${action}**\nPełna obsługa zostanie dodana wkrótce.`,
+      content: `✅ Wybrano akcję: **${action}**`,
       ephemeral: true
     });
   }
 };
 
-// ====================== DYNAMICZNE MENU UŻYTKOWNIKÓW (Kick / Ban / Unban) ======================
+// ====================== DYNAMICZNE MENU UŻYTKOWNIKÓW (Kick/Ban/Unban) ======================
 async function showUserSelectMenu(interaction, channel, action) {
   let options = [];
 
   if (action === "kick" || action === "ban") {
-    // Osoby aktualnie na kanale (oprócz właściciela)
-    options = channel.members
+    options = Array.from(channel.members.values())
       .filter(m => m.id !== interaction.user.id)
       .map(m => ({
         label: m.displayName || m.user.username,
@@ -253,14 +256,13 @@ async function showUserSelectMenu(interaction, channel, action) {
         description: m.user.tag
       }));
   } else if (action === "unban") {
-    // Osoby zbanowane na kanale
     const banned = channel.permissionOverwrites.cache.filter(perm =>
       perm.type === 1 && perm.deny.has(PermissionFlagsBits.Connect)
     );
     options = banned.map(perm => {
       const member = interaction.guild.members.cache.get(perm.id);
       return {
-        label: member ? (member.displayName || member.user.username) : "Nieznany użytkownik",
+        label: member ? (member.displayName || member.user.username) : "Nieznany",
         value: perm.id,
         description: "Zbanowany"
       };
@@ -277,7 +279,7 @@ async function showUserSelectMenu(interaction, channel, action) {
   const select = new StringSelectMenuBuilder()
     .setCustomId(`private_${action}_user_${channel.id}`)
     .setPlaceholder(`Wybierz kogo ${action === "kick" ? "wyrzucić" : action === "ban" ? "zbanować" : "odbanować"}`)
-    .addOptions(options.slice(0, 25)); // limit Discorda
+    .addOptions(options.slice(0, 25));
 
   const row = new ActionRowBuilder().addComponents(select);
 
@@ -286,6 +288,44 @@ async function showUserSelectMenu(interaction, channel, action) {
     components: [row],
     ephemeral: true
   });
+};
+
+// ====================== OBSŁUGA AKCJI NA UŻYTKOWNIKU (Kick / Ban / Unban) ======================
+async function handlePrivateUserAction(interaction) {
+  const parts = interaction.customId.split("_");
+  const action = parts[1]; // kick / ban / unban
+  const channelId = parts[3];
+  const targetId = interaction.values[0];
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) {
+    return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+  }
+
+  const targetMember = await interaction.guild.members.fetch(targetId).catch(() => null);
+  if (!targetMember && action !== "unban") {
+    return interaction.reply({ content: "❌ Nie znaleziono użytkownika.", ephemeral: true });
+  }
+
+  await interaction.deferUpdate().catch(() => {});
+
+  try {
+    if (action === "kick") {
+      await targetMember.voice.disconnect().catch(() => {});
+      await interaction.followUp({ content: `🚪 Wyrzucono ${targetMember || targetId} z kanału.`, ephemeral: true });
+    } 
+    else if (action === "ban") {
+      await channel.permissionOverwrites.edit(targetId, { Connect: false });
+      await interaction.followUp({ content: `🔨 Zbanowano ${targetMember || targetId} na kanale.`, ephemeral: true });
+    } 
+    else if (action === "unban") {
+      await channel.permissionOverwrites.delete(targetId).catch(() => {});
+      await interaction.followUp({ content: `🔓 Odbanowano ${targetMember || targetId}.`, ephemeral: true });
+    }
+  } catch (err) {
+    console.error(`[PrivateUserAction] Błąd ${action}:`, err);
+    await interaction.followUp({ content: "❌ Nie udało się wykonać akcji.", ephemeral: true });
+  }
 }
 
 // ====================== PRIVATE RENAME MODAL ======================
@@ -298,9 +338,9 @@ async function handlePrivateRename(interaction) {
 
   try {
     await channel.setName(newName);
-    await interaction.reply({ content: `✅ Nazwa kanału zmieniona na: **${newName}**`, ephemeral: true });
+    await interaction.reply({ content: `✅ Nazwa zmieniona na: **${newName}**`, ephemeral: true });
   } catch (err) {
-    await interaction.reply({ content: "❌ Nie udało się zmienić nazwy (sprawdź długość lub uprawnienia).", ephemeral: true });
+    await interaction.reply({ content: "❌ Nie udało się zmienić nazwy.", ephemeral: true });
   }
 }
 
