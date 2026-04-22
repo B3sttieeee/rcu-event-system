@@ -2,7 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const { ChannelType, EmbedBuilder } = require("discord.js");
 const { getCurrentBoost } = require("./boostSystem");
-const { addVoiceTime, addMessage } = require("./profileSystem");
+const { addVoiceTime } = require("./profileSystem");
 const { addCoins } = require("./economySystem");
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
@@ -20,7 +20,6 @@ const DEFAULT_CONFIG = {
   boostRole: "1476000398107217980"
 };
 
-// Role za poziomy
 const LEVEL_ROLES = {
   5: "1476000458987278397",
   15: "1476000995501670534",
@@ -30,26 +29,17 @@ const LEVEL_ROLES = {
   75: "1476000992351879229"
 };
 
-// =====================================================
-// CACHE & WRITE QUEUE
-// =====================================================
 let dbCache = null;
 let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 const xpCooldown = new Map();
 
-// =====================================================
-// INIT
-// =====================================================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   console.log(`[LEVEL] Data directory ready: ${DATA_DIR}`);
 }
 
-// =====================================================
-// HELPERS
-// =====================================================
 const normalizeUserXP = (user = {}) => ({
   xp: Number.isFinite(Number(user.xp)) ? Number(user.xp) : 0,
   level: Number.isFinite(Number(user.level)) ? Number(user.level) : 0
@@ -61,9 +51,6 @@ const logError = (scope, error) => {
   else console.error(error);
 };
 
-// =====================================================
-// RANK SYSTEM
-// =====================================================
 function getRank(level) {
   if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
   if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
@@ -74,9 +61,6 @@ function getRank(level) {
   return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
-// =====================================================
-// LEVEL UP MESSAGE
-// =====================================================
 async function sendLevelUpMessage(member, newLevel, xpGained) {
   if (!member || member.user.bot) return;
   const rank = getRank(newLevel);
@@ -113,9 +97,6 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
   }
 }
 
-// =====================================================
-// DATABASE
-// =====================================================
 function loadDB() {
   if (dbCache) return dbCache;
   try {
@@ -147,7 +128,7 @@ function saveDB() {
       try {
         await fs.promises.writeFile(DB_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(DB_TMP_PATH, DB_PATH);
-        dbCache = null;   // <--- CZYSZCZENIE CACHE
+        dbCache = null;
         console.log(`[LEVEL] Saved and cache cleared`);
       } catch (error) {
         logError("DB SAVE ERROR", error);
@@ -156,9 +137,6 @@ function saveDB() {
   return writeQueue;
 }
 
-// =====================================================
-// CONFIG
-// =====================================================
 function loadConfig() {
   if (configCache) return configCache;
   try {
@@ -183,9 +161,6 @@ function saveConfig() {
   fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
 }
 
-// =====================================================
-// XP CALCULATIONS
-// =====================================================
 function neededXP(level) {
   const currentLevel = Math.max(0, Number(level) || 0);
   return Math.floor(100 * Math.pow(currentLevel + 1, 1.5));
@@ -201,9 +176,6 @@ function getMultiplier(member) {
   return multiplier;
 }
 
-// =====================================================
-// CORE XP + LEVEL UP + ROLE REWARDS
-// =====================================================
 async function addXP(member, base = 0, length = 0, options = {}) {
   const { useCooldown = true } = options;
   if (!member || member.user?.bot) return null;
@@ -247,9 +219,6 @@ async function addXP(member, base = 0, length = 0, options = {}) {
   };
 }
 
-// =====================================================
-// ROLE REWARDS
-// =====================================================
 async function checkRoles(member, level) {
   for (const [reqLevel, roleId] of Object.entries(LEVEL_ROLES)) {
     if (level >= Number(reqLevel) && !member.roles.cache.has(roleId)) {
@@ -260,12 +229,8 @@ async function checkRoles(member, level) {
   }
 }
 
-// =====================================================
-// MESSAGE & VOICE XP
-// =====================================================
 async function handleMessageXP(member, content) {
   if (!member || member.user?.bot) return null;
-  addMessage(member.id);
   const cfg = loadConfig();
   const result = await addXP(member, cfg.messageXP, content?.length || 0, { useCooldown: true });
   return result;
@@ -274,7 +239,7 @@ async function handleMessageXP(member, content) {
 function startVoiceXP(client) {
   if (voiceLoopStarted) return;
   voiceLoopStarted = true;
-  console.log("🎤 Voice XP + Profile Voice Tracker started");
+  console.log("🎤 Voice XP started");
 
   setInterval(async () => {
     const cfg = loadConfig();
@@ -283,7 +248,7 @@ function startVoiceXP(client) {
       for (const channel of guild.channels.cache.values()) {
         if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) continue;
         for (const member of channel.members.values()) {
-          if (!isEligibleVoiceMember(member) || processedUsers.has(member.id)) continue;
+          if (member.user?.bot || processedUsers.has(member.id)) continue;
           processedUsers.add(member.id);
           addVoiceTime(member.id, 60);
           await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => null);
@@ -293,9 +258,6 @@ function startVoiceXP(client) {
   }, 60_000);
 }
 
-// =====================================================
-// CONFIG SETTERS
-// =====================================================
 function setMessageXP(value) {
   const cfg = loadConfig();
   cfg.messageXP = Number(value) || DEFAULT_CONFIG.messageXP;
@@ -308,7 +270,6 @@ function setVoiceXP(value) {
   saveConfig();
 }
 
-// ====================== EXPORT ======================
 module.exports = {
   addXP,
   startVoiceXP,
