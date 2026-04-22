@@ -13,7 +13,7 @@ const {
 const ticketSystem = require("../utils/ticketSystem");
 const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
-const { handleExpeditionSelect } = require("../commands/expedition");
+const { handleLumberjackSelect } = require("../commands/lumberjack");   // <-- zmienione
 
 // Daily System
 const {
@@ -57,9 +57,10 @@ module.exports = {
         return await handleEventInteraction(interaction);
       }
 
-      // 4. EXPEDITION
-      if (interaction.isStringSelectMenu() && (cid === "expedition_location" || cid === "expedition_duration")) {
-        return await handleExpeditionSelect(interaction);
+      // 4. LUMBERJACK (dawniej expedition)
+      if (interaction.isStringSelectMenu() && 
+          (cid === "lumberjack_location" || cid === "lumberjack_duration")) {
+        return await handleLumberjackSelect(interaction);
       }
 
       // 5. DAILY QUEST
@@ -67,7 +68,7 @@ module.exports = {
         return await handleDailyClaim(interaction);
       }
 
-      // 6. PRIVATE CHANNEL PANEL (Select Menu)
+      // 6. PRIVATE CHANNEL PANEL
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
@@ -217,12 +218,10 @@ async function handlePrivatePanel(interaction) {
     return await interaction.showModal(modal);
   }
 
-  // Kick, Ban, Unban
   if (action === "kick" || action === "ban" || action === "unban") {
     return await showUserSelectMenu(interaction, channel, action);
   }
 
-  // Lock / Unlock / Delete
   await interaction.deferUpdate().catch(() => {});
 
   if (action === "lock") {
