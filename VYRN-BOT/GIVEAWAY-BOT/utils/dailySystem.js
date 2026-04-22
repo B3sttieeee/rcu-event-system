@@ -40,7 +40,7 @@ function ensureDailyState(user) {
 }
 
 function buildDailyEmbed(userId) {
-  // Wymuszamy pełne odświeżenie cache przed zbudowaniem embedu
+  // WYMUSZAMY ŚWIEŻE DANE Z DYSKU - to jest klucz
   const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
@@ -96,8 +96,8 @@ async function checkDailyDM(member) {
 // ====================== PO ODEBRANIU ======================
 function onDailyClaimed(userId) {
   try {
-    // Wymuszamy pełne odświeżenie po odebraniu
-    loadProfile(); // czyścimy cache przed odczytem
+    // Wymuszamy pełne odświeżenie cache po odebraniu
+    loadProfile(); // czyścimy cache
     const db = loadProfile();
     const user = db.users?.[userId];
     if (!user) return;
@@ -105,7 +105,7 @@ function onDailyClaimed(userId) {
     daily.notified = false;
     daily.lastNotifyAttemptAt = 0;
     saveProfile();
-    console.log(`[DAILY] Status zresetowany po odebraniu → ${userId}`);
+    console.log(`[DAILY] Status zresetowany po odebraniu → ${userId} (streak = ${daily.streak})`);
   } catch (err) {
     console.error("Błąd onDailyClaimed:", err);
   }
