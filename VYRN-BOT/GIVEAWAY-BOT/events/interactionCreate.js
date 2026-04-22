@@ -7,13 +7,8 @@ const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleLumberjackSelect } = require("../commands/lumberjack");
 const embedCommand = require("../commands/embed");
 
-// PRIVATE VC
-const {
-  handlePrivatePanel,
-  handlePrivateRename,
-  handlePrivateLimit,
-  handlePrivateButton
-} = require("../utils/privateChannelSystem");
+// PRIVATE VC (FIX)
+const privateVC = require("../utils/privateChannelSystem");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -21,7 +16,9 @@ module.exports = {
   async execute(interaction, client) {
     const cid = interaction.customId;
 
-    console.log(`[INTERACTION] ${interaction.type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
+    console.log(
+      `[INTERACTION] ${interaction.type} | ${interaction.user.tag} | ${cid ?? "NONE"}`
+    );
 
     // EMBED
     if (interaction.isModalSubmit() && cid?.startsWith("embedModal_")) {
@@ -51,17 +48,24 @@ module.exports = {
       return handleLumberjackSelect(interaction);
     }
 
-    // ================= PRIVATE VC (NOW BUTTON BASED) =================
+    // ================= PRIVATE VC (FIXED SYSTEM) =================
+
     if (interaction.isButton() && cid?.startsWith("vc_")) {
-      return handlePrivateButton(interaction);
+      return privateVC.handlePrivatePanel(interaction);
     }
 
-    if (interaction.isModalSubmit() && cid?.startsWith("private_rename_")) {
-      return handlePrivateRename(interaction);
+    if (
+      interaction.isModalSubmit() &&
+      cid?.startsWith("vc_rename_")
+    ) {
+      return privateVC.handleRename(interaction);
     }
 
-    if (interaction.isModalSubmit() && cid?.startsWith("private_limit_")) {
-      return handlePrivateLimit(interaction);
+    if (
+      interaction.isModalSubmit() &&
+      cid?.startsWith("vc_limit_")
+    ) {
+      return privateVC.handleLimit(interaction);
     }
 
     // TICKET SYSTEM
@@ -75,16 +79,23 @@ module.exports = {
     ];
 
     if (
-      (interaction.isButton() || interaction.isStringSelectMenu() || interaction.isModalSubmit()) &&
+      (interaction.isButton() ||
+        interaction.isStringSelectMenu() ||
+        interaction.isModalSubmit()) &&
       ticketIds.includes(cid)
     ) {
       return ticketSystem.handle(interaction, client);
     }
 
-    // SLASH
+    // SLASH COMMANDS
     if (interaction.isChatInputCommand()) {
       const cmd = client.commands.get(interaction.commandName);
-      if (!cmd) return interaction.reply({ content: "❌ Not found", ephemeral: true });
+      if (!cmd) {
+        return interaction.reply({
+          content: "❌ Not found",
+          ephemeral: true
+        });
+      }
 
       return cmd.execute(interaction, client);
     }
