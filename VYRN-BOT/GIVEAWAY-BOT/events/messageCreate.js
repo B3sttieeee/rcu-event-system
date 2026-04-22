@@ -1,73 +1,45 @@
 const { Events, EmbedBuilder } = require("discord.js");
 const { handleMessageXP } = require("../utils/levelSystem");
 
-const LEVEL_CHANNEL_ID = "1475999590716018719";
-
-// =====================================================
-// HELPERS
-// =====================================================
-const resolveLevelChannel = async (guild) => {
-  let channel = guild.channels.cache.get(LEVEL_CHANNEL_ID);
-
-  if (!channel) {
-    channel = await guild.channels.fetch(LEVEL_CHANNEL_ID).catch(() => null);
-  }
-
-  if (!channel || !channel.isTextBased()) return null;
-  return channel;
-};
-
-const buildLevelUpEmbed = (member, level) => {
-  return new EmbedBuilder()
-    .setColor("#f59e0b")
-    .setAuthor({
-      name: member.user.tag,
-      iconURL: member.user.displayAvatarURL()
-    })
-    .setTitle("🏆 Level Up")
-    .setDescription(
-      [
-        `**${member} wbił nowy poziom!**`,
-        "",
-        `📈 **Aktualny poziom:** \`${level}\``,
-        "",
-        "Gratulacje i lecimy dalej."
-      ].join("\n")
-    )
-    .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-    .setFooter({
-      text: "VYRN • Level System"
-    })
-    .setTimestamp();
-};
-
-// =====================================================
-// EVENT
-// =====================================================
 module.exports = {
   name: Events.MessageCreate,
-
   async execute(message) {
     if (!message.guild) return;
     if (!message.author || message.author.bot) return;
     if (message.system || message.webhookId) return;
 
-    const member =
-      message.member ||
-      (await message.guild.members.fetch(message.author.id).catch(() => null));
+    const member = message.member || 
+      await message.guild.members.fetch(message.author.id).catch(() => null);
 
     if (!member) return;
 
-    const result = await handleMessageXP(member, message.content || "");
-    if (!result?.leveledUp) return;
+    // 1. Dodajemy XP za wiadomość
+    await handleMessageXP(member, message.content || "").catch(() => {});
 
-    const levelChannel = await resolveLevelChannel(message.guild);
-    if (!levelChannel) return;
+    // 2. Małe reakcje na popularne słowa (opcjonalnie)
+    const content = message.content.toLowerCase();
 
-    const embed = buildLevelUpEmbed(member, result.level);
+    if (content.includes("gg") || content.includes("good game")) {
+      await message.react("👏").catch(() => {});
+    }
 
-    await levelChannel.send({
-      embeds: [embed]
-    }).catch(() => {});
+    if (content.includes("brawo") || content.includes("gratulacje") || content.includes("gratz")) {
+      await message.react("🎉").catch(() => {});
+    }
+
+    if (content.includes("xd") || content.includes("haha") || content.includes("lol")) {
+      await message.react("😂").catch(() => {});
+    }
+
+    // 3. Opcjonalnie: mały embed gdy ktoś napisze "!stats" lub "moje staty" (przykładowo)
+    if (content === "!stats" || content === "moje staty" || content === "staty") {
+      // Tu możesz później dodać komendę /profile, ale na razie prosty response
+      await message.reply({
+        content: `📊 **${member}**, sprawdź swoje staty komendą \`/profile\`!`,
+        allowedMentions: { repliedUser: false }
+      }).catch(() => {});
+    }
+
+    // Możesz tu dodać więcej custom reakcji w przyszłości
   }
 };
