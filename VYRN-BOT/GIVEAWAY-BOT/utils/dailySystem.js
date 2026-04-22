@@ -7,9 +7,9 @@ const {
 
 const {
   loadProfile,
-  isDailyReady,      // ← musi być zaimportowane
+  isDailyReady,
   saveProfile,
-  claimDaily         // ← używamy wersji z profileSystem
+  claimDaily        // ← teraz używamy z profileSystem
 } = require("./profileSystem");
 
 // ====================== CONFIG ======================
@@ -37,7 +37,7 @@ function buildDailyEmbed(userId) {
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
 
-  const ready = isDailyReady(userId);   // teraz działa
+  const ready = isDailyReady(userId);
 
   return {
     embed: new EmbedBuilder()
@@ -74,6 +74,7 @@ async function checkDailyDM(member) {
 
   const userId = member.id;
   if (dmLock.has(userId)) return false;
+
   dmLock.add(userId);
 
   try {
@@ -84,17 +85,22 @@ async function checkDailyDM(member) {
     const daily = ensureDailyState(user);
     const ready = isDailyReady(userId);
 
+    // Najważniejsze zabezpieczenie
     if (!ready) {
       if (daily.notified) {
         daily.notified = false;
         daily.lastNotifyAttemptAt = 0;
         dmCooldown.delete(userId);
         saveProfile();
+        console.log(`[DAILY] RESET NOTIFIED (nie gotowy) → ${member.user.tag} | Msg: ${daily.msgs}/50 | VC: ${Math.floor(daily.vc/60)}/30`);
       }
       return false;
     }
 
-    if (daily.notified) return false;
+    if (daily.notified) {
+      console.log(`[DAILY] Już powiadomiony → ${member.user.tag}`);
+      return false;
+    }
 
     const now = Date.now();
     const lastAttempt = Math.max(
