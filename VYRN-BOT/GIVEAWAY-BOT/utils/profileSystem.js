@@ -59,7 +59,7 @@ function loadProfile() {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
       fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
-      console.log(`[PROFILE] New database created: ${PROFILE_PATH}`);
+      console.log(`[PROFILE] New database created`);
       return dbCache;
     }
     const raw = fs.readFileSync(PROFILE_PATH, "utf8");
@@ -82,7 +82,7 @@ function saveProfile() {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        dbCache = null;                    // <--- NAJWAŻNIEJSZE CZYSZCZENIE CACHE
+        dbCache = null;                    // <--- TO JEST NAJWAŻNIEJSZE
         console.log(`[PROFILE] Saved and cache cleared`);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
@@ -164,10 +164,13 @@ function getDailyReward(streak) {
 }
 
 async function claimDaily(userId, member = null) {
+  console.log(`[CLAIM] Rozpoczynam claim dla ${userId}`);
+
   const user = ensureUser(userId);
   if (!user) return { success: false, error: "invalid_user" };
 
   if (!isDailyReady(userId)) {
+    console.log(`[CLAIM] Nie gotowy dla ${userId}`);
     return { success: false, error: "not_ready", message: "Daily Quest nie jest jeszcze gotowy." };
   }
 
@@ -196,6 +199,7 @@ async function claimDaily(userId, member = null) {
   user.daily.notified = false;
   user.daily.lastNotifyAttemptAt = 0;
 
+  console.log(`[CLAIM] Zapisuję zmiany (nowy streak = ${user.daily.streak})`);
   saveProfile();
 
   return {
