@@ -6,15 +6,15 @@ const { handleEventInteraction } = require("../utils/eventSystem");
 const { handleGiveaway } = require("../utils/giveawaySystem");
 const { handleLumberjackSelect } = require("../commands/lumberjack");
 
-// Daily System – POPRAWIONE IMPORTY
+// Daily System
 const {
   isDailyReady,
   claimDaily
-} = require("../utils/profileSystem");          // te dwie są w profileSystem
+} = require("../utils/profileSystem");
 
 const {
   onDailyClaimed
-} = require("../utils/dailySystem");           // ta jest w dailySystem
+} = require("../utils/dailySystem");
 
 const embedCommand = require("../commands/embed");
 
@@ -38,26 +38,37 @@ module.exports = {
     try {
       console.log(`[INTERACTION] ${type} | ${interaction.user.tag} | ${cid ?? "NONE"}`);
 
+      // 1. EMBED BUILDER
       if (interaction.isModalSubmit() && interaction.customId.startsWith("embedModal_")) {
         return await embedCommand.handleModal(interaction);
       }
       if (interaction.isButton() && interaction.customId.startsWith("embed_")) {
         return await embedCommand.handleButton(interaction);
       }
+
+      // 2. GIVEAWAY
       if (interaction.isButton() && cid?.startsWith("gw_")) {
         return await handleGiveaway(interaction);
       }
+
+      // 3. EVENT SYSTEM
       const eventIds = ["refresh", "roles", "dm", "role_menu", "dm_menu"];
       if ((interaction.isButton() || interaction.isStringSelectMenu()) && eventIds.includes(cid)) {
         return await handleEventInteraction(interaction);
       }
+
+      // 4. LUMBERJACK
       if (interaction.isStringSelectMenu() &&
           (cid === "lumberjack_location" || cid === "lumberjack_duration")) {
         return await handleLumberjackSelect(interaction);
       }
+
+      // 5. DAILY QUEST
       if (interaction.isButton() && cid === "daily_claim") {
         return await handleDailyClaim(interaction);
       }
+
+      // 6. PRIVATE CHANNEL
       if (interaction.isStringSelectMenu() && interaction.customId.startsWith("private_panel_")) {
         return await handlePrivatePanel(interaction);
       }
@@ -72,6 +83,8 @@ module.exports = {
           return await handlePrivateLimit(interaction);
         }
       }
+
+      // 7. TICKET SYSTEM
       const ticketIds = [
         "open_ticket_vyrn",
         "open_ticket_v2rn",
@@ -85,6 +98,8 @@ module.exports = {
       ) {
         return await ticketSystem.handle(interaction, client);
       }
+
+      // 8. SLASH COMMANDS
       if (interaction.isChatInputCommand()) {
         const cmd = client.commands.get(interaction.commandName);
         if (!cmd) {
@@ -92,9 +107,11 @@ module.exports = {
         }
         return await cmd.execute(interaction, client);
       }
+
       if (cid) {
         console.log(`[UNHANDLED INTERACTION] ${type} | ${cid}`);
       }
+
     } catch (err) {
       console.error("❌ INTERACTION ERROR:", err);
       const payload = {
@@ -115,10 +132,13 @@ module.exports = {
 // ====================== DAILY CLAIM HANDLER ======================
 async function handleDailyClaim(interaction) {
   const userId = interaction.user.id;
+  console.log(`[DAILY] Kliknięto daily_claim przez ${interaction.user.tag}`);
+
   if (interaction.replied || interaction.deferred) return;
   await interaction.deferUpdate().catch(() => {});
 
   try {
+    console.log(`[DAILY] Sprawdzam isDailyReady dla ${userId}`);
     if (!isDailyReady(userId)) {
       return await interaction.editReply({
         content: "❌ Twój Daily Quest nie jest jeszcze gotowy.",
@@ -128,9 +148,12 @@ async function handleDailyClaim(interaction) {
     }
 
     const member = interaction.member || (interaction.guild ? interaction.guild.members.cache.get(userId) : null);
+    console.log(`[DAILY] Member: ${member ? "tak" : "nie"}`);
+
     const result = await claimDaily(userId, member);
 
     if (!result?.success) {
+      console.log(`[DAILY] Claim nieudany: ${result?.message}`);
       return await interaction.editReply({
         content: result?.message || "❌ Nie udało się odebrać daily.",
         embeds: [],
