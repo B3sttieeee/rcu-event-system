@@ -37,9 +37,12 @@ module.exports = {
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
 
+  console.log(`[PrivateChannel] handlePrivateChannelCreation wywołane dla ${member.user.tag}`);
+
   if (userChannels.has(member.id)) {
     const existing = guild.channels.cache.get(userChannels.get(member.id));
     if (existing) {
+      console.log(`[PrivateChannel] Użytkownik ma już kanał - przenoszę`);
       await member.voice.setChannel(existing).catch(() => {});
       return;
     }
@@ -54,6 +57,8 @@ async function handlePrivateChannelCreation(member) {
   }
 
   try {
+    console.log(`[PrivateChannel] Tworzę kanał dla ${member.user.tag}...`);
+
     const channel = await guild.channels.create({
       name: `・${member.displayName}'s Channel`,
       type: ChannelType.GuildVoice,
@@ -78,14 +83,14 @@ async function handlePrivateChannelCreation(member) {
 
     await member.voice.setChannel(channel).catch(() => {});
 
+    console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name} (ID: ${channel.id})`);
+
     await channel.send({
       content: `> **${member}** Twój prywatny kanał został stworzony!`
     }).catch(() => {});
 
     await sendControlPanel(channel, member);
     startEmptyChannelWatcher(channel, member.id);
-
-    console.log(`[PrivateChannel] Kanał stworzony pomyślnie: ${channel.name}`);
 
   } catch (err) {
     console.error(`[PrivateChannel] Błąd tworzenia dla ${member.user.tag}:`, err);
@@ -141,7 +146,6 @@ async function handlePrivatePanel(interaction) {
     return interaction.reply({ content: "❌ Nie jesteś właścicielem tego kanału.", ephemeral: true });
   }
 
-  // Modale dla rename i limit
   if (action === "rename" || action === "limit") {
     const modal = new ModalBuilder()
       .setCustomId(`private_${action}_${channel.id}`)
@@ -160,12 +164,10 @@ async function handlePrivatePanel(interaction) {
     return await interaction.showModal(modal);
   }
 
-  // Kick, Ban, Unban – dynamiczne menu
   if (action === "kick" || action === "ban" || action === "unban") {
     return await showUserSelectMenu(interaction, channel, action);
   }
 
-  // Pozostałe akcje
   await interaction.deferUpdate().catch(() => {});
 
   if (action === "lock") {
@@ -181,7 +183,7 @@ async function handlePrivatePanel(interaction) {
   }
 }
 
-// ====================== DYNAMICZNE MENU DLA KICK/BAN/UNBAN ======================
+// ====================== DYNAMICZNE MENU ======================
 async function showUserSelectMenu(interaction, channel, action) {
   let options = [];
 
@@ -247,7 +249,7 @@ async function handlePrivateUserAction(interaction) {
       await interaction.followUp({ content: `🚪 Wyrzucono użytkownika.`, ephemeral: true });
     } else if (action === "ban") {
       await channel.permissionOverwrites.edit(targetId, { Connect: false });
-      await interaction.followUp({ content: `🔨 Użytkownik zbanowany na kanale.`, ephemeral: true });
+      await interaction.followUp({ content: `🔨 Użytkownik zbanowany.`, ephemeral: true });
     } else if (action === "unban") {
       await channel.permissionOverwrites.delete(targetId).catch(() => {});
       await interaction.followUp({ content: `🔓 Użytkownik odbanowany.`, ephemeral: true });
@@ -279,5 +281,5 @@ function startEmptyChannelWatcher(channel, ownerId) {
 module.exports = {
   handlePrivateChannelCreation,
   handlePrivatePanel,
-  handlePrivateUserAction   // <--- DODANE – to było brakujące!
+  handlePrivateUserAction   // <--- DODANE – to było brakujące w poprzedniej wersji
 };
