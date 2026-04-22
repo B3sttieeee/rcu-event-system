@@ -32,11 +32,10 @@ module.exports = {
       const userId = interaction.user.id;
 
       const levelsDB = loadDB();
-      const profileDB = loadProfile();        // zawsze świeże dane
+      const profileDB = loadProfile();
       const config = loadConfig();
 
       const lvlData = levelsDB.xp?.[userId] || { xp: 0, level: 0 };
-      const dailyData = profileDB.users?.[userId]?.daily || { msgs: 0, vc: 0, streak: 0, lastClaim: 0 };
       const userVoice = profileDB.users?.[userId]?.voice || 0;
 
       const nextLevelXP = neededXP(lvlData.level);
@@ -44,9 +43,6 @@ module.exports = {
       const xpLeft = Math.max(0, nextLevelXP - lvlData.xp);
 
       const totalVoiceMin = Math.floor(userVoice / 60);
-      const dailyVoiceMin = Math.floor((dailyData.vc || 0) / 60);
-      const dailyVoiceReq = 30;
-
       const currentBoost = getCurrentBoost(userId);
       const rank = getRank(lvlData.level);
       const coins = getCoins(userId);
@@ -65,12 +61,7 @@ module.exports = {
           `> ${createProgressBar(progress)} **${progress}%**\n` +
           `> **${xpLeft}** XP do następnego poziomu\n\n` +
           `**Voice Activity**\n` +
-          `> Total: **${totalVoiceMin}** minut\n` +
-          `> Daily: **${dailyVoiceMin} / ${dailyVoiceReq}** minut\n\n` +
-          `**Daily Quest**\n` +
-          `> Wiadomości: **${dailyData.msgs || 0} / 50**\n` +
-          `> Voice Chat: **${dailyVoiceMin} / 30** min\n` +
-          `> Streak: **${dailyData.streak || 0}** dni 🔥\n\n` +
+          `> Total: **${totalVoiceMin}** minut\n\n` +
           `**Economy**\n` +
           `> Monety: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
           `**Active Boost**\n` +
