@@ -1,5 +1,4 @@
 const { EmbedBuilder, Events } = require("discord.js");
-const path = require("path");
 
 // ====================== CONFIG ======================
 const CHANNEL_ID = "1475992158581559528";
@@ -13,7 +12,7 @@ const ROLES = {
 
 // ====================== CACHE ======================
 let lastUpdate = 0;
-const UPDATE_COOLDOWN = 15000; // Zwiększone do 15 sekund (było 8s)
+const UPDATE_COOLDOWN = 15000; // 15 sekund
 
 // ====================== FORMAT USER ======================
 function formatUser(member) {
@@ -21,18 +20,18 @@ function formatUser(member) {
   const status = isVerified ? "" : " `（Not Verified）`";
 
   if (member.roles.cache.has(ROLES.LEADER)) {
-    return `• ${member} — **LEADER VYRN**${status}`;
+    return `• ${member} — **LEADER**${status}`;
   }
   if (member.roles.cache.has(ROLES.OFFICER)) {
-    return `• ${member} — **OFFICER VYRN**${status}`;
+    return `• ${member} — **OFFICER**${status}`;
   }
   if (member.roles.cache.has(ROLES.MEMBER)) {
-    return `• ${member} — **MEMBER VYRN**${status}`;
+    return `• ${member} — **MEMBER**${status}`;
   }
   return null;
 }
 
-// ====================== GET CLAN MEMBERS ======================
+// ====================== POBIERANIE CZŁONKÓW KLANU ======================
 async function getClanMembers(guild) {
   await guild.members.fetch({ cache: true }).catch(() => {});
 
@@ -58,13 +57,13 @@ async function getClanMembers(guild) {
   return { leaders, officers, members: membersList };
 }
 
-// ====================== BUILD EMBED ======================
+// ====================== BUDOWANIE EMBEDU (CZARNY MOTYW) ======================
 async function buildEmbed(guild) {
   const { leaders, officers, members } = await getClanMembers(guild);
   const totalMembers = leaders.length + officers.length + members.length;
 
   return new EmbedBuilder()
-    .setColor("#0f172a")
+    .setColor("#0a0a0a")                    // Czarny motyw
     .setAuthor({
       name: `${guild.name} • VYRN Clan`,
       iconURL: guild.iconURL({ size: 256 }) || null,
@@ -72,27 +71,32 @@ async function buildEmbed(guild) {
     .setDescription(
 `🏆 **LEADERS**
 ${leaders.length ? leaders.join("\n") : "_Brak liderów_"}
+
 ━━━━━━━━━━━━━━━━━━
+
 🛡 **OFFICERS**
 ${officers.length ? officers.join("\n") : "_Brak oficerów_"}
+
 ━━━━━━━━━━━━━━━━━━
+
 👥 **MEMBERS**
 ${members.length ? members.join("\n") : "_Brak członków_"}
+
 ━━━━━━━━━━━━━━━━━━
-🔒 *Niezweryfikowani użytkownicy są oznaczeni*`
+
+🔒 *Niezweryfikowani użytkownicy są oznaczeni \`（Not Verified）\`*`
     )
     .setFooter({
-      text: `Łącznie w klanie: ${totalMembers} członków`,
+      text: `Łącznie w klanie: ${totalMembers} członków • VYRN`,
       iconURL: guild.iconURL({ size: 64 }) || null,
     })
     .setTimestamp();
 }
 
-// ====================== UPDATE EMBED (LEPSZY COOLDOWN) ======================
+// ====================== AKTUALIZACJA EMBEDU ======================
 async function updateClanEmbed(client) {
   const now = Date.now();
   if (now - lastUpdate < UPDATE_COOLDOWN) return;
-
   lastUpdate = now;
 
   try {
@@ -113,43 +117,42 @@ async function updateClanEmbed(client) {
 
     console.log(`✅ Clan embed zaktualizowany (${guild.name})`);
   } catch (error) {
-    console.error("❌ Błąd podczas aktualizacji clan embed:", error.message);
+    console.error("❌ Błąd aktualizacji clan embed:", error.message);
   }
 }
 
 // ====================== START CLAN SYSTEM ======================
 function startClanSystem(client) {
-  console.log("🛡️ System Clan Embed uruchomiony.");
+  console.log("🛡️ Clan Embed System uruchomiony.");
 
-  // Pierwsze uruchomienie
+  // Pierwsze uruchomienie po starcie bota
   client.once(Events.ClientReady, () => {
     setTimeout(() => updateClanEmbed(client), 10000);
   });
 
-  // Aktualizacja przy zmianach roli (z filtrem)
+  // Aktualizacja przy zmianie ról (tylko gdy dotyczy klanu)
   client.on(Events.GuildMemberUpdate, (oldMember, newMember) => {
     const oldRoles = oldMember.roles.cache.map(r => r.id);
     const newRoles = newMember.roles.cache.map(r => r.id);
 
-    // Aktualizujemy TYLKO jeśli zmieniła się rola związana z klanem
     const clanRoles = [ROLES.LEADER, ROLES.OFFICER, ROLES.MEMBER, ROLES.VERIFIED];
-    const hasClanRoleChange = clanRoles.some(roleId => 
+    const hasChange = clanRoles.some(roleId => 
       oldRoles.includes(roleId) !== newRoles.includes(roleId)
     );
 
-    if (hasClanRoleChange) {
+    if (hasChange) {
       updateClanEmbed(client);
     }
   });
 
-  // Dodanie / usunięcie członka
+  // Aktualizacja przy dołączeniu/wyjściu członka
   client.on(Events.GuildMemberAdd, () => updateClanEmbed(client));
   client.on(Events.GuildMemberRemove, () => updateClanEmbed(client));
 
-  // Fallback co 2 minuty (zamiast co minutę)
+  // Fallback co 2 minuty
   setInterval(() => {
     updateClanEmbed(client);
-  }, 120000); // 2 minuty
+  }, 120000);
 }
 
 module.exports = {
