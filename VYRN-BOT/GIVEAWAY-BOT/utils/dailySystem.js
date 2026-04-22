@@ -40,7 +40,7 @@ function ensureDailyState(user) {
 }
 
 function buildDailyEmbed(userId) {
-  // Zawsze świeże dane (wymuszamy odświeżenie cache)
+  // Wymuszamy pełne odświeżenie cache przed zbudowaniem embedu
   const db = loadProfile();
   const user = db.users?.[userId] || {};
   const daily = ensureDailyState(user);
@@ -96,6 +96,8 @@ async function checkDailyDM(member) {
 // ====================== PO ODEBRANIU ======================
 function onDailyClaimed(userId) {
   try {
+    // Wymuszamy pełne odświeżenie po odebraniu
+    loadProfile(); // czyścimy cache przed odczytem
     const db = loadProfile();
     const user = db.users?.[userId];
     if (!user) return;
