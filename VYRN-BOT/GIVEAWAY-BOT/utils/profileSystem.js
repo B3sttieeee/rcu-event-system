@@ -82,7 +82,8 @@ function saveProfile() {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        dbCache = null; // ← WAŻNE: czyścimy cache po zapisie
+        dbCache = null;                    // ← KLUCZOWE CZYSZCZENIE CACHE
+        console.log(`[PROFILE] Saved and cache cleared`);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
       }
@@ -148,7 +149,7 @@ function isDailyReady(userId) {
   const tier = getDailyTier(user.daily.streak);
   const vcMinutes = Math.floor(user.daily.vc / 60);
   const ready = (vcMinutes >= tier.vcRequired && user.daily.msgs >= tier.msgRequired);
-  console.log(`[DAILY CHECK] ${userId} | Msg: ${user.daily.msgs}/${tier.msgRequired} | VC: ${vcMinutes}/${tier.vcRequired} | Ready: ${ready} | Streak: ${user.daily.streak}`);
+  console.log(`[DAILY CHECK] ${userId} | Msg: ${user.daily.msgs}/${tier.msgRequired} | VC: ${vcMinutes}/${tier.vcRequired} | Ready: ${ready} | Streak: ${user.daily.streak} | LastClaim: ${user.daily.lastClaim}`);
   return ready;
 }
 
@@ -163,10 +164,13 @@ function getDailyReward(streak) {
 }
 
 async function claimDaily(userId, member = null) {
+  console.log(`[CLAIM] Rozpoczynam claim dla ${userId}`);
+
   const user = ensureUser(userId);
   if (!user) return { success: false, error: "invalid_user" };
 
   if (!isDailyReady(userId)) {
+    console.log(`[CLAIM] Nie gotowy dla ${userId}`);
     return { success: false, error: "not_ready", message: "Daily Quest nie jest jeszcze gotowy." };
   }
 
@@ -189,14 +193,14 @@ async function claimDaily(userId, member = null) {
     }
   }
 
-  // Reset po odebraniu
   user.daily.msgs = 0;
   user.daily.vc = 0;
   user.daily.lastClaim = now;
   user.daily.notified = false;
   user.daily.lastNotifyAttemptAt = 0;
 
-  saveProfile();   // ← tu czyścimy cache
+  console.log(`[CLAIM] Zapisuję zmiany (streak = ${user.daily.streak})`);
+  saveProfile();
 
   return {
     success: true,
