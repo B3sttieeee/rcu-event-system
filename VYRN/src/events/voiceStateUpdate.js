@@ -1,35 +1,49 @@
-// src/events/voiceStateUpdate.js
 const { handlePrivateChannelCreation } = require("../systems/privatevc");
-const { addVoiceTime } = require("../systems/profile");   // <--- DODANE
+const { addVoiceTime } = require("../systems/profile");
+const { addCoins } = require("../systems/economy");
 
 const CREATE_CHANNEL_ID = "1496280414237491220";
 
+const joinTimes = new Map();
+
 module.exports = {
   name: "voiceStateUpdate",
+
   async execute(oldState, newState) {
     try {
       const member = newState.member || oldState.member;
       if (!member || member.user.bot) return;
 
-      // ==================== PRIVATE VC CREATION ====================
-      if (newState.channelId === CREATE_CHANNEL_ID && oldState.channelId !== CREATE_CHANNEL_ID) {
-        console.log(`[PRIVATE VC] Trigger create for ${member.user.tag}`);
+      // PRIVATE VC
+      if (
+        newState.channelId === CREATE_CHANNEL_ID &&
+        oldState.channelId !== CREATE_CHANNEL_ID
+      ) {
         await handlePrivateChannelCreation(member);
       }
 
-      // ==================== VOICE TIME TRACKING ====================
-      // Jeśli użytkownik wszedł na dowolny kanał głosowy (i nie jest to kanał do tworzenia prywatnego)
-      if (newState.channelId && newState.channelId !== CREATE_CHANNEL_ID) {
-        // Sprawdza czy przedtem nie był na voice (czyli właśnie wszedł lub zmienił kanał)
-        if (!oldState.channelId || oldState.channelId !== newState.channelId) {
-          console.log(`[VOICE] ${member.user.tag} wszedł na voice channel`);
-          // Tutaj możesz dodać addVoiceTime jeśli chcesz naliczać natychmiast, ale lepiej zostawić w loopie w level
-        }
+      // WEJŚCIE NA VOICE
+      if (!oldState.channelId && newState.channelId) {
+        joinTimes.set(member.id, Date.now());
+        console.log(`[VOICE] ${member.user.tag} wszedł`);
       }
 
-      // Jeśli wyszedł z voice channel
+      // WYJŚCIE Z VOICE
       if (oldState.channelId && !newState.channelId) {
-        console.log(`[VOICE] ${member.user.tag} wyszedł z voice channel`);
+        const joined = joinTimes.get(member.id);
+
+        if (joined) {
+          const minutes = Math.floor((Date.now() - joined) / 60000);
+
+          if (minutes > 0) {
+            addVoiceTime(member.id, minutes);
+            addCoins(member.id, minutes * 10);
+          }
+
+          joinTimes.delete(member.id);
+        }
+
+        console.log(`[VOICE] ${member.user.tag} wyszedł`);
       }
 
     } catch (err) {
