@@ -1,37 +1,33 @@
-// =====================================================
-// LOG SYSTEM - HYBRID MODULAR
-// =====================================================
+// src/systems/log/index.js
 const { EmbedBuilder, ChannelType } = require("discord.js");
 
 // ====================== CONFIG ======================
 const LOGS = {
   JOIN_LEAVE: "1475992846912721018",   // Join / Leave
-  SYSTEM: "1475993709240778904",       // System events
-  CHAT: "1475992778554216448",         // Chat moderation (purge, delete, etc.)
-  MODERATION: "1475993709240778904",   // Moderacja (ban, kick, mute, warn)
-  VOICE: "1475993709240778904",        // Voice activity
-  LEVEL: "1475993709240778904",        // Level up
+  SYSTEM:     "1475993709240778904",   // System events
+  CHAT:       "1475992778554216448",   // Chat moderation
+  MODERATION: "1475993709240778904",   // Moderacja
+  VOICE:      "1475993709240778904",
+  LEVEL:      "1475993709240778904",
 };
 
 const TIME_ZONE = "Europe/Warsaw";
-const AUDIT_MAX_AGE = 15_000; // 15 sekund
+const AUDIT_MAX_AGE = 15_000;
 
-// Kolory dla różnych typów logów
+// Kolory
 const LOG_COLORS = {
-  JOIN_LEAVE: "#22c55e",   // zielony
-  LEAVE: "#ef4444",        // czerwony
-  SYSTEM: "#3b82f6",       // niebieski
-  CHAT: "#eab308",         // żółty
-  MODERATION: "#f97316",   // pomarańczowy
-  VOICE: "#8b5cf6",        // fioletowy
-  LEVEL: "#f59e0b",        // pomarańczowy
-  ERROR: "#ef4444",
-  DEFAULT: "#0a0a0a"
+  JOIN_LEAVE: "#22c55e",
+  LEAVE:      "#ef4444",
+  SYSTEM:     "#3b82f6",
+  CHAT:       "#eab308",
+  MODERATION: "#f97316",
+  VOICE:      "#8b5cf6",
+  LEVEL:      "#f59e0b",
+  ERROR:      "#ef4444",
+  DEFAULT:    "#0a0a0a"
 };
 
-// =====================================================
-// POMOCNICZE FUNKCJE
-// =====================================================
+// ====================== POMOCNICZE FUNKCJE ======================
 const formatTime = () => {
   return new Intl.DateTimeFormat("pl-PL", {
     timeZone: TIME_ZONE,
@@ -64,15 +60,11 @@ const formatRoleList = (roles, max = 1024) => {
   return clampText(text, max, "None");
 };
 
-// =====================================================
-// CACHE KANAŁÓW
-// =====================================================
+// ====================== CACHE KANAŁÓW ======================
 const channelCache = new Map();
 
 const resolveTextChannel = async (guild, channelId) => {
-  if (channelCache.has(channelId)) {
-    return channelCache.get(channelId);
-  }
+  if (channelCache.has(channelId)) return channelCache.get(channelId);
 
   let channel = guild.channels.cache.get(channelId);
   if (!channel) {
@@ -87,9 +79,7 @@ const resolveTextChannel = async (guild, channelId) => {
   return channel;
 };
 
-// =====================================================
-// GŁÓWNA FUNKCJA WYSYŁANIA LOGA
-// =====================================================
+// ====================== GŁÓWNA FUNKCJA WYSYŁANIA LOGA ======================
 const sendLog = async (guild, channelId, embed) => {
   try {
     const channel = await resolveTextChannel(guild, channelId);
@@ -106,9 +96,7 @@ const sendLog = async (guild, channelId, embed) => {
   }
 };
 
-// =====================================================
-// AUDIT LOG SEARCH
-// =====================================================
+// ====================== AUDIT LOG ======================
 const findAuditEntry = async (guild, { type, limit = 6, maxAge = AUDIT_MAX_AGE, match = () => true }) => {
   try {
     const logs = await guild.fetchAuditLogs({ type, limit });
@@ -127,9 +115,7 @@ const formatExecutor = (entry) => {
   return `<@${entry.executor.id}> (${entry.executor.tag || entry.executor.id})`;
 };
 
-// =====================================================
-// TWORZENIE EMBEDA LOGU
-// =====================================================
+// ====================== TWORZENIE EMBEDA ======================
 const createLogEmbed = (title, color, description = null, fields = [], footerText = null) => {
   const embed = new EmbedBuilder()
     .setColor(color || LOG_COLORS.DEFAULT)
@@ -137,7 +123,7 @@ const createLogEmbed = (title, color, description = null, fields = [], footerTex
     .setTimestamp();
 
   if (description) embed.setDescription(description);
-  if (fields.length) embed.addFields(fields);
+  if (fields && fields.length > 0) embed.addFields(fields);
   if (footerText) embed.setFooter({ text: footerText });
 
   return embed;
