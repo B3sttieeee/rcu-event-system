@@ -21,13 +21,17 @@ const BONUS_ROLES = {
   "1476000992351879229": 15
 };
 
-const giveaways = new Map();
+// Cache giveawayów
+const giveaways = new Map(); // messageId => data
 let writeQueue = Promise.resolve();
-let client;
+let client; // globalny client
 
 // ====================== DATABASE ======================
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    console.log(`[GIVEAWAY] Data directory created: ${DATA_DIR}`);
+  }
 }
 
 function loadDB() {
@@ -40,7 +44,7 @@ function loadDB() {
     const raw = fs.readFileSync(DB_PATH, "utf-8");
     return raw.trim() ? JSON.parse(raw) : {};
   } catch (err) {
-    console.error("❌ [GIVEAWAY] Load error:", err.message);
+    console.error("❌ [GIVEAWAY] Load DB error:", err.message);
     return {};
   }
 }
@@ -92,7 +96,7 @@ function getEntries(member) {
   return entries;
 }
 
-// ====================== BUILD EMBED ======================
+// ====================== BUILD EMBED (CZARNY MOTYW) ======================
 function buildEmbed(data) {
   const timeLeft = Math.max(0, data.end - Date.now());
 
@@ -120,7 +124,7 @@ function buildEmbed(data) {
 // ====================== CREATE GIVEAWAY ======================
 async function createGiveaway(interaction, options) {
   const duration = parseTime(options.time);
-  if (!duration) throw new Error("Nieprawidłowy format czasu!");
+  if (!duration) throw new Error("Nieprawidłowy format czasu! Użyj np. 1h, 30m, 2d");
 
   const giveawayData = {
     guildId: interaction.guild.id,
@@ -172,6 +176,7 @@ function startTimer(messageId) {
       return;
     }
 
+    // Aktualizacja co 10 sekund
     try {
       const channel = await client.channels.fetch(data.channelId).catch(() => null);
       if (channel) {
@@ -207,6 +212,7 @@ async function endGiveaway(messageId) {
       return;
     }
 
+    // Obliczanie szans
     let weightedUsers = [];
     const userChances = new Map();
 
@@ -253,6 +259,7 @@ async function endGiveaway(messageId) {
       .setImage(data.image || null)
       .setTimestamp();
 
+    // Edytujemy oryginalny embed zamiast tworzyć nowy
     await message.edit({ embeds: [endEmbed], components: [] }).catch(() => {});
 
     console.log(`[GIVEAWAY] Giveaway ${messageId} zakończony.`);
@@ -281,7 +288,7 @@ async function handleGiveaway(interaction) {
     data.users.push(userId);
     saveDB();
 
-    await interaction.reply({ content: "🎟 Dołączyłeś!", flags: 64 });
+    await interaction.reply({ content: "🎟 Dołączyłeś do giveawayu!", flags: 64 });
     await interaction.message.edit({ embeds: [buildEmbed(data)] }).catch(() => {});
 
   } else if (customId === "gw_leave") {
@@ -347,7 +354,7 @@ async function reroll(interaction, messageId) {
     .setImage(data.image || null)
     .setTimestamp();
 
-  await interaction.reply({ embeds: [rerollEmbed] });
+  await interaction.editReply({ embeds: [rerollEmbed] });
 }
 
 // ====================== INIT ======================
@@ -366,6 +373,7 @@ function init(botClient) {
     const remaining = g.end - Date.now();
     if (remaining > 0) {
       setTimeout(() => endGiveaway(id), remaining);
+      console.log(`[GIVEAWAY] Wznowiono timer dla ${id} — pozostało ${Math.floor(remaining/1000)}s`);
     } else {
       endGiveaway(id);
     }
