@@ -42,15 +42,14 @@ module.exports = async function interactionRouter(interaction) {
       return await modalHandler(interaction);
     }
 
-    // ==================== INNE INTERAKCJE (opcjonalnie) ====================
-    // Możesz tu dodać obsługę UserSelectMenu, RoleSelectMenu itp. w przyszłości
-
-    console.log(`[INTERACTION] Nieobsłużony typ: ${interaction.type} | CustomID: ${interaction.customId || "brak"}`);
+    // ==================== INNE INTERAKCJE ====================
+    // Tutaj możesz w przyszłości dodać obsługę UserSelectMenu, RoleSelectMenu itp.
+    console.warn(`[INTERACTION] Nieobsłużony typ: ${interaction.type} | CustomID: ${interaction.customId || "brak"}`);
 
   } catch (error) {
     console.error("[INTERACTION ROUTER ERROR]", error);
 
-    // Bezpieczne powiadomienie użytkownika (unikamy crasha)
+    // Bezpieczna odpowiedź dla użytkownika (unikamy crasha bota)
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
@@ -58,7 +57,6 @@ module.exports = async function interactionRouter(interaction) {
           ephemeral: true
         });
       } catch (e) {
-        // Jeśli nie da się odpowiedzieć (np. interakcja wygasła)
         console.error("[INTERACTION] Nie udało się wysłać odpowiedzi o błędzie.");
       }
     }
