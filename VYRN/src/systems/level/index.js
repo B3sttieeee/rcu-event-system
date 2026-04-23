@@ -35,8 +35,8 @@ let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
-const xpCooldown = new Map();           // 5s cooldown na wiadomości
-const lastLevelUp = new Map();          // 30s anti-spam level up
+const xpCooldown = new Map();      // 5s cooldown na XP z wiadomości
+const lastLevelUp = new Map();     // 30s anti-spam level up
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -69,7 +69,7 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
   if (!member || member.user.bot) return;
 
   const now = Date.now();
-  if (now - (lastLevelUp.get(member.id) || 0) < 30000) return;
+  if (now - (lastLevelUp.get(member.id) || 0) < 30000) return; // anti-spam
   lastLevelUp.set(member.id, now);
 
   const rank = getRank(newLevel);
@@ -103,7 +103,7 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
       });
     }
   } catch (err) {
-    console.error(`[LEVEL] Failed to send level-up:`, err.message);
+    console.error(`[LEVEL] Failed to send level-up for ${member.user.tag}:`, err.message);
   }
 }
 
@@ -121,7 +121,6 @@ function loadDB() {
     const raw = fs.readFileSync(DB_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : { xp: {} };
     dbCache = { xp: {} };
-
     for (const [userId, data] of Object.entries(parsed.xp || {})) {
       dbCache.xp[userId] = normalizeUserXP(data);
     }
@@ -144,7 +143,6 @@ function saveDB() {
       try {
         await fs.promises.writeFile(`${DB_PATH}.tmp`, snapshot, "utf8");
         await fs.promises.rename(`${DB_PATH}.tmp`, DB_PATH);
-        // Nie czyścimy cache od razu – zostawiamy dla kolejnych operacji w tej samej pętli
       } catch (error) {
         logError("DB SAVE ERROR", error);
       }
@@ -155,12 +153,14 @@ function saveDB() {
 
 function loadConfig() {
   if (configCache) return configCache;
+
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
       configCache = { ...DEFAULT_CONFIG };
       fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
       return configCache;
     }
+
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : {};
     configCache = { ...DEFAULT_CONFIG, ...parsed };
@@ -172,7 +172,7 @@ function loadConfig() {
   }
 }
 
-// ====================== CORE ======================
+// ====================== CORE LOGIC ======================
 function neededXP(level) {
   const current = Math.max(0, Number(level) || 0);
   return Math.floor(100 * Math.pow(current + 1, 1.5));
@@ -182,7 +182,10 @@ function getMultiplier(member) {
   const cfg = loadConfig();
   let mult = Number(cfg.globalMultiplier) || 1;
   mult *= getCurrentBoost(member.id) || 1;
-  if (cfg.boostRole && member.roles?.cache?.has(cfg.boostRole)) mult *= 1.75;
+
+  if (cfg.boostRole && member.roles?.cache?.has(cfg.boostRole)) {
+    mult *= 1.75;
+  }
   return mult;
 }
 
@@ -225,7 +228,7 @@ async function addXP(member, base = 0, length = 0, options = {}) {
     await sendLevelUpMessage(member, user.level, gain);
   }
 
-  saveDB();           // zapisujemy po każdej zmianie
+  saveDB();
   return { leveledUp: leveled, level: user.level, xp: user.xp, gained: gain };
 }
 
