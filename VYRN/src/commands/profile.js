@@ -26,8 +26,9 @@ module.exports = {
 
       // Ładowanie danych
       const levelsDB = loadDB();
-      const profileDB = loadProfile();
+      const profileDB = loadProfile();        // <-- ważne
       const lvlData = levelsDB.xp?.[userId] || { xp: 0, level: 0 };
+
       const totalVoiceMin = getVoiceMinutes(userId);
       const currentBoost = getCurrentBoost(userId) || 1;
       const coins = getCoins(userId);
