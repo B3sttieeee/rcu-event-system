@@ -7,8 +7,7 @@ const { getCurrentBoost } = require("../boost");
 const { addCoins } = require("../economy");
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
-const DB_PATH = path.join(DATA_DIR, "levels.json");
-const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
+const DB_PATH = path.join(DATA_DIR, "levels_new.json");   // nowa nazwa pliku
 
 const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 
@@ -32,11 +31,6 @@ const LEVEL_ROLES = {
 
 let dbCache = null;
 let configCache = null;
-let writeQueue = Promise.resolve();
-let voiceLoopStarted = false;
-
-const xpCooldown = new Map();
-const lastLevelUp = new Map();
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -48,12 +42,6 @@ const normalizeUserXP = (user = {}) => ({
   xp: Number.isFinite(Number(user.xp)) ? Number(user.xp) : 0,
   level: Number.isFinite(Number(user.level)) ? Number(user.level) : 0
 });
-
-const logError = (scope, error) => {
-  console.error(`[LEVEL] ${scope}`);
-  if (error?.stack) console.error(error.stack);
-  else console.error(error);
-};
 
 function getRank(level) {
   if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
@@ -67,10 +55,6 @@ function getRank(level) {
 
 async function sendLevelUpMessage(member, newLevel, xpGained) {
   if (!member || member.user.bot) return;
-
-  const now = Date.now();
-  if (now - (lastLevelUp.get(member.id) || 0) < 30000) return;
-  lastLevelUp.set(member.id, now);
 
   const rank = getRank(newLevel);
   const coinReward = 50;
@@ -95,7 +79,6 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
   try {
     const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID) ||
                     await member.guild.channels.fetch(LEVEL_UP_CHANNEL_ID).catch(() => null);
-
     if (channel) {
       await channel.send({
         content: `> **${member}** just leveled up!`,
@@ -103,13 +86,12 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
       });
     }
   } catch (err) {
-    console.error(`[LEVEL] Failed to send level-up for ${member.user.tag}:`, err.message);
+    console.error(`[LEVEL] Failed to send level-up:`, err.message);
   }
 }
 
-// ====================== LOAD & SAVE ======================
 function loadDB() {
-  if (dbCache !== null) return dbCache;
+  if (dbCache) return dbCache;
 
   try {
     if (!fs.existsSync(DB_PATH)) {
@@ -126,33 +108,21 @@ function loadDB() {
     }
     return dbCache;
   } catch (error) {
-    logError("DB LOAD ERROR", error);
+    console.error(`[LEVEL] DB LOAD ERROR:`, error.message);
     dbCache = { xp: {} };
     return dbCache;
   }
 }
 
 function saveDB() {
-  if (dbCache === null) return writeQueue;
+  if (!dbCache) return;
 
-  const snapshot = JSON.stringify(dbCache, null, 2);
-
-  writeQueue = writeQueue
-    .catch(() => null)
-    .then(async () => {
-      try {
-        await fs.promises.writeFile(`${DB_PATH}.tmp`, snapshot, "utf8");
-        await fs.promises.rename(`${DB_PATH}.tmp`, DB_PATH);
-        
-        dbCache = null;   // <--- NAJWAŻNIEJSZA POPRAWKA
-
-        console.log(`[LEVEL] Zapisano levels.json`);
-      } catch (error) {
-        logError("DB SAVE ERROR", error);
-      }
-    });
-
-  return writeQueue;
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+    console.log(`[LEVEL] Zapisano levels_new.json`);
+  } catch (error) {
+    console.error(`[LEVEL] SAVE ERROR:`, error.message);
+  }
 }
 
 function loadConfig() {
@@ -164,19 +134,17 @@ function loadConfig() {
       fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
       return configCache;
     }
-
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : {};
     configCache = { ...DEFAULT_CONFIG, ...parsed };
     return configCache;
   } catch (error) {
-    logError("CONFIG LOAD ERROR", error);
+    console.error(`[LEVEL] CONFIG LOAD ERROR:`, error.message);
     configCache = { ...DEFAULT_CONFIG };
     return configCache;
   }
 }
 
-// ====================== CORE LOGIC ======================
 function neededXP(level) {
   const current = Math.max(0, Number(level) || 0);
   return Math.floor(100 * Math.pow(current + 1, 1.5));
@@ -186,24 +154,15 @@ function getMultiplier(member) {
   const cfg = loadConfig();
   let mult = Number(cfg.globalMultiplier) || 1;
   mult *= getCurrentBoost(member.id) || 1;
-  if (cfg.boostRole && member.roles?.cache?.has(cfg.boostRole)) {
-    mult *= 1.75;
-  }
+  if (cfg.boostRole && member.roles?.cache?.has(cfg.boostRole)) mult *= 1.75;
   return mult;
 }
 
-async function addXP(member, base = 0, length = 0, options = {}) {
-  const { useCooldown = true } = options;
+async function addXP(member, base = 0, length = 0) {
   if (!member || member.user?.bot) return null;
 
   const safeBase = Number(base);
   if (!Number.isFinite(safeBase) || safeBase <= 0) return null;
-
-  if (useCooldown) {
-    const now = Date.now();
-    if (now - (xpCooldown.get(member.id) || 0) < 5000) return null;
-    xpCooldown.set(member.id, now);
-  }
 
   const db = loadDB();
   const cfg = loadConfig();
@@ -246,34 +205,29 @@ async function checkRoles(member, level) {
 async function handleMessageXP(member, content) {
   if (!member || member.user?.bot) return null;
   const cfg = loadConfig();
-  return await addXP(member, cfg.messageXP, content?.length || 0, { useCooldown: true });
+  return await addXP(member, cfg.messageXP, content?.length || 0);
 }
 
 function startVoiceXP(client) {
-  if (voiceLoopStarted) return;
-  voiceLoopStarted = true;
   console.log("🎤 Voice XP loop started");
 
   setInterval(async () => {
     const cfg = loadConfig();
-    const processed = new Set();
 
     for (const guild of client.guilds.cache.values()) {
       for (const channel of guild.channels.cache.values()) {
         if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) continue;
 
         for (const member of channel.members.values()) {
-          if (member.user?.bot || processed.has(member.id)) continue;
-          processed.add(member.id);
+          if (member.user?.bot) continue;
 
-          await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => null);
+          await addXP(member, cfg.voiceXP, 0).catch(() => null);
         }
       }
     }
   }, 60000);
 }
 
-// ====================== INIT ======================
 function init(client) {
   loadDB();
   loadConfig();
