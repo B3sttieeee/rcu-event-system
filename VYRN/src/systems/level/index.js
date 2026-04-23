@@ -5,9 +5,11 @@ const { ChannelType, EmbedBuilder } = require("discord.js");
 
 const { getCurrentBoost } = require("../boost");
 const { addCoins } = require("../economy");
+const { addVoiceTime } = require("../profile");   // ← ważne!
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
-const DB_PATH = path.join(DATA_DIR, "levels_new.json");   // nowa nazwa pliku
+const DB_PATH = path.join(DATA_DIR, "levels.json");
+const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 
 const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 
@@ -31,8 +33,12 @@ const LEVEL_ROLES = {
 
 let dbCache = null;
 let configCache = null;
+let writeQueue = Promise.resolve();
+let voiceLoopStarted = false;
 
-// ====================== INIT ======================
+const xpCooldown = new Map();
+const lastLevelUp = new Map(); // anti-spam level up
+
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -43,72 +49,36 @@ const normalizeUserXP = (user = {}) => ({
   level: Number.isFinite(Number(user.level)) ? Number(user.level) : 0
 });
 
-function getRank(level) {
-  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
-  if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
-  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
-  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
-  if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
-  if (level >= 5) return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
-  return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
+function neededXP(level) {
+  return Math.floor(100 * Math.pow(level + 1, 1.5));
 }
 
-async function sendLevelUpMessage(member, newLevel, xpGained) {
-  if (!member || member.user.bot) return;
+function getMultiplier(member) {
+  const cfg = loadConfig();
+  let multi = cfg.globalMultiplier;
 
-  const rank = getRank(newLevel);
-  const coinReward = 50;
-  addCoins(member.id, coinReward);
+  if (member.roles.cache.has(cfg.boostRole)) multi += 0.5;
+  const boost = getCurrentBoost(member.id);
+  if (boost && boost.multiplier) multi *= boost.multiplier;
 
-  const embed = new EmbedBuilder()
-    .setColor("#0a0a0a")
-    .setTitle("🎉 Level Up!")
-    .setDescription(
-      `> **${rank.emoji} ${rank.name}**\n` +
-      `> **Level ${newLevel}**\n\n` +
-      `**XP Gained:** \`${xpGained}\`\n` +
-      `**Coins Reward:** \`+${coinReward}\` <:CASHH:1491180511308157041>`
-    )
-    .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setFooter({
-      text: "VYRN CLAN • Keep grinding harder 🔥",
-      iconURL: member.guild.iconURL({ dynamic: true })
-    })
-    .setTimestamp();
-
-  try {
-    const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID) ||
-                    await member.guild.channels.fetch(LEVEL_UP_CHANNEL_ID).catch(() => null);
-    if (channel) {
-      await channel.send({
-        content: `> **${member}** just leveled up!`,
-        embeds: [embed]
-      });
-    }
-  } catch (err) {
-    console.error(`[LEVEL] Failed to send level-up:`, err.message);
-  }
+  return multi;
 }
 
+// ====================== LOAD & SAVE ======================
 function loadDB() {
   if (dbCache) return dbCache;
-
   try {
     if (!fs.existsSync(DB_PATH)) {
       dbCache = { xp: {} };
       fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
       return dbCache;
     }
-
     const raw = fs.readFileSync(DB_PATH, "utf8");
-    const parsed = raw.trim() ? JSON.parse(raw) : { xp: {} };
-    dbCache = { xp: {} };
-    for (const [userId, data] of Object.entries(parsed.xp || {})) {
-      dbCache.xp[userId] = normalizeUserXP(data);
-    }
+    dbCache = JSON.parse(raw);
+    if (!dbCache.xp) dbCache.xp = {};
     return dbCache;
-  } catch (error) {
-    console.error(`[LEVEL] DB LOAD ERROR:`, error.message);
+  } catch (e) {
+    console.error("[LEVEL] Load error:", e.message);
     dbCache = { xp: {} };
     return dbCache;
   }
@@ -116,82 +86,91 @@ function loadDB() {
 
 function saveDB() {
   if (!dbCache) return;
-
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
-    console.log(`[LEVEL] Zapisano levels_new.json`);
-  } catch (error) {
-    console.error(`[LEVEL] SAVE ERROR:`, error.message);
-  }
+  const snapshot = JSON.stringify(dbCache, null, 2);
+  writeQueue = writeQueue.then(async () => {
+    try {
+      await fs.promises.writeFile(`${DB_PATH}.tmp`, snapshot, "utf8");
+      await fs.promises.rename(`${DB_PATH}.tmp`, DB_PATH);
+      dbCache = null;
+      console.log(`[LEVEL] ✅ Zapisano levels.json`);
+    } catch (e) {
+      console.error("[LEVEL] Save error:", e.message);
+    }
+  });
 }
 
 function loadConfig() {
   if (configCache) return configCache;
-
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
       configCache = { ...DEFAULT_CONFIG };
       fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
       return configCache;
     }
-    const raw = fs.readFileSync(CONFIG_PATH, "utf8");
-    const parsed = raw.trim() ? JSON.parse(raw) : {};
-    configCache = { ...DEFAULT_CONFIG, ...parsed };
+    configCache = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
     return configCache;
-  } catch (error) {
-    console.error(`[LEVEL] CONFIG LOAD ERROR:`, error.message);
+  } catch {
     configCache = { ...DEFAULT_CONFIG };
     return configCache;
   }
 }
 
-function neededXP(level) {
-  const current = Math.max(0, Number(level) || 0);
-  return Math.floor(100 * Math.pow(current + 1, 1.5));
-}
+// ====================== XP CORE ======================
+async function addXP(member, baseAmount, messageLength = 0, options = {}) {
+  if (!member || member.user.bot) return null;
 
-function getMultiplier(member) {
   const cfg = loadConfig();
-  let mult = Number(cfg.globalMultiplier) || 1;
-  mult *= getCurrentBoost(member.id) || 1;
-  if (cfg.boostRole && member.roles?.cache?.has(cfg.boostRole)) mult *= 1.75;
-  return mult;
-}
+  let amount = baseAmount;
 
-async function addXP(member, base = 0, length = 0) {
-  if (!member || member.user?.bot) return null;
-
-  const safeBase = Number(base);
-  if (!Number.isFinite(safeBase) || safeBase <= 0) return null;
-
-  const db = loadDB();
-  const cfg = loadConfig();
-
-  if (!db.xp[member.id]) db.xp[member.id] = normalizeUserXP();
-
-  let gain = safeBase;
-  if ((length || 0) >= cfg.lengthThreshold) gain *= 1 + cfg.lengthBonus;
-
-  gain = Math.floor(gain * getMultiplier(member));
-  if (gain <= 0) return null;
-
-  const user = db.xp[member.id];
-  user.xp += gain;
-
-  let leveled = false;
-  while (user.xp >= neededXP(user.level)) {
-    user.xp -= neededXP(user.level);
-    user.level += 1;
-    leveled = true;
+  if (messageLength > cfg.lengthThreshold) {
+    amount += Math.floor(messageLength * cfg.lengthBonus);
   }
 
-  if (leveled) {
-    await checkRoles(member, user.level);
-    await sendLevelUpMessage(member, user.level, gain);
+  const multi = getMultiplier(member);
+  const finalXP = Math.floor(amount * multi);
+
+  const db = loadDB();
+  if (!db.xp[member.id]) db.xp[member.id] = { xp: 0, level: 0 };
+
+  const user = db.xp[member.id];
+  user.xp += finalXP;
+
+  let leveledUp = false;
+  while (user.xp >= neededXP(user.level)) {
+    user.xp -= neededXP(user.level);
+    user.level++;
+    leveledUp = true;
   }
 
   saveDB();
-  return { leveledUp: leveled, level: user.level, xp: user.xp, gained: gain };
+
+  if (leveledUp) {
+    await checkRoles(member, user.level);
+    await sendLevelUpMessage(member, user.level, finalXP);
+    addCoins(member.id, 50 + user.level * 5).catch(() => {});
+  }
+
+  return { leveledUp, level: user.level, xp: user.xp };
+}
+
+// ====================== LEVEL UP MESSAGE ======================
+async function sendLevelUpMessage(member, level, gained) {
+  const now = Date.now();
+  const last = lastLevelUp.get(member.id) || 0;
+  if (now - last < 30000) return; // 30s anti-spam
+  lastLevelUp.set(member.id, now);
+
+  const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
+  if (!channel) return;
+
+  const embed = new EmbedBuilder()
+    .setColor("#0a0a0a")
+    .setTitle(`🎉 ${member.user.tag} awansował!`)
+    .setDescription(`**Level ${level}**`)
+    .addFields({ name: "XP Gained", value: `+${gained} XP`, inline: true })
+    .setTimestamp();
+
+  channel.send({ embeds: [embed] }).catch(() => {});
 }
 
 async function checkRoles(member, level) {
@@ -205,29 +184,36 @@ async function checkRoles(member, level) {
 async function handleMessageXP(member, content) {
   if (!member || member.user?.bot) return null;
   const cfg = loadConfig();
-  return await addXP(member, cfg.messageXP, content?.length || 0);
+  return await addXP(member, cfg.messageXP, content?.length || 0, { useCooldown: true });
 }
 
+// ====================== VOICE XP ======================
 function startVoiceXP(client) {
+  if (voiceLoopStarted) return;
+  voiceLoopStarted = true;
   console.log("🎤 Voice XP loop started");
 
   setInterval(async () => {
     const cfg = loadConfig();
+    const processed = new Set();
 
     for (const guild of client.guilds.cache.values()) {
       for (const channel of guild.channels.cache.values()) {
         if (channel.type !== ChannelType.GuildVoice && channel.type !== ChannelType.GuildStageVoice) continue;
 
         for (const member of channel.members.values()) {
-          if (member.user?.bot) continue;
+          if (member.user?.bot || processed.has(member.id)) continue;
+          processed.add(member.id);
 
-          await addXP(member, cfg.voiceXP, 0).catch(() => null);
+          addVoiceTime(member.id, 60);                    // ← najważniejsze!
+          await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => {});
         }
       }
     }
   }, 60000);
 }
 
+// ====================== INIT ======================
 function init(client) {
   loadDB();
   loadConfig();
@@ -245,6 +231,5 @@ module.exports = {
   neededXP,
   getMultiplier,
   checkRoles,
-  getRank,
   sendLevelUpMessage
 };
