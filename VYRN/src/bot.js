@@ -75,7 +75,7 @@ function loadEvents() {
       const event = require(path.join(eventsPath, file));
 
       if (!event?.name || typeof event.execute !== "function") {
-        console.warn(`⚠️ Event ${file} nie ma poprawnej struktury`);
+        console.warn(`⚠️ Event ${file} nie ma poprawnej struktury (brak .name lub .execute)`);
         continue;
       }
 
@@ -158,7 +158,7 @@ process.on("unhandledRejection", (err) => {
 
 process.on("uncaughtException", (err) => {
   console.error("❌ Uncaught Exception:", err);
-  // process.exit(1);   // lepiej nie zabijać bota przy każdym błędzie
+  // Nie zabijamy bota przy każdym błędzie - lepiej logować
 });
 
 // ====================== LOGIN ======================
