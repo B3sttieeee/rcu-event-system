@@ -5,7 +5,8 @@ const giveawaySystem = require("../systems/giveaway");
 const eventSystem = require("../systems/event");
 
 /**
- * Główny handler wszystkich przycisków (buttons)
+ * Główny handler wszystkich przycisków (ButtonInteraction)
+ * Spójny styl z resztą handlerów
  */
 module.exports = async function buttonHandler(interaction) {
   const customId = interaction.customId;
@@ -44,14 +45,6 @@ module.exports = async function buttonHandler(interaction) {
       }
     }
 
-    // ==================== LUMBERJACK ====================
-    if (customId.startsWith("lumberjack_")) {
-      const lumberjack = require("../commands/lumberjack");
-      if (typeof lumberjack.handleLumberjackSelect === "function") {
-        return await lumberjack.handleLumberjackSelect(interaction);   // <-- tu jest select, nie button
-      }
-    }
-
     // ==================== NIEOBSŁUŻONY PRZYCISK ====================
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
@@ -63,6 +56,7 @@ module.exports = async function buttonHandler(interaction) {
   } catch (error) {
     console.error("[BUTTON HANDLER ERROR]", error);
 
+    // Bezpieczna odpowiedź dla użytkownika
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
