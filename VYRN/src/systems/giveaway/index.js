@@ -24,7 +24,7 @@ const BONUS_ROLES = {
 // Cache giveawayów
 const giveaways = new Map(); // messageId => data
 let writeQueue = Promise.resolve();
-let client; // globalny client do timera
+let client; // globalny client
 
 // ====================== DATABASE ======================
 function ensureDataDir() {
@@ -161,8 +161,10 @@ async function createGiveaway(interaction, options) {
   });
 }
 
-// ====================== TIMER (ODLICZANIE) ======================
+// ====================== TIMER ======================
 function startTimer(messageId) {
+  console.log(`[GIVEAWAY] Uruchomiono timer dla ${messageId}`);
+
   const interval = setInterval(async () => {
     const data = giveaways.get(messageId);
     if (!data || data.ended) {
@@ -176,7 +178,7 @@ function startTimer(messageId) {
       return;
     }
 
-    // Aktualizacja embedu co 10 sekund
+    // Aktualizacja co 10 sekund
     try {
       const channel = await client.channels.fetch(data.channelId).catch(() => null);
       if (channel) {
@@ -186,12 +188,12 @@ function startTimer(messageId) {
         }
       }
     } catch (err) {
-      if (err.code === 10008) clearInterval(interval); // wiadomość usunięta
+      if (err.code === 10008) clearInterval(interval);
     }
   }, 10000);
 }
 
-// ====================== END GIVEAWAY ======================
+// ====================== END GIVEAWAY (ładny embed zwycięzców) ======================
 async function endGiveaway(messageId) {
   const data = giveaways.get(messageId);
   if (!data || data.ended) return;
@@ -212,6 +214,7 @@ async function endGiveaway(messageId) {
       return;
     }
 
+    // Weighted random
     let weightedUsers = [];
     for (const userId of data.users) {
       const member = await channel.guild.members.fetch(userId).catch(() => null);
@@ -241,29 +244,33 @@ async function endGiveaway(messageId) {
 
     const endEmbed = new EmbedBuilder()
       .setColor("#22c55e")
-      .setTitle("🎉 Giveaway Zakończony!")
-      .setDescription(`**Nagroda:** ${data.prize}\n\n**Zwycięzc${count > 1 ? "y" : "a"}:** ${winnersMention}`)
+      .setTitle("🎉 GIVEAWAY ZAKOŃCZONY!")
+      .setDescription(
+        `**Nagroda:** ${data.prize}\n\n` +
+        `**Zwycięzc${count > 1 ? "y" : "a"}:** ${winnersMention}\n\n` +
+        `Gratulacje! 🎊`
+      )
+      .setImage(data.image || null)
       .setTimestamp();
 
     await channel.send({ embeds: [endEmbed] });
     await message.edit({ components: [] }).catch(() => {});
+
+    console.log(`[GIVEAWAY] Giveaway ${messageId} zakończony. Zwycięzcy: ${winners.length}`);
 
   } catch (err) {
     console.error(`[GIVEAWAY] End error ${messageId}:`, err);
   }
 }
 
-// ====================== HANDLE BUTTONS (gw_join / gw_leave) ======================
+// ====================== HANDLE BUTTONS ======================
 async function handleGiveaway(interaction) {
   const customId = interaction.customId;
   const messageId = interaction.message.id;
   const data = giveaways.get(messageId);
 
   if (!data || data.ended) {
-    return interaction.reply({ 
-      content: "❌ Ten giveaway już się zakończył.", 
-      flags: 64 
-    });
+    return interaction.reply({ content: "❌ Ten giveaway już się zakończył.", flags: 64 });
   }
 
   const userId = interaction.user.id;
@@ -272,7 +279,6 @@ async function handleGiveaway(interaction) {
     if (data.users.includes(userId)) {
       return interaction.reply({ content: "✅ Już jesteś zapisany na ten giveaway.", flags: 64 });
     }
-
     data.users.push(userId);
     saveDB();
 
@@ -283,7 +289,6 @@ async function handleGiveaway(interaction) {
     if (!data.users.includes(userId)) {
       return interaction.reply({ content: "❌ Nie jesteś zapisany na ten giveaway.", flags: 64 });
     }
-
     data.users = data.users.filter(id => id !== userId);
     saveDB();
 
@@ -321,6 +326,6 @@ function init(botClient) {
 module.exports = {
   init,
   createGiveaway,
-  handleGiveaway,     // <-- KLUCZOWE
+  handleGiveaway,
   endGiveaway
 };
