@@ -290,7 +290,7 @@ module.exports = {
   startVoiceXP,
   loadDB,
   loadConfig,
-  neededXP,
+  neededXP, 
   getMultiplier,
   checkRoles,
   getRank,
