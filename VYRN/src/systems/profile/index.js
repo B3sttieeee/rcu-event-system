@@ -40,7 +40,7 @@ const normalizeDb = (db = {}) => {
 
 // ====================== LOAD & SAVE ======================
 function loadProfile() {
-  if (dbCache) return dbCache;
+  if (dbCache !== null) return dbCache;
 
   try {
     if (!fs.existsSync(PROFILE_PATH)) {
@@ -62,7 +62,7 @@ function loadProfile() {
 }
 
 function saveProfile() {
-  if (!dbCache) return writeQueue;
+  if (dbCache === null) return writeQueue;
 
   const snapshot = JSON.stringify(dbCache, null, 2);
 
@@ -73,8 +73,7 @@ function saveProfile() {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
         
-        // KLUCZOWA POPRAWKA: Czyścimy cache po zapisie,
-        // żeby następny loadProfile() wczytał świeże dane z pliku
+        // KLUCZOWE - czyścimy cache po zapisie
         dbCache = null;
 
         console.log(`[PROFILE] Zapisano profile.json`);
@@ -138,7 +137,6 @@ function init() {
   loadProfile();
   console.log("📁 Profile System → załadowany");
 
-  // Auto flush przy wyłączaniu bota
   process.on("SIGINT", async () => { await flushProfile(); });
   process.on("SIGTERM", async () => { await flushProfile(); });
 }
