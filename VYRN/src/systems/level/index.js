@@ -143,6 +143,11 @@ function saveDB() {
       try {
         await fs.promises.writeFile(`${DB_PATH}.tmp`, snapshot, "utf8");
         await fs.promises.rename(`${DB_PATH}.tmp`, DB_PATH);
+        
+        // KLUCZOWA POPRAWKA: Czyścimy cache po zapisie
+        dbCache = null;
+
+        console.log(`[LEVEL] Zapisano levels.json`);
       } catch (error) {
         logError("DB SAVE ERROR", error);
       }
