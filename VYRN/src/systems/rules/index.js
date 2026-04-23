@@ -4,7 +4,7 @@
 const { EmbedBuilder } = require("discord.js");
 
 const RULES_CHANNEL_ID = "1475526080361140344";
-const RULES_GIF = "https://cdn.discordapp.com/attachments/1475526080361140344/1496239094810939402/ezgif.com-animated-gif-maker_2.gif?ex=69e928be&is=69e7d73e&hm=4a55408be270b97dd5bdf55f4a27a01b79fe092f8d9a5fe1094aed99ee144877&";
+const RULES_GIF = "https://cdn.discordapp.com/attachments/1475993709240778904/1496665769227059211/ezgif.com-animated-gif-maker_2.gif?ex=69eab61e&is=69e9649e&hm=5bfd45b96d0ce8737112547fbec2e351dd7a3aa51b86996a9440b00d7c37fd0e&";
 
 // ====================== CREATE RULES PANEL ======================
 async function createRulesPanel(client) {
