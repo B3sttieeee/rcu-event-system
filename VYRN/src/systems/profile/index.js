@@ -1,5 +1,5 @@
 // =====================================================
-// PROFILE SYSTEM - PROFESSIONAL VERSION
+// PROFILE SYSTEM - PROFESSIONAL FIXED VERSION
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -9,7 +9,7 @@ const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
 const PROFILE_TMP_PATH = `${PROFILE_PATH}.tmp`;
 
 const RESET_TIMEZONE = process.env.RESET_TIMEZONE || "Europe/Warsaw";
-const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true";
+const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true" || true; // włączone na stałe do testów
 
 let dbCache = null;
 let writeQueue = Promise.resolve();
@@ -39,14 +39,6 @@ const normalizeDb = (db = {}) => {
   }
   return normalized;
 };
-
-const getCurrentDayKey = () => 
-  new Intl.DateTimeFormat("en-CA", {
-    timeZone: RESET_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(new Date());
 
 // ====================== LOAD & SAVE ======================
 function loadProfile() {
@@ -82,7 +74,7 @@ function saveProfile() {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        dbCache = null;                    // Ważne - czyścimy cache po zapisie
+        dbCache = null;                    // KLUCZOWE - czyścimy cache
         console.log(`[PROFILE] ✅ Zapisano profile.json`);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
@@ -149,9 +141,8 @@ function getVoiceMinutes(userId) {
 // ====================== INIT ======================
 function init() {
   loadProfile();
-  console.log("📁 Profile System → załadowany (professional version)");
-  
-  // Auto flush przy wyłączeniu
+  console.log("📁 Profile System → załadowany (professional fixed version)");
+
   process.on("SIGINT", async () => { await flushProfile(); });
   process.on("SIGTERM", async () => { await flushProfile(); });
 }
