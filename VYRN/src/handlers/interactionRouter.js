@@ -15,7 +15,6 @@ module.exports = async function interactionRouter(interaction) {
     // ==================== SLASH COMMANDS ====================
     if (interaction.isChatInputCommand()) {
       const command = interaction.client.commands.get(interaction.commandName);
-
       if (!command) {
         return interaction.reply({
           content: "❌ Ta komenda nie istnieje lub jest aktualnie niedostępna.",
@@ -42,14 +41,14 @@ module.exports = async function interactionRouter(interaction) {
       return await modalHandler(interaction);
     }
 
-    // ==================== INNE INTERAKCJE ====================
-    // Tutaj możesz w przyszłości dodać obsługę UserSelectMenu, RoleSelectMenu itp.
+    // ==================== INNE INTERAKCJE (opcjonalnie) ====================
+    // UserSelectMenu, RoleSelectMenu, ChannelSelectMenu itp. w przyszłości
     console.warn(`[INTERACTION] Nieobsłużony typ: ${interaction.type} | CustomID: ${interaction.customId || "brak"}`);
 
   } catch (error) {
     console.error("[INTERACTION ROUTER ERROR]", error);
 
-    // Bezpieczna odpowiedź dla użytkownika (unikamy crasha bota)
+    // Bezpieczna odpowiedź nawet jeśli interakcja wygasła
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
