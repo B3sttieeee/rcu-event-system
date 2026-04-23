@@ -1,148 +1,90 @@
-// src/systems/profile/index.js
-const fs = require("fs");
-const path = require("path");
+// src/commands/profile.js
+const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-const DATA_DIR = process.env.DATA_DIR || "/data";
-const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
-const PROFILE_TMP_PATH = `${PROFILE_PATH}.tmp`;
+// Importy z systemów
+const { loadDB, neededXP } = require("../systems/level");
+const { loadProfile, getVoiceMinutes } = require("../systems/profile");
+const { getCurrentBoost } = require("../systems/boost");
+const { getCoins } = require("../systems/economy");
 
-const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true";
-
-let dbCache = null;
-let writeQueue = Promise.resolve();
-
-// ====================== INIT ======================
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  console.log(`[PROFILE] Data directory created: ${DATA_DIR}`);
+// ====================== RANK SYSTEM ======================
+function getRank(level) {
+  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
+  if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
+  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
+  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
+  if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
+  if (level >= 5)  return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
+  return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
-// ====================== HELPERS ======================
-const toSafeNumber = (value, fallback = 0) => {
-  const number = Number(value);
-  return Number.isFinite(number) ? number : fallback;
-};
-
-const normalizeUser = (user = {}) => ({
-  voice: toSafeNumber(user.voice, 0)
-});
-
-const normalizeDb = (db = {}) => {
-  const normalized = { users: {} };
-  if (!db.users || typeof db.users !== "object") return normalized;
-  for (const [userId, userData] of Object.entries(db.users)) {
-    normalized.users[userId] = normalizeUser(userData);
-  }
-  return normalized;
-};
-
-// ====================== LOAD & SAVE ======================
-function loadProfile() {
-  if (dbCache) return dbCache;
-
-  try {
-    if (!fs.existsSync(PROFILE_PATH)) {
-      dbCache = { users: {} };
-      fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
-      console.log(`[PROFILE] Utworzono nowy plik profile.json`);
-      return dbCache;
-    }
-
-    const raw = fs.readFileSync(PROFILE_PATH, "utf8");
-    const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
-    dbCache = normalizeDb(parsed);
-    return dbCache;
-  } catch (error) {
-    console.error(`[PROFILE] LOAD ERROR: ${error.message}`);
-    dbCache = { users: {} };
-    return dbCache;
-  }
-}
-
-function saveProfile() {
-  if (!dbCache) return writeQueue;
-
-  const snapshot = JSON.stringify(dbCache, null, 2);
-
-  writeQueue = writeQueue
-    .catch(() => null)
-    .then(async () => {
-      try {
-        await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
-        await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        dbCache = null;                    // KLUCZOWE - czyścimy cache
-        console.log(`[PROFILE] ✅ Zapisano profile.json`);
-      } catch (error) {
-        console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
-      }
-    });
-
-  return writeQueue;
-}
-
-async function flushProfile() {
-  try {
-    await writeQueue;
-  } catch (e) {
-    console.error("[PROFILE] Flush error:", e.message);
-  }
-}
-
-// ====================== USER ======================
-function ensureUser(userId) {
-  if (!userId) return null;
-  const db = loadProfile();
-  if (!db.users[userId]) {
-    db.users[userId] = normalizeUser();
-    saveProfile();
-  } else {
-    db.users[userId] = normalizeUser(db.users[userId]);
-  }
-  return db.users[userId];
-}
-
-// ====================== CORE ======================
-function addVoiceTime(userId, seconds) {
-  const amount = Math.floor(Number(seconds));
-  if (!userId || amount <= 0) return false;
-
-  const user = ensureUser(userId);
-  const old = user.voice;
-  user.voice += amount;
-
-  if (DEBUG_PROFILE_VOICE) {
-    console.log(`[PROFILE][VOICE] ${userId} +${amount}s | ${old}s → ${user.voice}s (${Math.floor(user.voice/60)} minut)`);
-  }
-
-  saveProfile();
-  return true;
-}
-
-function getVoiceMinutes(userId) {
-  const user = ensureUser(userId);
-  const minutes = user ? Math.floor(user.voice / 60) : 0;
-
-  if (DEBUG_PROFILE_VOICE) {
-    console.log(`[PROFILE] getVoiceMinutes(${userId}) = ${minutes} minut`);
-  }
-  return minutes;
-}
-
-// ====================== INIT ======================
-function init() {
-  loadProfile();
-  console.log("📁 Profile System → załadowany");
-  
-  process.on("SIGINT", async () => { await flushProfile(); });
-  process.on("SIGTERM", async () => { await flushProfile(); });
+function createProgressBar(percent) {
+  const size = 12;
+  const filled = Math.round((percent / 100) * size);
+  return "▰".repeat(filled) + "▱".repeat(size - filled);
 }
 
 module.exports = {
-  init,
-  loadProfile,
-  saveProfile,
-  flushProfile,
-  ensureUser,
-  addVoiceTime,
-  getVoiceMinutes
+  data: new SlashCommandBuilder()
+    .setName("profile")
+    .setDescription("📊 Wyświetla Twój szczegółowy profil w VYRN"),
+
+  async execute(interaction) {
+    await interaction.deferReply();
+
+    try {
+      const userId = interaction.user.id;
+
+      const levelsDB = loadDB();
+      const profileDB = loadProfile();
+
+      const lvlData = levelsDB.xp?.[userId] || { xp: 0, level: 0 };
+      const totalVoiceMin = getVoiceMinutes(userId);
+      const currentBoost = getCurrentBoost(userId) || 1;
+      const coins = getCoins(userId);
+
+      const nextLevelXP = neededXP(lvlData.level);
+      const progress = nextLevelXP > 0 
+        ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100)) 
+        : 0;
+      const xpLeft = Math.max(0, nextLevelXP - lvlData.xp);
+
+      const rank = getRank(lvlData.level);
+
+      const embed = new EmbedBuilder()
+        .setColor("#0a0a0a")
+        .setAuthor({
+          name: `${interaction.user.username} • VYRN Profile`,
+          iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+        })
+        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .setDescription(
+          `**${rank.emoji} ${rank.name}** — Level **${lvlData.level}**\n\n` +
+          `**Experience**\n` +
+          `> **${lvlData.xp} / ${nextLevelXP} XP**\n` +
+          `> ${createProgressBar(progress)} **${progress}%**\n` +
+          `> **${xpLeft}** XP do następnego poziomu\n\n` +
+          `**Voice Activity**\n` +
+          `> Total: **${totalVoiceMin}** minut\n\n` +
+          `**Economy**\n` +
+          `> Monety: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
+          `**Active Boost**\n` +
+          `> ${currentBoost > 1 ? `**${currentBoost}x XP** 🚀` : "**Brak**"}`
+        )
+        .setFooter({
+          text: "VYRN CLAN • Grind smarter, not harder",
+          iconURL: interaction.guild.iconURL({ dynamic: true })
+        })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
+
+    } catch (err) {
+      console.error("❌ Błąd w komendzie /profile:", err);
+      await interaction.editReply({
+        content: "❌ Wystąpił błąd podczas ładowania profilu.",
+        ephemeral: true
+      });
+    }
+  }
 };
