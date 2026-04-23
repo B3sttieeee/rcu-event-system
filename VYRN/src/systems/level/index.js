@@ -1,6 +1,4 @@
-// =====================================================
-// LEVEL SYSTEM - HYBRID MODULAR
-// =====================================================
+// src/systems/level/index.js
 const fs = require("fs");
 const path = require("path");
 const { ChannelType, EmbedBuilder } = require("discord.js");
@@ -15,8 +13,8 @@ const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 
 const DEFAULT_CONFIG = {
-  messageXP: 5,
-  voiceXP: 5,
+  messageXP: 10,      // ← zmienione na 10
+  voiceXP: 8,         // ← zmienione na 8
   lengthBonus: 0.3,
   lengthThreshold: 30,
   globalMultiplier: 1,
@@ -37,6 +35,7 @@ let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
+// Cooldown na XP z wiadomości - 5 sekund
 const xpCooldown = new Map();
 
 // ====================== INIT ======================
@@ -71,6 +70,7 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
 
   const rank = getRank(newLevel);
   const coinReward = 50;
+
   addCoins(member.id, coinReward);
 
   const embed = new EmbedBuilder()
@@ -113,11 +113,9 @@ function loadDB() {
       fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
       return dbCache;
     }
-
     const raw = fs.readFileSync(DB_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : { xp: {} };
     dbCache = { xp: {} };
-
     for (const [userId, userData] of Object.entries(parsed.xp || {})) {
       dbCache.xp[userId] = normalizeUserXP(userData);
     }
@@ -155,7 +153,6 @@ function loadConfig() {
       fs.writeFileSync(CONFIG_PATH, JSON.stringify(configCache, null, 2));
       return configCache;
     }
-
     const raw = fs.readFileSync(CONFIG_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : {};
     configCache = { ...DEFAULT_CONFIG, ...parsed };
@@ -196,9 +193,11 @@ async function addXP(member, base = 0, length = 0, options = {}) {
   const safeBase = Number(base);
   if (!Number.isFinite(safeBase) || safeBase <= 0) return null;
 
+  // Cooldown 5 sekund między gainami XP z wiadomości
   if (useCooldown) {
     const now = Date.now();
-    if (xpCooldown.has(member.id) && now - xpCooldown.get(member.id) < 2500) return null;
+    const lastXP = xpCooldown.get(member.id) || 0;
+    if (now - lastXP < 5000) return null;
     xpCooldown.set(member.id, now);
   }
 
@@ -251,7 +250,6 @@ async function handleMessageXP(member, content) {
 function startVoiceXP(client) {
   if (voiceLoopStarted) return;
   voiceLoopStarted = true;
-
   console.log("🎤 Voice XP loop started");
 
   setInterval(async () => {
