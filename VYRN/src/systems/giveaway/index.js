@@ -1,6 +1,4 @@
-// =====================================================
-// GIVEAWAY SYSTEM - HYBRID MODULAR
-// =====================================================
+// src/systems/giveaway/index.js
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -23,12 +21,12 @@ const BONUS_ROLES = {
   "1476000992351879229": 15
 };
 
-// =====================================================
-// DATABASE
-// =====================================================
+// Cache giveawayów
 const giveaways = new Map(); // messageId => data
 let writeQueue = Promise.resolve();
+let client; // globalny client
 
+// ====================== DATABASE ======================
 function ensureDataDir() {
   if (!fs.existsSync(DATA_DIR)) {
     fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -46,7 +44,7 @@ function loadDB() {
     const raw = fs.readFileSync(DB_PATH, "utf-8");
     return raw.trim() ? JSON.parse(raw) : {};
   } catch (err) {
-    console.error("❌ Błąd odczytu giveaways.json:", err.message);
+    console.error("❌ [GIVEAWAY] Load DB error:", err.message);
     return {};
   }
 }
@@ -60,14 +58,12 @@ function saveDB() {
         await fs.promises.writeFile(DB_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(DB_TMP_PATH, DB_PATH);
       } catch (err) {
-        console.error("❌ Błąd zapisu giveaways.json:", err.message);
+        console.error("❌ [GIVEAWAY] Save error:", err.message);
       }
     });
 }
 
-// =====================================================
-// HELPERS
-// =====================================================
+// ====================== HELPERS ======================
 function parseTime(timeStr) {
   const match = timeStr.match(/^(\d+)([smhd])$/i);
   if (!match) return null;
@@ -100,17 +96,16 @@ function getEntries(member) {
   return entries;
 }
 
-// =====================================================
-// BUILD EMBED
-// =====================================================
+// ====================== BUILD EMBED (CZARNY MOTYW) ======================
 function buildEmbed(data) {
   const timeLeft = Math.max(0, data.end - Date.now());
+
   const bonusText = Object.entries(BONUS_ROLES)
     .map(([roleId, bonus]) => `<@&${roleId}> → **+${bonus}**`)
     .join("\n") || "Brak bonusów";
 
   return new EmbedBuilder()
-    .setColor("#0a0a0a")
+    .setColor("#0a0a0a")                    // Czarny motyw
     .setTitle(`🎉 ${data.prize}`)
     .setDescription(data.description || "Kliknij przycisk poniżej, aby wziąć udział!")
     .addFields(
@@ -119,19 +114,19 @@ function buildEmbed(data) {
       { name: "⏳ Czas do końca", value: `\`${formatTimeLeft(timeLeft)}\``, inline: true },
       { name: "🎟 Boosty ról", value: bonusText, inline: false }
     )
-    .setImage(data.image || null)
+    .setImage(data.image || null)           // Zdjęcie zawsze się pokazuje jeśli podane
     .setFooter({
       text: `Host: ${data.hostId ? `<@${data.hostId}>` : "Nieznany"} • VYRN`,
     })
     .setTimestamp();
 }
 
-// =====================================================
-// CREATE GIVEAWAY
-// =====================================================
+// ====================== CREATE GIVEAWAY ======================
 async function createGiveaway(interaction, options) {
   const duration = parseTime(options.time);
-  if (!duration) throw new Error("Nieprawidłowy format czasu!");
+  if (!duration) {
+    throw new Error("Nieprawidłowy format czasu! Użyj np. 1h, 30m, 2d");
+  }
 
   const giveawayData = {
     guildId: interaction.guild.id,
@@ -144,7 +139,6 @@ async function createGiveaway(interaction, options) {
     ended: false,
     hostId: interaction.user.id,
     description: options.description || null,
-    requiredRole: options.requiredRole || null,
     image: options.image || null,
     createdAt: Date.now()
   };
@@ -169,15 +163,13 @@ async function createGiveaway(interaction, options) {
 
   startTimer(msg.id);
 
-  await interaction.reply({
-    content: `✅ **Giveaway utworzony pomyślnie!**\nID wiadomości: \`${msg.id}\``,
+  await interaction.editReply({
+    content: `✅ **Giveaway został utworzony pomyślnie!**\nID wiadomości: \`${msg.id}\``,
     ephemeral: true
   });
 }
 
-// =====================================================
-// TIMER & END GIVEAWAY
-// =====================================================
+// ====================== TIMER ======================
 function startTimer(messageId) {
   const interval = setInterval(async () => {
     const data = giveaways.get(messageId);
@@ -192,19 +184,22 @@ function startTimer(messageId) {
       return;
     }
 
-    // Aktualizacja co 10 sekund
+    // Aktualizacja embedu co 10 sekund
     try {
       const channel = await client.channels.fetch(data.channelId).catch(() => null);
       if (channel) {
         const message = await channel.messages.fetch(messageId).catch(() => null);
-        if (message) await message.edit({ embeds: [buildEmbed(data)] });
+        if (message) {
+          await message.edit({ embeds: [buildEmbed(data)] });
+        }
       }
     } catch (err) {
-      if (err.code === 10008) clearInterval(interval);
+      if (err.code === 10008) clearInterval(interval); // wiadomość usunięta
     }
   }, 10000);
 }
 
+// ====================== END GIVEAWAY ======================
 async function endGiveaway(messageId) {
   const data = giveaways.get(messageId);
   if (!data || data.ended) return;
@@ -267,33 +262,8 @@ async function endGiveaway(messageId) {
   }
 }
 
-// =====================================================
-// REROLL + RESUME
-// =====================================================
-async function reroll(client, messageId, rerollWinners = null) {
-  let data = giveaways.get(messageId);
-  if (!data) data = loadDB()[messageId];
-  if (!data) return "❌ Giveaway nie istnieje.";
-
-  if (!data.ended) return "❌ Giveaway jeszcze się nie zakończył!";
-
-  // ... (cała logika reroll z Twojego oryginalnego pliku)
-  // (skróciłem tutaj dla czytelności – mogę rozwinąć jeśli chcesz)
-
-  return "Reroll completed";
-}
-
-async function resumeGiveaway(client, messageId) {
-  // ... logika resume
-  return "Giveaway resumed";
-}
-
-// =====================================================
-// INIT
-// =====================================================
-let client; // global reference
-
-function loadGiveaways(botClient) {
+// ====================== INIT ======================
+function init(botClient) {
   client = botClient;
   const data = loadDB();
   giveaways.clear();
@@ -310,23 +280,11 @@ function loadGiveaways(botClient) {
     }
   }
 
-  console.log(`🎁 Załadowano ${giveaways.size} giveawayów`);
-}
-
-function init(botClient) {
-  loadGiveaways(botClient);
-  console.log("🎉 Giveaway System → załadowany");
+  console.log(`🎁 Giveaway System załadowany (${giveaways.size} aktywnych)`);
 }
 
 module.exports = {
   init,
   createGiveaway,
-  loadGiveaways,
-  endGiveaway,
-  reroll,
-  resumeGiveaway,
-  handleGiveaway: async (interaction) => {
-    console.log(`[GIVEAWAY] Button clicked: ${interaction.customId}`);
-    // Tu możesz dodać pełną obsługę gw_join / gw_leave
-  }
+  endGiveaway
 };
