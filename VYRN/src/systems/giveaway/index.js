@@ -21,13 +21,17 @@ const BONUS_ROLES = {
   "1476000992351879229": 15
 };
 
+// Cache giveawayów
 const giveaways = new Map(); // messageId => data
 let writeQueue = Promise.resolve();
-let client;
+let client; // globalny client do timera
 
 // ====================== DATABASE ======================
 function ensureDataDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    console.log(`[GIVEAWAY] Data directory created: ${DATA_DIR}`);
+  }
 }
 
 function loadDB() {
@@ -92,9 +96,10 @@ function getEntries(member) {
   return entries;
 }
 
-// ====================== BUILD EMBED ======================
+// ====================== BUILD EMBED (CZARNY MOTYW) ======================
 function buildEmbed(data) {
   const timeLeft = Math.max(0, data.end - Date.now());
+
   const bonusText = Object.entries(BONUS_ROLES)
     .map(([roleId, bonus]) => `<@&${roleId}> → **+${bonus}**`)
     .join("\n") || "Brak bonusów";
@@ -119,7 +124,7 @@ function buildEmbed(data) {
 // ====================== CREATE GIVEAWAY ======================
 async function createGiveaway(interaction, options) {
   const duration = parseTime(options.time);
-  if (!duration) throw new Error("Nieprawidłowy format czasu!");
+  if (!duration) throw new Error("Nieprawidłowy format czasu! Użyj np. 1h, 30m, 2d");
 
   const giveawayData = {
     guildId: interaction.guild.id,
@@ -151,58 +156,42 @@ async function createGiveaway(interaction, options) {
   startTimer(msg.id);
 
   await interaction.editReply({
-    content: `✅ **Giveaway utworzony pomyślnie!**\nID: \`${msg.id}\``,
-    flags: 64 // ephemeral
+    content: `✅ **Giveaway utworzony pomyślnie!**\nID wiadomości: \`${msg.id}\``,
+    flags: 64
   });
 }
 
-// ====================== HANDLE BUTTONS (gw_join / gw_leave) ======================
-async function handleGiveaway(interaction) {
-  const customId = interaction.customId;
-  const messageId = interaction.message.id;
-  const data = giveaways.get(messageId);
-
-  if (!data || data.ended) {
-    return interaction.reply({ content: "❌ Ten giveaway już się zakończył.", ephemeral: true });
-  }
-
-  const userId = interaction.user.id;
-
-  if (customId === "gw_join") {
-    if (data.users.includes(userId)) {
-      return interaction.reply({ content: "✅ Już jesteś zapisany na ten giveaway.", ephemeral: true });
-    }
-    data.users.push(userId);
-    saveDB();
-
-    await interaction.reply({ content: "🎟 Zostałeś dodany do giveawayu!", ephemeral: true });
-    await interaction.message.edit({ embeds: [buildEmbed(data)] });
-
-  } else if (customId === "gw_leave") {
-    if (!data.users.includes(userId)) {
-      return interaction.reply({ content: "❌ Nie jesteś zapisany na ten giveaway.", ephemeral: true });
-    }
-    data.users = data.users.filter(id => id !== userId);
-    saveDB();
-
-    await interaction.reply({ content: "❌ Zostałeś wypisany z giveawayu.", ephemeral: true });
-    await interaction.message.edit({ embeds: [buildEmbed(data)] });
-  }
-}
-
-// ====================== TIMER & END ======================
+// ====================== TIMER (ODLICZANIE) ======================
 function startTimer(messageId) {
   const interval = setInterval(async () => {
     const data = giveaways.get(messageId);
-    if (!data || data.ended) return clearInterval(interval);
+    if (!data || data.ended) {
+      clearInterval(interval);
+      return;
+    }
 
     if (Date.now() >= data.end) {
       clearInterval(interval);
       await endGiveaway(messageId);
+      return;
+    }
+
+    // Aktualizacja embedu co 10 sekund
+    try {
+      const channel = await client.channels.fetch(data.channelId).catch(() => null);
+      if (channel) {
+        const message = await channel.messages.fetch(messageId).catch(() => null);
+        if (message) {
+          await message.edit({ embeds: [buildEmbed(data)] });
+        }
+      }
+    } catch (err) {
+      if (err.code === 10008) clearInterval(interval); // wiadomość usunięta
     }
   }, 10000);
 }
 
+// ====================== END GIVEAWAY ======================
 async function endGiveaway(messageId) {
   const data = giveaways.get(messageId);
   if (!data || data.ended) return;
@@ -264,26 +253,74 @@ async function endGiveaway(messageId) {
   }
 }
 
+// ====================== HANDLE BUTTONS (gw_join / gw_leave) ======================
+async function handleGiveaway(interaction) {
+  const customId = interaction.customId;
+  const messageId = interaction.message.id;
+  const data = giveaways.get(messageId);
+
+  if (!data || data.ended) {
+    return interaction.reply({ 
+      content: "❌ Ten giveaway już się zakończył.", 
+      flags: 64 
+    });
+  }
+
+  const userId = interaction.user.id;
+
+  if (customId === "gw_join") {
+    if (data.users.includes(userId)) {
+      return interaction.reply({ content: "✅ Już jesteś zapisany na ten giveaway.", flags: 64 });
+    }
+
+    data.users.push(userId);
+    saveDB();
+
+    await interaction.reply({ content: "🎟 Dołączyłeś do giveawayu!", flags: 64 });
+    await interaction.message.edit({ embeds: [buildEmbed(data)] }).catch(() => {});
+
+  } else if (customId === "gw_leave") {
+    if (!data.users.includes(userId)) {
+      return interaction.reply({ content: "❌ Nie jesteś zapisany na ten giveaway.", flags: 64 });
+    }
+
+    data.users = data.users.filter(id => id !== userId);
+    saveDB();
+
+    await interaction.reply({ content: "❌ Zostałeś wypisany z giveawayu.", flags: 64 });
+    await interaction.message.edit({ embeds: [buildEmbed(data)] }).catch(() => {});
+  }
+}
+
 // ====================== INIT ======================
 function init(botClient) {
   client = botClient;
   const data = loadDB();
   giveaways.clear();
 
+  let loaded = 0;
+
   for (const [id, g] of Object.entries(data)) {
     if (g.ended) continue;
+
     giveaways.set(id, g);
+    loaded++;
+
     const remaining = g.end - Date.now();
-    if (remaining > 0) setTimeout(() => endGiveaway(id), remaining);
-    else endGiveaway(id);
+    if (remaining > 0) {
+      setTimeout(() => endGiveaway(id), remaining);
+      console.log(`[GIVEAWAY] Wznowiono timer dla ${id} — pozostało ${Math.floor(remaining/1000)}s`);
+    } else {
+      endGiveaway(id);
+    }
   }
 
-  console.log(`🎁 Giveaway System załadowany (${giveaways.size} aktywnych)`);
+  console.log(`🎁 Giveaway System załadowany (${loaded} aktywnych)`);
 }
 
 module.exports = {
   init,
   createGiveaway,
-  handleGiveaway,     // <-- Dodane!
+  handleGiveaway,     // <-- KLUCZOWE
   endGiveaway
 };
