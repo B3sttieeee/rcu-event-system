@@ -1,6 +1,4 @@
-// =====================================================
-// PRIVATE VC SYSTEM - HYBRID MODULAR
-// =====================================================
+// src/systems/privatevc/index.js
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -36,7 +34,6 @@ async function handlePrivateChannelCreation(member) {
   creatingUsers.add(member.id);
 
   try {
-    // Usuń stare kanały użytkownika jeśli istnieją
     const oldId = userChannels.get(member.id);
     if (oldId) {
       const oldChannel = guild.channels.cache.get(oldId);
@@ -85,7 +82,7 @@ async function handlePrivateChannelCreation(member) {
   cooldown(member.id);
 }
 
-// ====================== PANEL + BUTTONS ======================
+// ====================== SEND PANEL ======================
 async function sendPanel(channel, owner) {
   const embed = new EmbedBuilder()
     .setColor("#0a0a0a")
@@ -115,20 +112,213 @@ async function sendPanel(channel, owner) {
   await channel.send({ embeds: [embed], components: [row1, row2] }).catch(() => {});
 }
 
-// ====================== HANDLERS ======================
-async function handlePrivatePanel(interaction) { /* ... cały kod z oryginalnego pliku ... */ }
-async function handlePrivateSelect(interaction) { /* ... cały kod z oryginalnego pliku ... */ }
-async function handleRename(interaction) { /* ... cały kod z oryginalnego pliku ... */ }
-async function handleLimit(interaction) { /* ... cały kod z oryginalnego pliku ... */ }
+// ====================== BUTTON HANDLER ======================
+async function handlePrivatePanel(interaction) {
+  const [_, action, channelId] = interaction.customId.split("_");
+  const channel = interaction.guild.channels.cache.get(channelId);
 
-function startWatcher(channelId) { /* ... cały kod z oryginalnego pliku ... */ }
-function cleanup(channelId) { /* ... cały kod z oryginalnego pliku ... */ }
-function cooldown(userId) { /* ... cały kod z oryginalnego pliku ... */ }
+  if (!channel) {
+    return interaction.reply({ content: "❌ Channel not found.", ephemeral: true });
+  }
+
+  const ownerId = channelOwners.get(channelId);
+  if (interaction.user.id !== ownerId) {
+    return interaction.reply({ content: "❌ This is not your channel.", ephemeral: true });
+  }
+
+  // Lock
+  if (action === "lock") {
+    await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: false });
+    return interaction.reply({ content: "🔒 Channel locked.", ephemeral: true });
+  }
+
+  // Unlock
+  if (action === "unlock") {
+    await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: true });
+    return interaction.reply({ content: "🔓 Channel unlocked.", ephemeral: true });
+  }
+
+  // Delete
+  if (action === "delete") {
+    await channel.delete().catch(() => {});
+    cleanup(channelId);
+    return interaction.reply({ content: "🗑️ Channel deleted.", ephemeral: true });
+  }
+
+  // Rename
+  if (action === "rename") {
+    const modal = new ModalBuilder()
+      .setCustomId(`vc_rename_${channelId}`)
+      .setTitle("Rename Channel");
+
+    const input = new TextInputBuilder()
+      .setCustomId("value")
+      .setLabel("New channel name")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
+
+  // Limit
+  if (action === "limit") {
+    const modal = new ModalBuilder()
+      .setCustomId(`vc_limit_${channelId}`)
+      .setTitle("User Limit");
+
+    const input = new TextInputBuilder()
+      .setCustomId("value")
+      .setLabel("1 - 99")
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
+
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    return interaction.showModal(modal);
+  }
+
+  // Kick
+  if (action === "kick") {
+    const users = channel.members
+      .filter(m => m.id !== ownerId)
+      .map(m => ({ label: m.user.username, value: m.id }))
+      .slice(0, 25);
+
+    if (!users.length) {
+      return interaction.reply({ content: "❌ No users to kick.", ephemeral: true });
+    }
+
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`vc_kickselect_${channelId}`)
+      .setPlaceholder("Select user to kick")
+      .addOptions(users);
+
+    return interaction.reply({
+      content: "👢 Select user:",
+      components: [new ActionRowBuilder().addComponents(menu)],
+      ephemeral: true
+    });
+  }
+
+  // Ban
+  if (action === "ban") {
+    const users = channel.members
+      .filter(m => m.id !== ownerId)
+      .map(m => ({ label: m.user.username, value: m.id }))
+      .slice(0, 25);
+
+    if (!users.length) {
+      return interaction.reply({ content: "❌ No users to ban.", ephemeral: true });
+    }
+
+    const menu = new StringSelectMenuBuilder()
+      .setCustomId(`vc_banselect_${channelId}`)
+      .setPlaceholder("Select user to ban")
+      .addOptions(users);
+
+    return interaction.reply({
+      content: "🔨 Select user:",
+      components: [new ActionRowBuilder().addComponents(menu)],
+      ephemeral: true
+    });
+  }
+
+  // Unban All
+  if (action === "unban") {
+    channelBans.set(channelId, new Set());
+    return interaction.reply({ content: "🔓 All banned users removed.", ephemeral: true });
+  }
+}
+
+// ====================== SELECT HANDLER ======================
+async function handlePrivateSelect(interaction) {
+  const [_, type, channelId] = interaction.customId.split("_");
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) return;
+
+  const userId = interaction.values[0];
+  const target = interaction.guild.members.cache.get(userId);
+  if (!target) return;
+
+  if (type === "kickselect") {
+    await target.voice.disconnect().catch(() => {});
+    return interaction.update({ content: `👢 ${target.user.tag} kicked.`, components: [] });
+  }
+
+  if (type === "banselect") {
+    if (!channelBans.has(channelId)) channelBans.set(channelId, new Set());
+    channelBans.get(channelId).add(userId);
+
+    await channel.permissionOverwrites.edit(userId, { Connect: false });
+    await target.voice.disconnect().catch(() => {});
+
+    return interaction.update({ content: `🔨 ${target.user.tag} banned.`, components: [] });
+  }
+}
+
+// ====================== MODAL HANDLERS ======================
+async function handleRename(interaction) {
+  const channelId = interaction.customId.split("_")[2];
+  const value = interaction.fields.getTextInputValue("value");
+  const channel = interaction.guild.channels.cache.get(channelId);
+
+  if (!channel) return;
+
+  await channel.setName(value);
+  await interaction.reply({ content: "✏️ Name updated.", ephemeral: true });
+}
+
+async function handleLimit(interaction) {
+  const channelId = interaction.customId.split("_")[2];
+  const value = Number(interaction.fields.getTextInputValue("value"));
+
+  if (isNaN(value) || value < 1 || value > 99) {
+    return interaction.reply({ content: "❌ Enter number between 1-99.", ephemeral: true });
+  }
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) return;
+
+  await channel.setUserLimit(value);
+  await interaction.reply({ content: `👥 Limit set to ${value}.`, ephemeral: true });
+}
+
+// ====================== WATCHER ======================
+function startWatcher(channelId) {
+  const interval = setInterval(async () => {
+    const channel = global.client?.channels?.cache.get(channelId) || 
+                    (await require("discord.js").Client.prototype.channels.fetch(channelId).catch(() => null));
+
+    if (!channel) {
+      clearInterval(interval);
+      return;
+    }
+
+    if (channel.members.size === 0) {
+      await channel.delete().catch(() => {});
+      cleanup(channelId);
+      clearInterval(interval);
+    }
+  }, WATCH_INTERVAL);
+}
+
+// ====================== HELPERS ======================
+function cleanup(channelId) {
+  const ownerId = channelOwners.get(channelId);
+  if (ownerId) userChannels.delete(ownerId);
+  channelOwners.delete(channelId);
+  channelBans.delete(channelId);
+}
+
+function cooldown(userId) {
+  setTimeout(() => creatingUsers.delete(userId), CREATE_COOLDOWN);
+}
 
 // ====================== INIT ======================
 function init(client) {
+  // Zapisz klienta globalnie (potrzebne w watcherze)
+  global.client = client;
   console.log("🔒 Private VC System → załadowany");
-  // Nie ma potrzeby dodatkowych eventów – wszystko idzie przez voiceStateUpdate
 }
 
 module.exports = {
