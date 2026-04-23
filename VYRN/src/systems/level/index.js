@@ -144,7 +144,7 @@ function saveDB() {
         await fs.promises.writeFile(`${DB_PATH}.tmp`, snapshot, "utf8");
         await fs.promises.rename(`${DB_PATH}.tmp`, DB_PATH);
         
-        dbCache = null;   // <--- KLUCZOWE
+        dbCache = null;   // <--- NAJWAŻNIEJSZA POPRAWKA
 
         console.log(`[LEVEL] Zapisano levels.json`);
       } catch (error) {
@@ -176,6 +176,7 @@ function loadConfig() {
   }
 }
 
+// ====================== CORE LOGIC ======================
 function neededXP(level) {
   const current = Math.max(0, Number(level) || 0);
   return Math.floor(100 * Math.pow(current + 1, 1.5));
@@ -272,6 +273,7 @@ function startVoiceXP(client) {
   }, 60000);
 }
 
+// ====================== INIT ======================
 function init(client) {
   loadDB();
   loadConfig();
