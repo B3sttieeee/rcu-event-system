@@ -11,38 +11,49 @@ module.exports = async function buttonHandler(interaction) {
   console.log(`[BUTTON] ${interaction.user.tag} → ${customId}`);
 
   try {
-    // Private VC
+    // ==================== PRIVATE VC ====================
     if (customId.startsWith("vc_")) {
       return await privateVC.handlePrivatePanel(interaction);
     }
 
-    // Tickets
+    // ==================== TICKETS ====================
     if (customId === "close_ticket") {
       return await ticketSystem.handle(interaction, interaction.client);
     }
 
-    // Giveaway
+    // ==================== GIVEAWAY ====================
     if (customId.startsWith("gw_")) {
       return await giveawaySystem.handleGiveaway(interaction);
     }
 
-    // Event System
+    // ==================== EVENT SYSTEM ====================
     if (["refresh", "roles", "dm"].includes(customId)) {
       return await eventSystem.handleEventInteraction(interaction);
     }
 
-    // Nieobsłużony przycisk
+    // ==================== EMBED COMMAND ====================
+    if (customId.startsWith("embed_edit_") || customId.startsWith("embed_delete_")) {
+      const embedCommand = require("../commands/embed");
+      return await embedCommand.handleButton(interaction);
+    }
+
+    // ==================== LUMBERJACK (jeśli dodasz w przyszłości) ====================
+    // if (customId.startsWith("lumberjack_")) { ... }
+
+    // ==================== NIEOBSŁUŻONY PRZYCISK ====================
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: "❌ Ten przycisk nie jest jeszcze obsługiwany.",
         ephemeral: true
       });
     }
+
   } catch (error) {
     console.error("[BUTTON HANDLER ERROR]", error);
+
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
-        content: "❌ Wystąpił błąd przy obsłudze przycisku.",
+        content: "❌ Wystąpił błąd podczas przetwarzania przycisku.",
         ephemeral: true
       }).catch(() => {});
     }
