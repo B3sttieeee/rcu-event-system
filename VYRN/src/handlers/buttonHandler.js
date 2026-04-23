@@ -4,6 +4,9 @@ const ticketSystem = require("../systems/tickets");
 const giveawaySystem = require("../systems/giveaway");
 const eventSystem = require("../systems/event");
 
+/**
+ * Główny handler wszystkich przycisków (buttons)
+ */
 module.exports = async function buttonHandler(interaction) {
   const customId = interaction.customId;
   if (!customId) return;
@@ -23,7 +26,9 @@ module.exports = async function buttonHandler(interaction) {
 
     // ==================== GIVEAWAY ====================
     if (customId.startsWith("gw_")) {
-      return await giveawaySystem.handleGiveaway(interaction);
+      if (typeof giveawaySystem.handleGiveaway === "function") {
+        return await giveawaySystem.handleGiveaway(interaction);
+      }
     }
 
     // ==================== EVENT SYSTEM ====================
@@ -34,11 +39,18 @@ module.exports = async function buttonHandler(interaction) {
     // ==================== EMBED COMMAND ====================
     if (customId.startsWith("embed_edit_") || customId.startsWith("embed_delete_")) {
       const embedCommand = require("../commands/embed");
-      return await embedCommand.handleButton(interaction);
+      if (typeof embedCommand.handleButton === "function") {
+        return await embedCommand.handleButton(interaction);
+      }
     }
 
-    // ==================== LUMBERJACK (jeśli dodasz w przyszłości) ====================
-    // if (customId.startsWith("lumberjack_")) { ... }
+    // ==================== LUMBERJACK ====================
+    if (customId.startsWith("lumberjack_")) {
+      const lumberjack = require("../commands/lumberjack");
+      if (typeof lumberjack.handleLumberjackSelect === "function") {
+        return await lumberjack.handleLumberjackSelect(interaction);   // <-- tu jest select, nie button
+      }
+    }
 
     // ==================== NIEOBSŁUŻONY PRZYCISK ====================
     if (!interaction.replied && !interaction.deferred) {
@@ -52,10 +64,14 @@ module.exports = async function buttonHandler(interaction) {
     console.error("[BUTTON HANDLER ERROR]", error);
 
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: "❌ Wystąpił błąd podczas przetwarzania przycisku.",
-        ephemeral: true
-      }).catch(() => {});
+      try {
+        await interaction.reply({
+          content: "❌ Wystąpił błąd podczas przetwarzania przycisku.",
+          ephemeral: true
+        });
+      } catch (e) {
+        console.error("[BUTTON] Nie udało się wysłać odpowiedzi o błędzie.");
+      }
     }
   }
 };
