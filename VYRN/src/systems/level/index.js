@@ -35,8 +35,8 @@ let configCache = null;
 let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
-const xpCooldown = new Map();      // 5s cooldown na XP z wiadomości
-const lastLevelUp = new Map();     // 30s anti-spam level up
+const xpCooldown = new Map();
+const lastLevelUp = new Map();
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -69,7 +69,7 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
   if (!member || member.user.bot) return;
 
   const now = Date.now();
-  if (now - (lastLevelUp.get(member.id) || 0) < 30000) return; // anti-spam
+  if (now - (lastLevelUp.get(member.id) || 0) < 30000) return;
   lastLevelUp.set(member.id, now);
 
   const rank = getRank(newLevel);
@@ -109,7 +109,7 @@ async function sendLevelUpMessage(member, newLevel, xpGained) {
 
 // ====================== LOAD & SAVE ======================
 function loadDB() {
-  if (dbCache) return dbCache;
+  if (dbCache !== null) return dbCache;
 
   try {
     if (!fs.existsSync(DB_PATH)) {
@@ -133,7 +133,7 @@ function loadDB() {
 }
 
 function saveDB() {
-  if (!dbCache) return writeQueue;
+  if (dbCache === null) return writeQueue;
 
   const snapshot = JSON.stringify(dbCache, null, 2);
 
@@ -144,8 +144,7 @@ function saveDB() {
         await fs.promises.writeFile(`${DB_PATH}.tmp`, snapshot, "utf8");
         await fs.promises.rename(`${DB_PATH}.tmp`, DB_PATH);
         
-        // KLUCZOWA POPRAWKA: Czyścimy cache po zapisie
-        dbCache = null;
+        dbCache = null;   // <--- KLUCZOWE
 
         console.log(`[LEVEL] Zapisano levels.json`);
       } catch (error) {
@@ -177,7 +176,6 @@ function loadConfig() {
   }
 }
 
-// ====================== CORE LOGIC ======================
 function neededXP(level) {
   const current = Math.max(0, Number(level) || 0);
   return Math.floor(100 * Math.pow(current + 1, 1.5));
@@ -187,7 +185,6 @@ function getMultiplier(member) {
   const cfg = loadConfig();
   let mult = Number(cfg.globalMultiplier) || 1;
   mult *= getCurrentBoost(member.id) || 1;
-
   if (cfg.boostRole && member.roles?.cache?.has(cfg.boostRole)) {
     mult *= 1.75;
   }
@@ -275,7 +272,6 @@ function startVoiceXP(client) {
   }, 60000);
 }
 
-// ====================== INIT ======================
 function init(client) {
   loadDB();
   loadConfig();
@@ -290,7 +286,7 @@ module.exports = {
   startVoiceXP,
   loadDB,
   loadConfig,
-  neededXP, 
+  neededXP,
   getMultiplier,
   checkRoles,
   getRank,
