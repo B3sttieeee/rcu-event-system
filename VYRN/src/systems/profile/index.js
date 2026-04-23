@@ -1,6 +1,4 @@
-// =====================================================
-// PROFILE SYSTEM - HYBRID MODULAR
-// =====================================================
+// src/systems/profile/index.js
 const fs = require("fs");
 const path = require("path");
 
@@ -13,7 +11,6 @@ const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true";
 
 let dbCache = null;
 let writeQueue = Promise.resolve();
-let resetInterval = null;
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -41,14 +38,6 @@ const normalizeDb = (db = {}) => {
   return normalized;
 };
 
-const getCurrentDayKey = () =>
-  new Intl.DateTimeFormat("en-CA", {
-    timeZone: RESET_TIMEZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit"
-  }).format(new Date());
-
 // ====================== LOAD & SAVE ======================
 function loadProfile() {
   if (dbCache) return dbCache;
@@ -57,6 +46,7 @@ function loadProfile() {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
       fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
+      console.log(`[PROFILE] Utworzono nowy plik profile.json`);
       return dbCache;
     }
 
@@ -75,24 +65,27 @@ function saveProfile() {
   if (!dbCache) return writeQueue;
 
   const snapshot = JSON.stringify(dbCache, null, 2);
+
   writeQueue = writeQueue
     .catch(() => null)
     .then(async () => {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        dbCache = null;
-        console.log(`[PROFILE] Saved and cache cleared`);
+        // Nie czyścimy cache od razu – zostawiamy dla dalszych operacji
+        console.log(`[PROFILE] Zapisano profile.json`);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
       }
     });
+
   return writeQueue;
 }
 
 async function flushProfile() {
   try {
     await writeQueue;
+    console.log(`[PROFILE] Flushed on shutdown`);
   } catch (e) {
     console.error("[PROFILE] Flush error:", e.message);
   }
@@ -100,6 +93,7 @@ async function flushProfile() {
 
 function ensureUser(userId) {
   if (!userId) return null;
+
   const db = loadProfile();
 
   if (!db.users[userId]) {
@@ -108,6 +102,7 @@ function ensureUser(userId) {
   } else {
     db.users[userId] = normalizeUser(db.users[userId]);
   }
+
   return db.users[userId];
 }
 
@@ -139,7 +134,7 @@ function init() {
   loadProfile();
   console.log("📁 Profile System → załadowany");
 
-  // Auto flush przy wyłączaniu
+  // Auto flush przy wyłączaniu bota
   process.on("SIGINT", async () => { await flushProfile(); });
   process.on("SIGTERM", async () => { await flushProfile(); });
 }
