@@ -8,7 +8,7 @@ const AUTO_ROLE_DELAY = 1500;
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 module.exports = {
-  name: Events.GuildMemberAdd,
+  name: Events.GuildMemberAdd,   // ← Poprawione
 
   async execute(member) {
     if (member.user.bot) return;
@@ -37,7 +37,7 @@ module.exports = {
                              await guild.channels.fetch(WELCOME_CHANNEL_ID).catch(() => null);
 
       if (!welcomeChannel?.isTextBased()) {
-        console.warn(`[JOIN] Welcome channel not found or not text-based: ${WELCOME_CHANNEL_ID}`);
+        console.warn(`[JOIN] Welcome channel not found or not text-based`);
         return;
       }
 
@@ -49,7 +49,7 @@ module.exports = {
         })
         .setTitle(`Welcome ${member.user.username}!`)
         .setDescription(
-          `**Welcome to VYRN Clan!** 👋\n\n` +
+          `**Welcome ${member} to VYRN Clan!** 👋\n\n` +
 
           `**Start Here**\n` +
           `・ **<#1475526080361140344>** • Server Rules\n` +
@@ -63,10 +63,10 @@ module.exports = {
 
           `🔥 **Good luck and have fun!**`
         )
-        .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
+        .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
         .setImage("https://media.discordapp.net/attachments/1475992778554216448/1496214765406650489/ezgif.com-animated-gif-maker.gif")
         .setFooter({
-          text: `New Member #${guild.memberCount} • VYRN Clan`,
+          text: `New Member #${guild.memberCount} • VYRN`,
           iconURL: guild.iconURL({ dynamic: true })
         })
         .setTimestamp();
