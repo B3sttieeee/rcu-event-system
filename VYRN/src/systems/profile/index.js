@@ -72,7 +72,6 @@ function saveProfile() {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        // Nie czyścimy cache od razu – zostawiamy dla dalszych operacji
         console.log(`[PROFILE] Zapisano profile.json`);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
