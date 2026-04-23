@@ -1,5 +1,5 @@
 // =====================================================
-// LEVEL SYSTEM - PROFESSIONAL VERSION
+// LEVEL SYSTEM - PROFESSIONAL VERSION + AUTO COINS
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -18,6 +18,8 @@ const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 const DEFAULT_CONFIG = {
   messageXP: 10,
   voiceXP: 8,
+  messageCoins: 8,      // monety za wiadomość
+  voiceCoins: 6,        // monety za minutę na voice
   lengthBonus: 0.3,
   lengthThreshold: 30,
   globalMultiplier: 1,
@@ -39,18 +41,13 @@ let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
 const xpCooldown = new Map();
-const lastLevelUp = new Map(); // 30s anti-spam level up
+const lastLevelUp = new Map(); // anti-spam level up
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
 // ====================== HELPERS ======================
-const normalizeUserXP = (user = {}) => ({
-  xp: Number.isFinite(Number(user.xp)) ? Number(user.xp) : 0,
-  level: Number.isFinite(Number(user.level)) ? Number(user.level) : 0
-});
-
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level + 1, 1.5));
 }
@@ -80,14 +77,12 @@ function getMultiplier(member) {
 // ====================== LOAD & SAVE ======================
 function loadDB() {
   if (dbCache) return dbCache;
-
   try {
     if (!fs.existsSync(DB_PATH)) {
       dbCache = { xp: {} };
       fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
       return dbCache;
     }
-
     const raw = fs.readFileSync(DB_PATH, "utf8");
     dbCache = JSON.parse(raw);
     if (!dbCache.xp) dbCache.xp = {};
@@ -101,9 +96,7 @@ function loadDB() {
 
 function saveDB() {
   if (!dbCache) return;
-
   const snapshot = JSON.stringify(dbCache, null, 2);
-
   writeQueue = writeQueue
     .catch(() => null)
     .then(async () => {
@@ -120,7 +113,6 @@ function saveDB() {
 
 function loadConfig() {
   if (configCache) return configCache;
-
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
       configCache = { ...DEFAULT_CONFIG };
@@ -136,18 +128,23 @@ function loadConfig() {
 }
 
 // ====================== CORE ======================
-async function addXP(member, baseAmount, messageLength = 0, options = {}) {
+async function addXP(member, baseAmount, messageLength = 0) {
   if (!member || member.user?.bot) return null;
 
   const cfg = loadConfig();
-  let amount = baseAmount;
+  let xpAmount = baseAmount;
+  let coinAmount = 0;
 
-  if (messageLength > cfg.lengthThreshold) {
-    amount += Math.floor(messageLength * cfg.lengthBonus);
+  // Monety + XP za wiadomość
+  if (messageLength > 0) {
+    coinAmount += cfg.messageCoins;
+    if (messageLength > cfg.lengthThreshold) {
+      xpAmount += Math.floor(messageLength * cfg.lengthBonus);
+    }
   }
 
   const multi = getMultiplier(member);
-  const finalXP = Math.floor(amount * multi);
+  const finalXP = Math.floor(xpAmount * multi);
 
   const db = loadDB();
   if (!db.xp[member.id]) db.xp[member.id] = { xp: 0, level: 0 };
@@ -163,6 +160,11 @@ async function addXP(member, baseAmount, messageLength = 0, options = {}) {
   }
 
   saveDB();
+
+  // Dodaj monety
+  if (coinAmount > 0) {
+    addCoins(member.id, coinAmount);
+  }
 
   if (leveledUp) {
     await checkRoles(member, user.level);
@@ -202,14 +204,14 @@ async function checkRoles(member, level) {
 async function handleMessageXP(member, content) {
   if (!member || member.user?.bot) return null;
   const cfg = loadConfig();
-  return await addXP(member, cfg.messageXP, content?.length || 0, { useCooldown: true });
+  return await addXP(member, cfg.messageXP, content?.length || 0);
 }
 
-// ====================== VOICE XP ======================
+// ====================== VOICE XP + COINS ======================
 function startVoiceXP(client) {
   if (voiceLoopStarted) return;
   voiceLoopStarted = true;
-  console.log("🎤 Voice XP loop started");
+  console.log("🎤 Voice XP + Coins loop started");
 
   setInterval(async () => {
     const cfg = loadConfig();
@@ -223,8 +225,9 @@ function startVoiceXP(client) {
           if (member.user?.bot || processed.has(member.id)) continue;
           processed.add(member.id);
 
-          addVoiceTime(member.id, 60);           // ← Kluczowe!
-          await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => {});
+          addVoiceTime(member.id, 60);
+          await addXP(member, cfg.voiceXP, 0).catch(() => {});
+          addCoins(member.id, cfg.voiceCoins);        // ← MONETY ZA VOICE
         }
       }
     }
@@ -236,7 +239,7 @@ function init(client) {
   loadDB();
   loadConfig();
   startVoiceXP(client);
-  console.log("📈 Level System → załadowany");
+  console.log("📈 Level System → załadowany (z automatycznymi monetami)");
 }
 
 module.exports = {
@@ -249,6 +252,6 @@ module.exports = {
   neededXP,
   getMultiplier,
   checkRoles,
-  getRank,                    // ← WAŻNE DLA /profile
+  getRank,
   sendLevelUpMessage
 };
