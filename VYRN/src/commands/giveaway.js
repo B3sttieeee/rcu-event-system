@@ -1,8 +1,7 @@
 // src/commands/giveaway.js
 const {
   SlashCommandBuilder,
-  EmbedBuilder,
-  PermissionFlagsBits
+  MessageFlags
 } = require("discord.js");
 
 const { createGiveaway } = require("../systems/giveaway");
@@ -11,7 +10,7 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName("giveaway")
     .setDescription("🎉 Tworzy nowy giveaway")
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageEvents) // tylko osoby z Manage Events
+    .setDefaultMemberPermissions(8) // Administrator
     .addStringOption(option =>
       option
         .setName("prize")
@@ -38,33 +37,29 @@ module.exports = {
         .setDescription("Dodatkowy opis giveawayu")
         .setRequired(false)
     )
-    .addStringOption(option =>
+    .addAttachmentOption(option =>           // <-- Zmienione na AttachmentOption
       option
         .setName("image")
-        .setDescription("URL obrazka do embedu")
+        .setDescription("Obrazek do embedu giveawayu")
         .setRequired(false)
     ),
 
   async execute(interaction) {
-    if (!interaction.guild) {
-      return interaction.reply({ content: "Tej komendy można używać tylko na serwerze.", ephemeral: true });
-    }
-
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });   // <-- Poprawione
 
     try {
       const prize = interaction.options.getString("prize");
       const time = interaction.options.getString("time");
       const winners = interaction.options.getInteger("winners");
       const description = interaction.options.getString("description");
-      const image = interaction.options.getString("image");
+      const imageAttachment = interaction.options.getAttachment("image"); // <-- Attachment
 
       const options = {
         prize,
         time,
         winners,
         description,
-        image
+        image: imageAttachment ? imageAttachment.url : null   // Pobieramy URL z attachment
       };
 
       await createGiveaway(interaction, options);
@@ -73,7 +68,7 @@ module.exports = {
       console.error("[GIVEAWAY COMMAND ERROR]", error);
       await interaction.editReply({
         content: "❌ Wystąpił błąd podczas tworzenia giveawayu.",
-        ephemeral: true
+        flags: MessageFlags.Ephemeral
       });
     }
   }
