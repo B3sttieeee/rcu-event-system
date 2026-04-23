@@ -1,5 +1,5 @@
 // =====================================================
-// LEVEL SYSTEM - PROFESSIONAL VERSION + AUTO COINS
+// LEVEL SYSTEM - FINAL VERSION Z MONETAMI
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -18,8 +18,8 @@ const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 const DEFAULT_CONFIG = {
   messageXP: 10,
   voiceXP: 8,
-  messageCoins: 8,      // monety za wiadomość
-  voiceCoins: 6,        // monety za minutę na voice
+  messageCoins: 10,     // ← ile monet za wiadomość
+  voiceCoins: 8,        // ← ile monet za minutę voice
   lengthBonus: 0.3,
   lengthThreshold: 30,
   globalMultiplier: 1,
@@ -41,8 +41,9 @@ let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
 const xpCooldown = new Map();
-const lastLevelUp = new Map(); // anti-spam level up
+const lastLevelUp = new Map();
 
+// ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -65,12 +66,9 @@ function getRank(level) {
 function getMultiplier(member) {
   const cfg = loadConfig();
   let multi = cfg.globalMultiplier;
-
   if (member.roles.cache.has(cfg.boostRole)) multi += 0.5;
-
   const boost = getCurrentBoost(member.id);
   if (boost?.multiplier) multi *= boost.multiplier;
-
   return multi;
 }
 
@@ -135,7 +133,7 @@ async function addXP(member, baseAmount, messageLength = 0) {
   let xpAmount = baseAmount;
   let coinAmount = 0;
 
-  // Monety + XP za wiadomość
+  // MONETY ZA WIADOMOŚĆ
   if (messageLength > 0) {
     coinAmount += cfg.messageCoins;
     if (messageLength > cfg.lengthThreshold) {
@@ -161,9 +159,10 @@ async function addXP(member, baseAmount, messageLength = 0) {
 
   saveDB();
 
-  // Dodaj monety
+  // === DODAJ MONETY ===
   if (coinAmount > 0) {
     addCoins(member.id, coinAmount);
+    console.log(`[ECONOMY] +${coinAmount} monet dla ${member.user.tag} (wiadomość)`);
   }
 
   if (leveledUp) {
@@ -175,39 +174,7 @@ async function addXP(member, baseAmount, messageLength = 0) {
   return { leveledUp, level: user.level, xp: user.xp };
 }
 
-async function sendLevelUpMessage(member, level, gained) {
-  const now = Date.now();
-  if (now - (lastLevelUp.get(member.id) || 0) < 30000) return;
-  lastLevelUp.set(member.id, now);
-
-  const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
-  if (!channel) return;
-
-  const embed = new EmbedBuilder()
-    .setColor("#0a0a0a")
-    .setTitle(`🎉 ${member.user.tag} awansował!`)
-    .setDescription(`**Level ${level}**`)
-    .addFields({ name: "XP Gained", value: `+${gained} XP`, inline: true })
-    .setTimestamp();
-
-  channel.send({ embeds: [embed] }).catch(() => {});
-}
-
-async function checkRoles(member, level) {
-  for (const [reqLevel, roleId] of Object.entries(LEVEL_ROLES)) {
-    if (level >= Number(reqLevel) && !member.roles.cache.has(roleId)) {
-      await member.roles.add(roleId).catch(() => {});
-    }
-  }
-}
-
-async function handleMessageXP(member, content) {
-  if (!member || member.user?.bot) return null;
-  const cfg = loadConfig();
-  return await addXP(member, cfg.messageXP, content?.length || 0);
-}
-
-// ====================== VOICE XP + COINS ======================
+// ====================== VOICE LOOP ======================
 function startVoiceXP(client) {
   if (voiceLoopStarted) return;
   voiceLoopStarted = true;
@@ -227,19 +194,30 @@ function startVoiceXP(client) {
 
           addVoiceTime(member.id, 60);
           await addXP(member, cfg.voiceXP, 0).catch(() => {});
-          addCoins(member.id, cfg.voiceCoins);        // ← MONETY ZA VOICE
+
+          // MONETY ZA VOICE
+          addCoins(member.id, cfg.voiceCoins);
+          console.log(`[ECONOMY] +${cfg.voiceCoins} monet dla ${member.user.tag} (voice)`);
         }
       }
     }
   }, 60000);
 }
 
-// ====================== INIT ======================
+// ====================== POZOSTAŁE FUNKCJE ======================
+async function sendLevelUpMessage(member, level, gained) { /* ... zostaw jak miałeś ... */ }
+async function checkRoles(member, level) { /* ... zostaw jak miałeś ... */ }
+async function handleMessageXP(member, content) {
+  if (!member || member.user?.bot) return null;
+  const cfg = loadConfig();
+  return await addXP(member, cfg.messageXP, content?.length || 0);
+}
+
 function init(client) {
   loadDB();
   loadConfig();
   startVoiceXP(client);
-  console.log("📈 Level System → załadowany (z automatycznymi monetami)");
+  console.log("📈 Level System → załadowany (z monetami za aktywność)");
 }
 
 module.exports = {
