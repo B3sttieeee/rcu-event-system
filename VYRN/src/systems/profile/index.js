@@ -3,10 +3,9 @@ const fs = require("fs");
 const path = require("path");
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
-const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
+const PROFILE_PATH = path.join(DATA_DIR, "profile_new.json");   // nowa nazwa pliku
 const PROFILE_TMP_PATH = `${PROFILE_PATH}.tmp`;
 
-const RESET_TIMEZONE = process.env.RESET_TIMEZONE || "Europe/Warsaw";
 const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true";
 
 let dbCache = null;
@@ -40,19 +39,20 @@ const normalizeDb = (db = {}) => {
 
 // ====================== LOAD & SAVE ======================
 function loadProfile() {
-  if (dbCache !== null) return dbCache;
+  if (dbCache) return dbCache;
 
   try {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
       fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
-      console.log(`[PROFILE] Utworzono nowy plik profile.json`);
+      console.log(`[PROFILE] Utworzono nowy plik profile_new.json`);
       return dbCache;
     }
 
     const raw = fs.readFileSync(PROFILE_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
     dbCache = normalizeDb(parsed);
+    console.log(`[PROFILE] Wczytano profile_new.json (${Object.keys(dbCache.users).length} użytkowników)`);
     return dbCache;
   } catch (error) {
     console.error(`[PROFILE] LOAD ERROR: ${error.message}`);
@@ -62,7 +62,7 @@ function loadProfile() {
 }
 
 function saveProfile() {
-  if (dbCache === null) return writeQueue;
+  if (!dbCache) return writeQueue;
 
   const snapshot = JSON.stringify(dbCache, null, 2);
 
@@ -72,26 +72,14 @@ function saveProfile() {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-        
-        // KLUCZOWE - czyścimy cache po zapisie
         dbCache = null;
-
-        console.log(`[PROFILE] Zapisano profile.json`);
+        console.log(`[PROFILE] Zapisano profile_new.json`);
       } catch (error) {
         console.error(`[PROFILE] SAVE ERROR: ${error.message}`);
       }
     });
 
   return writeQueue;
-}
-
-async function flushProfile() {
-  try {
-    await writeQueue;
-    console.log(`[PROFILE] Flushed on shutdown`);
-  } catch (e) {
-    console.error("[PROFILE] Flush error:", e.message);
-  }
 }
 
 function ensureUser(userId) {
@@ -101,6 +89,7 @@ function ensureUser(userId) {
 
   if (!db.users[userId]) {
     db.users[userId] = normalizeUser();
+    console.log(`[PROFILE] Utworzono nowy profil dla ${userId}`);
     saveProfile();
   } else {
     db.users[userId] = normalizeUser(db.users[userId]);
@@ -112,15 +101,16 @@ function ensureUser(userId) {
 // ====================== CORE FUNCTIONS ======================
 function addVoiceTime(userId, seconds) {
   const amount = Math.floor(Number(seconds));
-  if (!userId || !Number.isFinite(amount) || amount <= 0) return false;
+  if (!userId || amount <= 0) return false;
 
   const user = ensureUser(userId);
   if (!user) return false;
 
+  const old = user.voice;
   user.voice += amount;
 
   if (DEBUG_PROFILE_VOICE) {
-    console.log(`[PROFILE][VOICE] ${userId} +${amount}s | Total: ${user.voice}s`);
+    console.log(`[PROFILE][VOICE] ${userId} +${amount}s | ${old} → ${user.voice}s`);
   }
 
   saveProfile();
@@ -129,24 +119,19 @@ function addVoiceTime(userId, seconds) {
 
 function getVoiceMinutes(userId) {
   const user = ensureUser(userId);
-  return user ? Math.floor(user.voice / 60) : 0;
+  const minutes = user ? Math.floor(user.voice / 60) : 0;
+  console.log(`[PROFILE] getVoiceMinutes(${userId}) = ${minutes} minut`);
+  return minutes;
 }
 
 // ====================== INIT ======================
 function init() {
   loadProfile();
   console.log("📁 Profile System → załadowany");
-
-  process.on("SIGINT", async () => { await flushProfile(); });
-  process.on("SIGTERM", async () => { await flushProfile(); });
 }
 
 module.exports = {
   init,
-  loadProfile,
-  saveProfile,
-  flushProfile,
-  ensureUser,
   addVoiceTime,
   getVoiceMinutes
 };
