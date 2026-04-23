@@ -1,11 +1,13 @@
-// src/systems/level/index.js
+// =====================================================
+// LEVEL SYSTEM - PROFESSIONAL VERSION
+// =====================================================
 const fs = require("fs");
 const path = require("path");
 const { ChannelType, EmbedBuilder } = require("discord.js");
 
 const { getCurrentBoost } = require("../boost");
 const { addCoins } = require("../economy");
-const { addVoiceTime } = require("../profile");   // ← ważne!
+const { addVoiceTime } = require("../profile");
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "levels.json");
@@ -23,7 +25,7 @@ const DEFAULT_CONFIG = {
 };
 
 const LEVEL_ROLES = {
-  5: "1476000458987278397",
+  5:  "1476000458987278397",
   15: "1476000995501670534",
   30: "1476000459595448442",
   45: "1476000991206707221",
@@ -37,7 +39,7 @@ let writeQueue = Promise.resolve();
 let voiceLoopStarted = false;
 
 const xpCooldown = new Map();
-const lastLevelUp = new Map(); // anti-spam level up
+const lastLevelUp = new Map(); // 30s anti-spam level up
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -53,13 +55,24 @@ function neededXP(level) {
   return Math.floor(100 * Math.pow(level + 1, 1.5));
 }
 
+function getRank(level) {
+  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
+  if (level >= 60) return { name: "Ruby",   emoji: "<:RubyRank:1488756400514404372>" };
+  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
+  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
+  if (level >= 15) return { name: "Gold",    emoji: "<:GoldRank:1488756524854808686>" };
+  if (level >= 5)  return { name: "Bronze",  emoji: "<:BronzeRank:1488756638285565962>" };
+  return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
+}
+
 function getMultiplier(member) {
   const cfg = loadConfig();
   let multi = cfg.globalMultiplier;
 
   if (member.roles.cache.has(cfg.boostRole)) multi += 0.5;
+
   const boost = getCurrentBoost(member.id);
-  if (boost && boost.multiplier) multi *= boost.multiplier;
+  if (boost?.multiplier) multi *= boost.multiplier;
 
   return multi;
 }
@@ -67,18 +80,20 @@ function getMultiplier(member) {
 // ====================== LOAD & SAVE ======================
 function loadDB() {
   if (dbCache) return dbCache;
+
   try {
     if (!fs.existsSync(DB_PATH)) {
       dbCache = { xp: {} };
       fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
       return dbCache;
     }
+
     const raw = fs.readFileSync(DB_PATH, "utf8");
     dbCache = JSON.parse(raw);
     if (!dbCache.xp) dbCache.xp = {};
     return dbCache;
-  } catch (e) {
-    console.error("[LEVEL] Load error:", e.message);
+  } catch (error) {
+    console.error(`[LEVEL] LOAD ERROR: ${error.message}`);
     dbCache = { xp: {} };
     return dbCache;
   }
@@ -86,21 +101,26 @@ function loadDB() {
 
 function saveDB() {
   if (!dbCache) return;
+
   const snapshot = JSON.stringify(dbCache, null, 2);
-  writeQueue = writeQueue.then(async () => {
-    try {
-      await fs.promises.writeFile(`${DB_PATH}.tmp`, snapshot, "utf8");
-      await fs.promises.rename(`${DB_PATH}.tmp`, DB_PATH);
-      dbCache = null;
-      console.log(`[LEVEL] ✅ Zapisano levels.json`);
-    } catch (e) {
-      console.error("[LEVEL] Save error:", e.message);
-    }
-  });
+
+  writeQueue = writeQueue
+    .catch(() => null)
+    .then(async () => {
+      try {
+        await fs.promises.writeFile(`${DB_PATH}.tmp`, snapshot, "utf8");
+        await fs.promises.rename(`${DB_PATH}.tmp`, DB_PATH);
+        dbCache = null;
+        console.log(`[LEVEL] ✅ Zapisano levels.json`);
+      } catch (error) {
+        console.error(`[LEVEL] SAVE ERROR: ${error.message}`);
+      }
+    });
 }
 
 function loadConfig() {
   if (configCache) return configCache;
+
   try {
     if (!fs.existsSync(CONFIG_PATH)) {
       configCache = { ...DEFAULT_CONFIG };
@@ -115,9 +135,9 @@ function loadConfig() {
   }
 }
 
-// ====================== XP CORE ======================
+// ====================== CORE ======================
 async function addXP(member, baseAmount, messageLength = 0, options = {}) {
-  if (!member || member.user.bot) return null;
+  if (!member || member.user?.bot) return null;
 
   const cfg = loadConfig();
   let amount = baseAmount;
@@ -153,11 +173,9 @@ async function addXP(member, baseAmount, messageLength = 0, options = {}) {
   return { leveledUp, level: user.level, xp: user.xp };
 }
 
-// ====================== LEVEL UP MESSAGE ======================
 async function sendLevelUpMessage(member, level, gained) {
   const now = Date.now();
-  const last = lastLevelUp.get(member.id) || 0;
-  if (now - last < 30000) return; // 30s anti-spam
+  if (now - (lastLevelUp.get(member.id) || 0) < 30000) return;
   lastLevelUp.set(member.id, now);
 
   const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
@@ -205,7 +223,7 @@ function startVoiceXP(client) {
           if (member.user?.bot || processed.has(member.id)) continue;
           processed.add(member.id);
 
-          addVoiceTime(member.id, 60);                    // ← najważniejsze!
+          addVoiceTime(member.id, 60);           // ← Kluczowe!
           await addXP(member, cfg.voiceXP, 0, { useCooldown: false }).catch(() => {});
         }
       }
@@ -231,5 +249,6 @@ module.exports = {
   neededXP,
   getMultiplier,
   checkRoles,
+  getRank,                    // ← WAŻNE DLA /profile
   sendLevelUpMessage
 };
