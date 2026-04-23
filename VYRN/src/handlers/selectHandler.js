@@ -28,14 +28,6 @@ module.exports = async function selectHandler(interaction) {
       return await eventSystem.handleEventInteraction(interaction);
     }
 
-    // ==================== LUMBERJACK ====================
-    if (customId.startsWith("lumberjack_")) {
-      const lumberjack = require("../commands/lumberjack");
-      if (typeof lumberjack.handleLumberjackSelect === "function") {
-        return await lumberjack.handleLumberjackSelect(interaction);
-      }
-    }
-
     // ==================== NIEOBSŁUŻONA LISTA ====================
     console.warn(`[SELECT] Nieobsłużona lista rozwijana: ${customId}`);
 
