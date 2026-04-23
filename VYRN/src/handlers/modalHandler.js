@@ -4,6 +4,7 @@ const ticketSystem = require("../systems/tickets");
 
 /**
  * Główny handler wszystkich ModalSubmit (formularzy)
+ * Spójny styl z pozostałymi handlerami
  */
 module.exports = async function modalHandler(interaction) {
   const customId = interaction.customId;
@@ -34,7 +35,7 @@ module.exports = async function modalHandler(interaction) {
       }
     }
 
-    // ==================== INNE / NIEOBSŁUŻONE MODALE ====================
+    // ==================== NIEOBSŁUŻONY MODAL ====================
     console.warn(`[MODAL] Nieobsłużony modal: ${customId}`);
 
     if (!interaction.replied && !interaction.deferred) {
@@ -47,7 +48,7 @@ module.exports = async function modalHandler(interaction) {
   } catch (error) {
     console.error("[MODAL HANDLER ERROR]", error);
 
-    // Bezpieczna odpowiedź nawet jeśli coś pójdzie nie tak
+    // Bezpieczna odpowiedź dla użytkownika
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
