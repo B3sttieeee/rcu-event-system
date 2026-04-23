@@ -24,11 +24,11 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // Ładowanie danych
+      // Ładowanie danych z systemów
       const levelsDB = loadDB();
-      const profileDB = loadProfile();        // <-- ważne
+      const profileDB = loadProfile();
+      
       const lvlData = levelsDB.xp?.[userId] || { xp: 0, level: 0 };
-
       const totalVoiceMin = getVoiceMinutes(userId);
       const currentBoost = getCurrentBoost(userId) || 1;
       const coins = getCoins(userId);
