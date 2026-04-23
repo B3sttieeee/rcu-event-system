@@ -47,8 +47,8 @@ function loadCommands() {
   const items = fs.readdirSync(commandsPath);
   for (const item of items) {
     const itemPath = path.join(commandsPath, item);
+
     if (fs.statSync(itemPath).isDirectory()) {
-      // Obsługa podfolderów (np. jeśli kiedyś dodasz kategorie)
       fs.readdirSync(itemPath)
         .filter(f => f.endsWith(".js"))
         .forEach(f => loadFile(path.join(itemPath, f)));
@@ -73,7 +73,11 @@ function loadEvents() {
   for (const file of files) {
     try {
       const event = require(path.join(eventsPath, file));
-      if (!event?.name || typeof event.execute !== "function") continue;
+
+      if (!event?.name || typeof event.execute !== "function") {
+        console.warn(`⚠️ Event ${file} nie ma poprawnej struktury`);
+        continue;
+      }
 
       const runner = (...args) => event.execute(...args, client);
 
@@ -113,8 +117,7 @@ async function loadSystems() {
 
   for (const sysName of systems) {
     try {
-      const sysPath = `./systems/${sysName}`;
-      const sys = require(sysPath);
+      const sys = require(`./systems/${sysName}`);
 
       if (typeof sys.init === "function") {
         if (sys.init.constructor.name === "AsyncFunction") {
@@ -155,7 +158,7 @@ process.on("unhandledRejection", (err) => {
 
 process.on("uncaughtException", (err) => {
   console.error("❌ Uncaught Exception:", err);
-  process.exit(1);
+  // process.exit(1);   // lepiej nie zabijać bota przy każdym błędzie
 });
 
 // ====================== LOGIN ======================
