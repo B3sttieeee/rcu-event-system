@@ -5,12 +5,12 @@ const { reroll } = require("../systems/giveaway");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("reroll")
-    .setDescription("🔄 Przeprowadza reroll istniejącego giveawayu")
-    .setDefaultMemberPermissions(8) // Administrator / Manage Events
+    .setDescription("🔄 Przeprowadza reroll giveawayu")
+    .setDefaultMemberPermissions(8) // Administrator
     .addStringOption(option =>
       option
         .setName("message_id")
-        .setDescription("ID wiadomości giveawayu")
+        .setDescription("ID wiadomości giveawayu, który chcesz rerollować")
         .setRequired(true)
     ),
 
@@ -20,13 +20,13 @@ module.exports = {
     try {
       const messageId = interaction.options.getString("message_id");
 
-      // Wywołujemy reroll z systemu giveaway
+      // Wywołanie reroll z systemu giveaway
       await reroll(interaction, messageId);
 
     } catch (error) {
       console.error("[REROLL COMMAND ERROR]", error);
       await interaction.editReply({
-        content: "❌ Wystąpił błąd podczas rerollu giveawayu.",
+        content: "❌ Wystąpił błąd podczas wykonywania rerollu.",
         flags: MessageFlags.Ephemeral
       });
     }
