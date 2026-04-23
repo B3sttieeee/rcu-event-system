@@ -1,9 +1,9 @@
 // src/commands/profile.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// Importy z systemów (nowa struktura)
-const { loadDB, loadConfig, neededXP, getRank } = require("../systems/level");
-const { loadProfile } = require("../systems/profile");
+// Importy z systemów
+const { loadDB, neededXP, getRank } = require("../systems/level");
+const { loadProfile, getVoiceMinutes } = require("../systems/profile");
 const { getCurrentBoost } = require("../systems/boost");
 const { getCoins } = require("../systems/economy");
 
@@ -24,20 +24,22 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
+      // Ładowanie danych
       const levelsDB = loadDB();
       const profileDB = loadProfile();
-      const config = loadConfig();
-
       const lvlData = levelsDB.xp?.[userId] || { xp: 0, level: 0 };
-      const userVoice = profileDB.users?.[userId]?.voice || 0;
+      const totalVoiceMin = getVoiceMinutes(userId);
+      const currentBoost = getCurrentBoost(userId) || 1;
+      const coins = getCoins(userId);
+
+      // Obliczenia poziomu
       const nextLevelXP = neededXP(lvlData.level);
-      const progress = nextLevelXP > 0 ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100)) : 0;
+      const progress = nextLevelXP > 0 
+        ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100)) 
+        : 0;
       const xpLeft = Math.max(0, nextLevelXP - lvlData.xp);
 
-      const totalVoiceMin = Math.floor(userVoice / 60);
-      const currentBoost = getCurrentBoost(userId);
       const rank = getRank(lvlData.level);
-      const coins = getCoins(userId);
 
       const embed = new EmbedBuilder()
         .setColor("#0a0a0a")
@@ -48,14 +50,18 @@ module.exports = {
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setDescription(
           `**${rank.emoji} ${rank.name}** — Level **${lvlData.level}**\n\n` +
+
           `**Experience**\n` +
           `> **${lvlData.xp} / ${nextLevelXP} XP**\n` +
           `> ${createProgressBar(progress)} **${progress}%**\n` +
           `> **${xpLeft}** XP do następnego poziomu\n\n` +
+
           `**Voice Activity**\n` +
           `> Total: **${totalVoiceMin}** minut\n\n` +
+
           `**Economy**\n` +
           `> Monety: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
+
           `**Active Boost**\n` +
           `> ${currentBoost > 1 ? `**${currentBoost}x XP** 🚀` : "**Brak**"}`
         )
