@@ -1,6 +1,6 @@
 // =====================================================
 // src/events/messagecreate.js
-// VYRN CLEAN MESSAGE XP SYSTEM
+// VYRN CLEAN MESSAGE XP SYSTEM - FIXED STABLE
 // =====================================================
 
 const { Events } = require("discord.js");
@@ -22,7 +22,9 @@ module.exports = {
       let member = message.member;
 
       if (!member) {
-        member = await message.guild.members.fetch(message.author.id).catch(() => null);
+        member = await message.guild.members
+          .fetch(message.author.id)
+          .catch(() => null);
       }
 
       if (!member) return;
@@ -31,15 +33,18 @@ module.exports = {
       const lower = content.toLowerCase();
 
       // ====================== XP SYSTEM ======================
-      const user = await handleMessageXP(member);
+      const user = handleMessageXP(member);
+
+      const xp = user?.xp ?? 0;
+      const level = user?.level ?? 0;
+      const totalXP = user?.totalXP ?? 0;
 
       console.log(
-        `[XP] ${member.user.tag} | +5 XP | TOTAL: ${user.totalXP} | LVL: ${user.level}`
+        `[XP] ${member.user.tag} | TOTAL XP: ${totalXP} | LVL: ${level}`
       );
 
       // ====================== BONUS COINS ======================
-      // standard 5 coins daje level system
-      // tu tylko dodatki za aktywność
+      // dodatkowe coinsy (level system daje podstawowe)
 
       if (content.length > 40) {
         addCoins(member.id, 2);
@@ -53,7 +58,7 @@ module.exports = {
         addCoins(member.id, 2);
       }
 
-      // ====================== FUN REACTIONS ======================
+      // ====================== REACTIONS ======================
       if (lower.includes("gg") || lower.includes("good game")) {
         message.react("👏").catch(() => {});
       }
@@ -82,9 +87,7 @@ module.exports = {
       ) {
         return message.reply({
           content: `📊 **${member.user.username}**, use \`/profile\` for full stats!`,
-          allowedMentions: {
-            repliedUser: false
-          }
+          allowedMentions: { repliedUser: false }
         });
       }
 
