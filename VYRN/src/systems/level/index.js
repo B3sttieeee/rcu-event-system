@@ -1,5 +1,5 @@
 // ====================== LEVEL SYSTEM ======================
-// VYRN • Black Edition
+// VYRN • Black Edition (FIXED STABLE VERSION)
 
 const fs = require("fs");
 const path = require("path");
@@ -38,12 +38,11 @@ const LEVEL_ROLES = {
 // ====================== CACHE ======================
 let dbCache = null;
 let configCache = null;
-let writeQueue = Promise.resolve();
 
 const xpCooldown = new Map();
 const lastLevelUp = new Map();
 
-// ====================== INIT ======================
+// ====================== INIT FOLDER ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -88,6 +87,7 @@ function loadDB() {
   }
 
   dbCache = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+
   if (!dbCache.xp) dbCache.xp = {};
 
   return dbCache;
@@ -96,20 +96,14 @@ function loadDB() {
 function saveDB() {
   if (!dbCache) return;
 
-  const data = JSON.stringify(dbCache, null, 2);
-
-  writeQueue = writeQueue
-    .catch(() => null)
-    .then(async () => {
-      await fs.promises.writeFile(DB_PATH, data, "utf8");
-      dbCache = null;
-    });
+  fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
 }
 
 // ====================== LEVEL UP ======================
 async function sendLevelUpMessage(member, level, gainedXP) {
   const now = Date.now();
-  if (now - (lastLevelUp.get(member.id) || 0) < 30000) return;
+
+  if (now - (lastLevelUp.get(member.id) || 0) < 20000) return;
   lastLevelUp.set(member.id, now);
 
   const rank = getRank(level);
@@ -118,22 +112,22 @@ async function sendLevelUpMessage(member, level, gainedXP) {
   addCoins(member.id, coinReward);
 
   const embed = new EmbedBuilder()
-    .setColor("#0b0b0f") // BLACK THEME
-    .setTitle("Level Up")
+    .setColor("#0b0b0f")
+    .setTitle("LEVEL UP")
     .setDescription(
       `${rank.emoji} ${rank.name}\n` +
-      `Level ${level}\n\n` +
-      `XP gained \`${gainedXP}\`\n` +
-      `Reward \`+${coinReward}\` coins`
+      `Level **${level}**\n\n` +
+      `XP gained: \`${gainedXP}\`\n` +
+      `Reward: \`+${coinReward}\` coins`
     )
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setFooter({ text: "VYRN • Level System", iconURL: member.guild.iconURL() })
+    .setFooter({
+      text: "VYRN • Level System",
+      iconURL: member.guild.iconURL()
+    })
     .setTimestamp();
 
-  const channel =
-    member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID) ||
-    await member.guild.channels.fetch(LEVEL_UP_CHANNEL_ID).catch(() => null);
-
+  const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
   if (!channel) return;
 
   channel.send({
@@ -142,7 +136,7 @@ async function sendLevelUpMessage(member, level, gainedXP) {
   }).catch(() => {});
 }
 
-// ====================== CORE ======================
+// ====================== CORE XP ======================
 async function addXP(member, base, length = 0) {
   if (!member || member.user?.bot) return;
 
@@ -154,7 +148,9 @@ async function addXP(member, base, length = 0) {
   }
 
   const now = Date.now();
-  if (now - (xpCooldown.get(member.id) || 0) < 5000) return;
+  const last = xpCooldown.get(member.id) || 0;
+
+  if (now - last < 3000) return;
   xpCooldown.set(member.id, now);
 
   let gain = base;
@@ -163,13 +159,12 @@ async function addXP(member, base, length = 0) {
     gain += Math.floor(length * cfg.lengthBonus);
   }
 
-  const multi =
-    cfg.globalMultiplier *
-    (getCurrentBoost(member.id) || 1);
+  const boost = Number(getCurrentBoost(member.id) || 1);
 
-  gain = Math.floor(gain * multi);
+  gain = Math.floor(gain * cfg.globalMultiplier * boost);
 
   const user = db.xp[member.id];
+
   user.xp += gain;
 
   let leveled = false;
@@ -210,20 +205,17 @@ async function handleMessageXP(member, content) {
 function init() {
   loadDB();
   loadConfig();
-  console.log("📈 Level System (Black Edition) loaded");
+  console.log("📈 LEVEL SYSTEM • BLACK FIXED LOADED");
 }
 
 // ====================== EXPORT ======================
 module.exports = {
   init,
-
   loadDB,
   loadConfig,
-
   addXP,
   handleMessageXP,
   sendLevelUpMessage,
-
   neededXP,
   getRank
 };
