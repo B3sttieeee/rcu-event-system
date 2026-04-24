@@ -23,23 +23,32 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // Bezpieczne pobieranie danych
-      const voiceMin = activity.getVoiceMinutes ? activity.getVoiceMinutes(userId) : 0;
-      
+      // Zawsze świeże dane z Activity System
+      const voiceMin = typeof activity.getVoiceMinutes === "function" 
+        ? activity.getVoiceMinutes(userId) 
+        : 0;
+
       let levelData = { xp: 0, level: 0 };
-      if (activity.getLevelData) {
+      if (typeof activity.getLevelData === "function") {
         levelData = activity.getLevelData(userId);
       }
 
       const coins = getCoins(userId);
       const boost = getCurrentBoost(userId) || 1;
 
-      const nextXP = activity.neededXP ? activity.neededXP(levelData.level) : 100;
+      // Bezpieczne obliczenie nextXP
+      let nextXP = 100;
+      if (typeof activity.neededXP === "function") {
+        nextXP = activity.neededXP(levelData.level);
+      }
+
       const progress = nextXP > 0 
         ? Math.min(100, Math.floor((levelData.xp / nextXP) * 100)) 
         : 0;
 
-      const rank = activity.getRank ? activity.getRank(levelData.level) : { name: "Iron", emoji: "⚔️" };
+      const rank = typeof activity.getRank === "function" 
+        ? activity.getRank(levelData.level) 
+        : { name: "Iron", emoji: "⚔️" };
 
       const embed = new EmbedBuilder()
         .setColor("#0b0b0f")
