@@ -1,3 +1,4 @@
+// src/deploy-commands.js
 const { REST, Routes } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
@@ -7,76 +8,64 @@ const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
 if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-console.error("❌ Missing TOKEN / CLIENT_ID / GUILD_ID");
-process.exit(1);
+  console.error("❌ Brak TOKEN, CLIENT_ID lub GUILD_ID w zmiennych!");
+  process.exit(1);
 }
 
 const commands = [];
+const commandsPath = path.join(__dirname, "commands");
 
-const commandsPath = path.join(process.cwd(), "src", "commands");
+console.log(`📁 Szukam komend w: ${commandsPath}`);
 
-function loadCommands(dir) {
-const items = fs.readdirSync(dir);
+// Ładowanie komend
+function loadCommandFiles(dir) {
+  const items = fs.readdirSync(dir);
+  for (const item of items) {
+    const fullPath = path.join(dir, item);
+    
+    if (fs.statSync(fullPath).isDirectory()) {
+      loadCommandFiles(fullPath);
+      continue;
+    }
 
-for (const item of items) {
-const fullPath = path.join(dir, item);
+    if (!item.endsWith(".js")) continue;
 
-if (fs.statSync(fullPath).isDirectory()) {
-loadCommands(fullPath);
-continue;
+    try {
+      delete require.cache[require.resolve(fullPath)]; // odświeżenie cache
+      const cmd = require(fullPath);
+
+      if (cmd?.data?.name && typeof cmd.execute === "function") {
+        commands.push(cmd.data.toJSON());
+        console.log(`✅ Loaded: /${cmd.data.name}`);
+      }
+    } catch (err) {
+      console.error(`❌ Błąd ładowania ${item}:`, err.message);
+    }
+  }
 }
 
-if (!item.endsWith(".js")) continue;
+loadCommandFiles(commandsPath);
 
-try {
-delete require.cache[require.resolve(fullPath)];
-const cmd = require(fullPath);
-
-if (cmd?.data?.toJSON && typeof cmd.execute === "function") {
-commands.push(cmd.data.toJSON());
-console.log(`📦 Loaded /${cmd.data.name}`);
-} else {
-console.log(`⚠️ Invalid command: ${item}`);
+if (commands.length === 0) {
+  console.error("❌ Nie znaleziono żadnych komend!");
+  process.exit(1);
 }
-} catch (err) {
-console.error(`❌ Error loading ${item}:`, err.message);
-}
-}
-}
-
-if (!fs.existsSync(commandsPath)) {
-console.error("❌ Commands folder not found:", commandsPath);
-process.exit(1);
-}
-
-loadCommands(commandsPath);
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
-try {
-console.log("\n🚀 STARTING DEPLOY...");
-console.log(`📁 Path: ${commandsPath}`);
-console.log(`📊 Commands: ${commands.length}`);
+  try {
+    console.log(`\n🚀 Deployuję ${commands.length} komend na serwer...`);
 
-// 🔥 HARD RESET CACHE (usuwa stare slashy)
-await rest.put(
-Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-{ body: [] }
-);
+    // Deploy na konkretny serwer (najpewniejsze)
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
 
-console.log("🧹 Cleared old commands");
-
-// 🔥 DEPLOY NEW
-await rest.put(
-Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-{ body: commands }
-);
-
-console.log("✅ DEPLOY SUCCESS");
-console.log("📌 Commands active immediately in guild");
-
-} catch (err) {
-console.error("❌ DEPLOY FAILED:", err);
-}
+    console.log("✅ DEPLOY ZAKOŃCZONY POMYŚLNIE");
+    console.log("📌 Komendy powinny być widoczne w ciągu 1-2 minut");
+  } catch (error) {
+    console.error("❌ BŁĄD DEPLOYU:", error);
+  }
 })();
