@@ -1,7 +1,7 @@
 // src/commands/profile.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// Import z Activity System
+// Importy z systemów
 const activity = require("../systems/activity");
 const { getCoins } = require("../systems/economy");
 const { getCurrentBoost } = require("../systems/boost");
@@ -23,21 +23,19 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // Pobieranie danych z Activity System
+      // Zawsze świeże dane
       const voiceMin = activity.getVoiceMinutes(userId);
-
-      // Level data
-      const userLevelData = activity.getLevelData ? activity.getLevelData(userId) : { xp: 0, level: 0 };
-      
-      const coins = getCoins(userId);
+      const coins = getCoins(userId);                    // zawsze aktualne
       const boost = getCurrentBoost(userId) || 1;
 
-      const nextXP = activity.neededXP ? activity.neededXP(userLevelData.level) : 100;
+      // Level data z activity
+      const levelData = activity.getLevelData ? activity.getLevelData(userId) : { xp: 0, level: 0 };
+      const nextXP = activity.neededXP ? activity.neededXP(levelData.level) : 100;
       const progress = nextXP > 0 
-        ? Math.min(100, Math.floor((userLevelData.xp / nextXP) * 100)) 
+        ? Math.min(100, Math.floor((levelData.xp / nextXP) * 100)) 
         : 0;
 
-      const rank = activity.getRank ? activity.getRank(userLevelData.level) : { name: "Iron", emoji: "⚔️" };
+      const rank = activity.getRank ? activity.getRank(levelData.level) : { name: "Iron", emoji: "⚔️" };
 
       const embed = new EmbedBuilder()
         .setColor("#0b0b0f")
@@ -47,9 +45,9 @@ module.exports = {
         })
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setDescription(
-          `**${rank.emoji} ${rank.name}** — Level **${userLevelData.level}**\n\n` +
+          `**${rank.emoji} ${rank.name}** — Level **${levelData.level}**\n\n` +
           `**Experience**\n` +
-          `> \`${userLevelData.xp} / ${nextXP} XP\`\n` +
+          `> \`${levelData.xp} / ${nextXP} XP\`\n` +
           `> ${createProgressBar(progress)} **${progress}%**\n\n` +
           `**Voice Activity**\n` +
           `> **${voiceMin}** minut\n\n` +
@@ -67,9 +65,9 @@ module.exports = {
       await interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
-      console.error("[PROFILE COMMAND ERROR]", err);
+      console.error("[PROFILE ERROR]", err);
       await interaction.editReply({
-        content: "❌ Wystąpił błąd podczas ładowania profilu.",
+        content: "❌ Błąd podczas ładowania profilu.",
         ephemeral: true
       });
     }
