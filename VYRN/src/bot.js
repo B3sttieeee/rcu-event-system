@@ -1,3 +1,6 @@
+// =====================================================
+// VYRN BOT - MAIN FILE (CLEAN & STABLE)
+// =====================================================
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
@@ -24,20 +27,16 @@ client.rest.on("rateLimited", (info) => {
 // ====================== LOAD COMMANDS ======================
 function loadCommands() {
   const commandsPath = path.join(__dirname, "commands");
-
   if (!fs.existsSync(commandsPath)) {
     console.warn("⚠️ Folder 'commands' nie istnieje!");
     return;
   }
 
   let count = 0;
-
   const loadFile = (filePath) => {
     try {
       delete require.cache[require.resolve(filePath)];
-
       const cmd = require(filePath);
-
       if (cmd?.data?.name && typeof cmd.execute === "function") {
         client.commands.set(cmd.data.name, cmd);
         console.log(`✅ Command: /${cmd.data.name}`);
@@ -49,10 +48,8 @@ function loadCommands() {
   };
 
   const items = fs.readdirSync(commandsPath);
-
   for (const item of items) {
     const itemPath = path.join(commandsPath, item);
-
     if (fs.statSync(itemPath).isDirectory()) {
       fs.readdirSync(itemPath)
         .filter(f => f.endsWith(".js"))
@@ -61,31 +58,25 @@ function loadCommands() {
       loadFile(itemPath);
     }
   }
-
   console.log(`📊 Commands loaded: ${count}`);
 }
 
-// ====================== LOAD EVENTS (FIXED HARD RESET) ======================
+// ====================== LOAD EVENTS ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
-
   if (!fs.existsSync(eventsPath)) {
     console.warn("⚠️ Folder 'events' nie istnieje!");
     return;
   }
 
-  // 🔥 HARD FIX: usuń WSZYSTKIE eventy przed reloadem
-  client.removeAllListeners();
+  client.removeAllListeners(); // czyszczenie starych eventów
 
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let count = 0;
 
-  const loadedEvents = new Set();
-
   for (const file of files) {
     try {
       const fullPath = path.join(eventsPath, file);
-
       delete require.cache[require.resolve(fullPath)];
       const event = require(fullPath);
 
@@ -93,13 +84,6 @@ function loadEvents() {
         console.warn(`⚠️ Invalid event: ${file}`);
         continue;
       }
-
-      if (loadedEvents.has(event.name)) {
-        console.warn(`⚠️ DUPLICATE EVENT BLOCKED: ${event.name}`);
-        continue;
-      }
-
-      loadedEvents.add(event.name);
 
       const runner = (...args) => event.execute(...args, client);
 
@@ -111,12 +95,10 @@ function loadEvents() {
 
       console.log(`✅ Event: ${event.name}`);
       count++;
-
     } catch (e) {
       console.error(`❌ EVENT ERROR ${file}:`, e.message);
     }
   }
-
   console.log(`📊 Events loaded: ${count}`);
 }
 
@@ -128,8 +110,7 @@ async function loadSystems() {
     "log",
     "economy",
     "boost",
-    "profile",
-    "level",
+    "activity",      // ← nowy główny system (voice + xp + coins)
     "clan",
     "rules",
     "event",
@@ -141,27 +122,21 @@ async function loadSystems() {
   for (const sysName of systems) {
     try {
       const sysPath = `./systems/${sysName}`;
-
       delete require.cache[require.resolve(sysPath)];
+
       const sys = require(sysPath);
 
       if (typeof sys.init === "function") {
-        const result = sys.init.length ? sys.init(client) : sys.init();
-
-        if (result instanceof Promise) {
-          await result;
-        }
-
+        const result = sys.init(client);
+        if (result instanceof Promise) await result;
         console.log(`✅ ${sysName.padEnd(12)} → OK`);
       } else {
-        console.log(`⚠️  ${sysName.padEnd(12)} → brak init()`);
+        console.log(`⚠️ ${sysName.padEnd(12)} → brak init()`);
       }
-
     } catch (e) {
       console.error(`❌ ${sysName.padEnd(12)} → ERROR: ${e.message}`);
     }
   }
-
   console.log("🎉 All systems loaded!\n");
 }
 
@@ -179,7 +154,7 @@ client.once("ready", async () => {
   console.log("✅ BOT READY & STABLE");
 });
 
-// ====================== ERRORS ======================
+// ====================== GLOBAL ERROR HANDLING ======================
 process.on("unhandledRejection", (err) => {
   console.error("❌ Unhandled Rejection:", err);
 });
