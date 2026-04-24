@@ -1,20 +1,5 @@
-// src/events/guildauditlogentrycreate.js
-const { Events, AuditLogEvent } = require("discord.js");
-const { 
-  LOGS, 
-  formatTime, 
-  sendLog, 
-  clampText 
-} = require("../systems/log");
-
-const IGNORED_ACTIONS = new Set([
-  AuditLogEvent.MemberKick,
-  AuditLogEvent.MemberBanAdd,
-  AuditLogEvent.MemberBanRemove,
-  AuditLogEvent.MemberRoleUpdate,
-  AuditLogEvent.MessageDelete,
-  AuditLogEvent.MessageBulkDelete
-]);
+const { Events, AuditLogEvent, EmbedBuilder } = require("discord.js");
+const { LOGS, formatTime, sendLog, clampText } = require("../systems/log");
 
 const ACTION_LABELS = {
   [AuditLogEvent.ChannelCreate]: "📁 Channel Created",
@@ -26,14 +11,10 @@ const ACTION_LABELS = {
   [AuditLogEvent.EmojiCreate]: "😀 Emoji Created",
   [AuditLogEvent.EmojiUpdate]: "😀 Emoji Updated",
   [AuditLogEvent.EmojiDelete]: "😀 Emoji Deleted",
-  [AuditLogEvent.StickerCreate]: "🧩 Sticker Created",
-  [AuditLogEvent.StickerUpdate]: "🧩 Sticker Updated",
-  [AuditLogEvent.StickerDelete]: "🧩 Sticker Deleted",
   [AuditLogEvent.WebhookCreate]: "🪝 Webhook Created",
   [AuditLogEvent.WebhookUpdate]: "🪝 Webhook Updated",
   [AuditLogEvent.WebhookDelete]: "🪝 Webhook Deleted",
   [AuditLogEvent.InviteCreate]: "🔗 Invite Created",
-  [AuditLogEvent.InviteUpdate]: "🔗 Invite Updated",
   [AuditLogEvent.InviteDelete]: "🔗 Invite Deleted",
   [AuditLogEvent.ThreadCreate]: "🧵 Thread Created",
   [AuditLogEvent.ThreadUpdate]: "🧵 Thread Updated",
@@ -41,43 +22,48 @@ const ACTION_LABELS = {
   [AuditLogEvent.BotAdd]: "🤖 Bot Added"
 };
 
-const formatTarget = (target) => {
-  if (!target) return "Unknown";
-  if (target.id && target.username) return `<@${target.id}>`;
-  if (target.id && target.permissions !== undefined) return `<@&${target.id}>`;
-  if (target.id && target.type !== undefined) return `<#${target.id}>`;
-  if (target.code) return `\`${target.code}\``;
-  if (target.name && target.id) return `\`${target.name}\` (${target.id})`;
-  if (target.name) return `\`${target.name}\``;
-  if (target.id) return `\`${target.id}\``;
-  return "Unknown";
-};
-
 module.exports = {
   name: Events.GuildAuditLogEntryCreate,
+
   async execute(entry, guild) {
-    if (IGNORED_ACTIONS.has(entry.action)) return;
+    try {
+      const title =
+        ACTION_LABELS[entry.action] || `⚙️ Audit Action ${entry.action}`;
 
-    const title = ACTION_LABELS[entry.action] || `⚙️ Audit Action ${entry.action}`;
-    const executor = entry.executor ? `<@${entry.executor.id}>` : "Unknown";
-    const target = formatTarget(entry.target);
-    const reason = entry.reason ? clampText(entry.reason, 1024) : null;
-    const changes = entry.changes?.length ? clampText(entry.changes.map(c => c.key).join(", "), 1024) : null;
+      const executor = entry.executor
+        ? `<@${entry.executor.id}>`
+        : "Unknown";
 
-    const embed = new EmbedBuilder()
-      .setColor("#64748b")
-      .setTitle(title)
-      .addFields(
-        { name: "🛠 By", value: executor, inline: true },
-        { name: "🎯 Target", value: target, inline: true },
-        { name: "🆔 Action", value: String(entry.action), inline: true }
-      )
-      .setFooter({ text: `Time: ${formatTime()}` })
-      .setTimestamp();
+      const target = entry.target
+        ? (entry.target.id ? `\`${entry.target.id}\`` : "Unknown")
+        : "Unknown";
 
-    if (reason) embed.addFields({ name: "📝 Reason", value: reason });
-    if (changes) embed.addFields({ name: "🧩 Changes", value: changes });
+      const reason = entry.reason
+        ? clampText(entry.reason, 1024)
+        : null;
 
-    await sendLog(guild, LOGS.SYSTEM, embed);
+      const changes = entry.changes?.length
+        ? clampText(entry.changes.map(c => `${c.key}: ${c.new ?? "?"}`).join(", "), 1024)
+        : null;
+
+      const embed = new EmbedBuilder()
+        .setColor("#64748b")
+        .setTitle(title)
+        .addFields(
+          { name: "🛠 By", value: executor, inline: true },
+          { name: "🎯 Target", value: target, inline: true },
+          { name: "🆔 Action", value: String(entry.action), inline: true }
+        )
+        .setFooter({ text: `Time: ${formatTime()}` })
+        .setTimestamp();
+
+      if (reason) embed.addFields({ name: "📝 Reason", value: reason });
+      if (changes) embed.addFields({ name: "🧩 Changes", value: changes });
+
+      await sendLog(guild, LOGS.SYSTEM, embed);
+
+    } catch (err) {
+      console.error("[AUDIT LOG ERROR]", err);
+    }
   }
 };
