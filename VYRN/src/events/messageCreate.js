@@ -14,6 +14,7 @@ module.exports = {
       if (message.system || message.webhookId) return;
 
       let member = message.member;
+
       if (!member) {
         member = await message.guild.members.fetch(message.author.id).catch(() => null);
       }
@@ -22,11 +23,15 @@ module.exports = {
       const content = message.content || "";
       const lower = content.toLowerCase();
 
-      const xpResult = await handleMessageXP(member, content);
-      const gainedXP = xpResult?.xp || 0;
+      // 🔥 XP UPDATE
+      const before = await handleMessageXP(member, content);
 
-      console.log(`[XP] ${member.user.tag} | +${gainedXP}`);
+      // NIE “gainedXP”, tylko REAL CHECK
+      const gainedXP = before?.xp ?? 0;
 
+      console.log(`[XP] ${member.user.tag} | XP total: ${gainedXP}`);
+
+      // 💰 COINS
       let coins = BASE_COINS;
 
       const len = content.length;
@@ -38,6 +43,7 @@ module.exports = {
 
       addCoins(member.id, coins);
 
+      // REACTIONS
       if (lower.includes("gg") || lower.includes("good game")) {
         message.react("👏").catch(() => {});
       }
