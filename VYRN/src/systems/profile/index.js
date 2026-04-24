@@ -42,12 +42,12 @@ if(dbCache)return dbCache;
 try{
 if(!fs.existsSync(PROFILE_PATH)){
 dbCache={users:{}};
-fs.writeFileSync(PROFILE_PATH,JSON.stringify(dbCache));
+fs.writeFileSync(PROFILE_PATH,JSON.stringify(dbCache,null,2));
 return dbCache;
 }
 
 const raw=fs.readFileSync(PROFILE_PATH,"utf8");
-const parsed=raw?JSON.parse(raw):{users:{}};
+const parsed=raw.trim()?JSON.parse(raw):{users:{}};
 
 dbCache=normalizeDb(parsed);
 return dbCache;
@@ -62,13 +62,13 @@ return dbCache;
 function saveProfile(){
 if(!dbCache)return;
 
-const data=JSON.stringify(dbCache);
+const snapshot=JSON.stringify(dbCache,null,2);
 
 writeQueue=writeQueue
 .catch(()=>null)
 .then(async()=>{
 try{
-await fs.promises.writeFile(PROFILE_TMP_PATH,data);
+await fs.promises.writeFile(PROFILE_TMP_PATH,snapshot,"utf8");
 await fs.promises.rename(PROFILE_TMP_PATH,PROFILE_PATH);
 }catch(err){
 console.error("[PROFILE SAVE]",err.message);
@@ -81,6 +81,9 @@ return writeQueue;
 async function flushProfile(){
 try{
 await writeQueue;
+if(dbCache){
+await fs.promises.writeFile(PROFILE_PATH,JSON.stringify(dbCache,null,2));
+}
 }catch(err){
 console.error("[PROFILE FLUSH]",err.message);
 }
@@ -133,8 +136,8 @@ function init(){
 loadProfile();
 console.log("📁 Profile System loaded");
 
-process.on("SIGINT",flushProfile);
-process.on("SIGTERM",flushProfile);
+process.on("SIGINT",async()=>await flushProfile());
+process.on("SIGTERM",async()=>await flushProfile());
 }
 
 module.exports={
