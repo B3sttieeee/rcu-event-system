@@ -47,7 +47,15 @@ const normalizeDb = (db = {}) => {
 
 // ====================== LOAD ======================
 function loadProfile() {
-  if (dbCache) return dbCache;
+  // 🔥 FIX: nie używaj stale cache bez refresh
+  if (dbCache) {
+    try {
+      const raw = fs.readFileSync(PROFILE_PATH, "utf8");
+      const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
+      dbCache = normalizeDb(parsed);
+    } catch {}
+    return dbCache;
+  }
 
   try {
     if (!fs.existsSync(PROFILE_PATH)) {
@@ -79,6 +87,9 @@ function saveProfile() {
     .catch(() => null)
     .then(async () => {
       try {
+        // 🔥 FIX: sanity normalize przed zapisem
+        dbCache = normalizeDb(dbCache);
+
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
       } catch (err) {
@@ -94,7 +105,6 @@ async function flushProfile() {
   try {
     await writeQueue;
 
-    // FINAL SAFETY WRITE
     if (dbCache) {
       await fs.promises.writeFile(
         PROFILE_PATH,
@@ -118,8 +128,8 @@ function ensureUser(userId) {
   if (!db.users[userId]) {
     db.users[userId] = normalizeUser();
   } else {
-    // NIE NADPISUJ CAŁOŚCI - tylko sanity check
-    db.users[userId].voice = toSafeNumber(db.users[userId].voice, 0);
+    // 🔥 FIX: tylko sanity check, nie nadpisuj całego obiektu
+    db.users[userId] = normalizeUser(db.users[userId]);
   }
 
   return db.users[userId];
