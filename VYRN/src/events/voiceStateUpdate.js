@@ -1,121 +1,113 @@
-// =====================================================
-// src/events/voicestateupdate.js
-// VYRN CLEAN VOICE XP SYSTEM - FIXED STABLE
-// =====================================================
-
 const { Events } = require("discord.js");
 
 const profile = require("../systems/profile");
 const economy = require("../systems/economy");
 const level = require("../systems/level");
 
-// ====================== CACHE ======================
-const intervals = new Map();
+// ====================== STATE ======================
+const sessions = new Map();
 
 // ====================== CONFIG ======================
 const MINUTE = 60000;
 
-// AFK channels (optional)
-const AFK_CHANNEL_IDS = new Set();
+// AFK optional
+const AFK_CHANNELS = new Set();
 
-// ====================== HELPERS ======================
-function isRewardable(channelId) {
-  return channelId && !AFK_CHANNEL_IDS.has(channelId);
+// ====================== HELP ======================
+function isValid(channelId) {
+  return channelId && !AFK_CHANNELS.has(channelId);
 }
 
-function stopSession(userId) {
-  const int = intervals.get(userId);
-  if (int) clearInterval(int);
-  intervals.delete(userId);
+function stop(userId) {
+  const data = sessions.get(userId);
+
+  if (data?.interval) {
+    clearInterval(data.interval);
+  }
+
+  sessions.delete(userId);
 }
 
-// ====================== VOICE LOOP ======================
-function startSession(member) {
+// ====================== START SESSION ======================
+function start(member) {
   const userId = member.id;
 
-  // 🔥 FIX: always reset old interval
-  stopSession(userId);
+  // zawsze reset starej sesji
+  stop(userId);
 
-  intervals.set(
-    userId,
-    setInterval(async () => {
-      try {
-        const fresh =
-          member.guild.members.cache.get(userId) ||
-          (await member.guild.members.fetch(userId).catch(() => null));
+  const interval = setInterval(async () => {
+    try {
+      const fresh =
+        member.guild.members.cache.get(userId) ||
+        (await member.guild.members.fetch(userId).catch(() => null));
 
-        if (!fresh) return stopSession(userId);
-
-        const voice = fresh.voice;
-
-        if (!voice?.channelId) {
-          return stopSession(userId);
-        }
-
-        if (!isRewardable(voice.channelId)) return;
-
-        // ====================== REWARDS ======================
-        profile.addVoiceTime(userId, 60); // seconds
-        economy.addCoins(userId, 8);
-
-        const user = level.handleVoiceXP(fresh);
-
-        const totalXP = user?.totalXP ?? 0;
-        const levelVal = user?.level ?? 0;
-
-        console.log(
-          `[VOICE] ${fresh.user.tag} | +1m | +8 coins | +10 XP | LVL: ${levelVal} | XP: ${totalXP}`
-        );
-
-      } catch (err) {
-        console.error("[VOICE LOOP ERROR]", err);
+      if (!fresh?.voice?.channelId) {
+        stop(userId);
+        return;
       }
-    }, MINUTE)
-  );
+
+      if (!isValid(fresh.voice.channelId)) return;
+
+      // ====================== REWARDS ======================
+      profile.addVoiceTime(userId, 60); // seconds
+      economy.addCoins(userId, 8);
+
+      const user = level.handleVoiceXP(fresh);
+
+      console.log(
+        `[VOICE] ${fresh.user.tag} | +1m | +8 coins | +10 XP | LVL ${user.level} | XP ${user.totalXP}`
+      );
+
+    } catch (err) {
+      console.error("[VOICE ERROR]", err);
+    }
+  }, MINUTE);
+
+  sessions.set(userId, { interval });
 }
 
-// ====================== EXPORT ======================
+// ====================== EVENT ======================
 module.exports = {
   name: Events.VoiceStateUpdate,
 
   async execute(oldState, newState) {
     try {
       const member = newState.member || oldState.member;
-      if (!member || member.user?.bot) return;
+      if (!member || member.user.bot) return;
 
-      const userId = member.id;
+      const id = member.id;
 
-      const oldChannel = oldState.channelId;
-      const newChannel = newState.channelId;
+      const oldC = oldState.channelId;
+      const newC = newState.channelId;
 
-      // ====================== JOIN ======================
-      if (!oldChannel && newChannel) {
-        if (isRewardable(newChannel)) {
-          startSession(member);
+      // JOIN
+      if (!oldC && newC) {
+        if (isValid(newC)) {
+          start(member);
           console.log(`[VOICE JOIN] ${member.user.tag}`);
         }
         return;
       }
 
-      // ====================== LEAVE ======================
-      if (oldChannel && !newChannel) {
-        stopSession(userId);
+      // LEAVE
+      if (oldC && !newC) {
+        stop(id);
         console.log(`[VOICE LEAVE] ${member.user.tag}`);
         return;
       }
 
-      // ====================== SWITCH ======================
-      if (oldChannel && newChannel && oldChannel !== newChannel) {
-        stopSession(userId);
+      // SWITCH
+      if (oldC && newC && oldC !== newC) {
+        stop(id);
 
-        if (isRewardable(newChannel)) {
-          startSession(member);
+        if (isValid(newC)) {
+          start(member);
           console.log(`[VOICE SWITCH] ${member.user.tag}`);
         }
       }
 
     } catch (err) {
-      console.error("[VOICE SYSTEM ERROR]", err);
+      console.error("[VOICE STATE ERROR]", err);
     }
   }
 };
