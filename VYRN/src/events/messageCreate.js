@@ -1,17 +1,23 @@
+// =====================================================
+// src/events/messagecreate.js
+// VYRN CLEAN MESSAGE XP SYSTEM
+// =====================================================
+
 const { Events } = require("discord.js");
 const { handleMessageXP } = require("../systems/level");
 const { addCoins } = require("../systems/economy");
-
-const BASE_COINS = 5;
 
 module.exports = {
   name: Events.MessageCreate,
 
   async execute(message) {
     try {
+      // ====================== BASIC CHECKS ======================
       if (!message.guild) return;
-      if (!message.author || message.author.bot) return;
-      if (message.system || message.webhookId) return;
+      if (!message.author) return;
+      if (message.author.bot) return;
+      if (message.webhookId) return;
+      if (message.system) return;
 
       let member = message.member;
 
@@ -21,29 +27,33 @@ module.exports = {
 
       if (!member) return;
 
-      const content = message.content || "";
+      const content = (message.content || "").trim();
       const lower = content.toLowerCase();
 
-      // XP
-      const result = await handleMessageXP(member, content);
+      // ====================== XP SYSTEM ======================
+      const user = await handleMessageXP(member);
 
-      console.log(`[XP] ${member.user.tag} | gained: ${result?.gained || 0}`);
-      console.log(`[XP] ${member.user.tag} | total: ${result?.xp || 0}`);
-      console.log(`[LEVEL] ${result?.level || 0}`);
+      console.log(
+        `[XP] ${member.user.tag} | +5 XP | TOTAL: ${user.totalXP} | LVL: ${user.level}`
+      );
 
-      // Coins
-      let coins = BASE_COINS;
+      // ====================== BONUS COINS ======================
+      // standard 5 coins daje level system
+      // tu tylko dodatki za aktywność
 
-      const len = content.length;
+      if (content.length > 40) {
+        addCoins(member.id, 2);
+      }
 
-      if (len > 40) coins += 2;
-      if (len > 100) coins += 3;
+      if (content.length > 100) {
+        addCoins(member.id, 3);
+      }
 
-      coins += Math.floor(Math.random() * 3);
+      if (message.mentions.users.size > 0) {
+        addCoins(member.id, 2);
+      }
 
-      addCoins(member.id, coins);
-
-      // Reactions
+      // ====================== FUN REACTIONS ======================
       if (lower.includes("gg") || lower.includes("good game")) {
         message.react("👏").catch(() => {});
       }
@@ -64,19 +74,22 @@ module.exports = {
         message.react("😂").catch(() => {});
       }
 
-      if (message.mentions.users.size > 0) {
-        addCoins(member.id, 2);
-      }
-
-      if (["!stats", "staty", "moje staty"].includes(lower)) {
+      // ====================== QUICK STATS ======================
+      if (
+        lower === "!stats" ||
+        lower === "staty" ||
+        lower === "moje staty"
+      ) {
         return message.reply({
           content: `📊 **${member.user.username}**, use \`/profile\` for full stats!`,
-          allowedMentions: { repliedUser: false }
+          allowedMentions: {
+            repliedUser: false
+          }
         });
       }
 
     } catch (err) {
-      console.error("[MESSAGE XP ERROR]", err);
+      console.error("[MESSAGE CREATE ERROR]", err);
     }
   }
 };
