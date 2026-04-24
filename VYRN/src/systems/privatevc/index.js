@@ -1,4 +1,7 @@
-// src/systems/privatevc/index.js
+// =====================================================
+// PRIVATE VC SYSTEM - BLACK EDITION PRO
+// =====================================================
+
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -15,32 +18,37 @@ const {
 // ====================== CONFIG ======================
 const CREATE_CHANNEL_ID = "1496280414237491220";
 const PRIVATE_CATEGORY_ID = "1496281285780574268";
+
 const CREATE_COOLDOWN = 5000;
 const MOVE_DELAY = 1500;
 const WATCH_INTERVAL = 15000;
 
 // ====================== CACHE ======================
-const userChannels = new Map();     // ownerId → channelId
-const channelOwners = new Map();    // channelId → ownerId
-const creatingUsers = new Set();    // anti-spam
-const channelBans = new Map();      // channelId → Set<userId>
+const userChannels = new Map();
+const channelOwners = new Map();
+const creatingUsers = new Set();
+const channelBans = new Map();
 
-// ====================== CREATE PRIVATE CHANNEL ======================
+// ====================== CREATE VC ======================
 async function handlePrivateChannelCreation(member) {
   const guild = member.guild;
+
   if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) return;
   if (creatingUsers.has(member.id)) return;
 
   creatingUsers.add(member.id);
 
   try {
-    const oldId = userChannels.get(member.id);
-    if (oldId) {
-      const oldChannel = guild.channels.cache.get(oldId);
-      if (oldChannel) {
-        await member.voice.setChannel(oldChannel).catch(() => {});
+    const existingId = userChannels.get(member.id);
+
+    if (existingId) {
+      const old = guild.channels.cache.get(existingId);
+
+      if (old) {
+        await member.voice.setChannel(old).catch(() => {});
         return cooldown(member.id);
       }
+
       userChannels.delete(member.id);
     }
 
@@ -51,13 +59,19 @@ async function handlePrivateChannelCreation(member) {
       userLimit: 10,
       bitrate: 64000,
       permissionOverwrites: [
-        { id: guild.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] },
+        {
+          id: guild.id,
+          allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect]
+        },
         {
           id: member.id,
           allow: [
-            PermissionFlagsBits.Connect, PermissionFlagsBits.ViewChannel,
-            PermissionFlagsBits.Speak, PermissionFlagsBits.Stream,
-            PermissionFlagsBits.MoveMembers, PermissionFlagsBits.ManageChannels
+            PermissionFlagsBits.ViewChannel,
+            PermissionFlagsBits.Connect,
+            PermissionFlagsBits.Speak,
+            PermissionFlagsBits.Stream,
+            PermissionFlagsBits.MoveMembers,
+            PermissionFlagsBits.ManageChannels
           ]
         }
       ]
@@ -76,24 +90,28 @@ async function handlePrivateChannelCreation(member) {
     startWatcher(channel.id);
 
   } catch (err) {
-    console.error("[PRIVATE VC] Create error:", err);
+    console.error("Private VC Create Error:", err);
   }
 
   cooldown(member.id);
 }
 
-// ====================== SEND PANEL ======================
+// ====================== PANEL ======================
 async function sendPanel(channel, owner) {
   const embed = new EmbedBuilder()
-    .setColor("#0a0a0a")
-    .setTitle("🔒 PRIVATE VOICE CONTROL PANEL")
+    .setColor("#0b0b0f")
+    .setAuthor({
+      name: "Private Voice Control Panel",
+      iconURL: owner.user.displayAvatarURL()
+    })
     .setDescription(
-      `> 👑 **Owner:** ${owner}\n` +
-      `> 🎧 **Channel:** <#${channel.id}>\n` +
-      `> 👥 **Limit:** 10 Users\n\n` +
-      `### ⚙️ Available Options:`
+      `> 👑 Owner: **${owner.user.username}**\n` +
+      `> 🎧 Channel: <#${channel.id}>\n` +
+      `> 👥 Limit: **10 users**\n\n` +
+      `> **Controls below**`
     )
-    .setFooter({ text: "Advanced Private VC System" });
+    .setFooter({ text: "VYRN Private VC System" })
+    .setTimestamp();
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`vc_rename_${channel.id}`).setLabel("Rename").setStyle(ButtonStyle.Secondary),
@@ -103,16 +121,16 @@ async function sendPanel(channel, owner) {
   );
 
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`vc_kick_${channel.id}`).setLabel("Kick User").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`vc_ban_${channel.id}`).setLabel("Ban User").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`vc_unban_${channel.id}`).setLabel("Unban All").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`vc_kick_${channel.id}`).setLabel("Kick").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`vc_ban_${channel.id}`).setLabel("Ban").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`vc_unban_${channel.id}`).setLabel("Unban").setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`vc_delete_${channel.id}`).setLabel("Delete").setStyle(ButtonStyle.Danger)
   );
 
   await channel.send({ embeds: [embed], components: [row1, row2] }).catch(() => {});
 }
 
-// ====================== BUTTON HANDLER ======================
+// ====================== PANEL HANDLER ======================
 async function handlePrivatePanel(interaction) {
   const [_, action, channelId] = interaction.customId.split("_");
   const channel = interaction.guild.channels.cache.get(channelId);
@@ -122,30 +140,31 @@ async function handlePrivatePanel(interaction) {
   }
 
   const ownerId = channelOwners.get(channelId);
+
   if (interaction.user.id !== ownerId) {
-    return interaction.reply({ content: "❌ This is not your channel.", ephemeral: true });
+    return interaction.reply({ content: "❌ Not your channel.", ephemeral: true });
   }
 
-  // Lock
+  // LOCK
   if (action === "lock") {
     await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: false });
-    return interaction.reply({ content: "🔒 Channel locked.", ephemeral: true });
+    return interaction.reply({ content: "🔒 Locked.", ephemeral: true });
   }
 
-  // Unlock
+  // UNLOCK
   if (action === "unlock") {
     await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: true });
-    return interaction.reply({ content: "🔓 Channel unlocked.", ephemeral: true });
+    return interaction.reply({ content: "🔓 Unlocked.", ephemeral: true });
   }
 
-  // Delete
+  // DELETE
   if (action === "delete") {
     await channel.delete().catch(() => {});
     cleanup(channelId);
-    return interaction.reply({ content: "🗑️ Channel deleted.", ephemeral: true });
+    return interaction.reply({ content: "🗑️ Deleted.", ephemeral: true });
   }
 
-  // Rename
+  // RENAME MODAL
   if (action === "rename") {
     const modal = new ModalBuilder()
       .setCustomId(`vc_rename_${channelId}`)
@@ -153,7 +172,7 @@ async function handlePrivatePanel(interaction) {
 
     const input = new TextInputBuilder()
       .setCustomId("value")
-      .setLabel("New channel name")
+      .setLabel("New name")
       .setStyle(TextInputStyle.Short)
       .setRequired(true);
 
@@ -161,11 +180,11 @@ async function handlePrivatePanel(interaction) {
     return interaction.showModal(modal);
   }
 
-  // Limit
+  // LIMIT MODAL
   if (action === "limit") {
     const modal = new ModalBuilder()
       .setCustomId(`vc_limit_${channelId}`)
-      .setTitle("User Limit");
+      .setTitle("Set Limit");
 
     const input = new TextInputBuilder()
       .setCustomId("value")
@@ -177,122 +196,98 @@ async function handlePrivatePanel(interaction) {
     return interaction.showModal(modal);
   }
 
-  // Kick
+  // KICK MENU
   if (action === "kick") {
     const users = channel.members
       .filter(m => m.id !== ownerId)
-      .map(m => ({ label: m.user.username, value: m.id }))
+      .map(m => ({
+        label: m.user.username,
+        value: m.id
+      }))
       .slice(0, 25);
 
     if (!users.length) {
-      return interaction.reply({ content: "❌ No users to kick.", ephemeral: true });
+      return interaction.reply({ content: "❌ No users.", ephemeral: true });
     }
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId(`vc_kickselect_${channelId}`)
-      .setPlaceholder("Select user to kick")
+      .setPlaceholder("Select user")
       .addOptions(users);
 
     return interaction.reply({
-      content: "👢 Select user:",
+      content: "👢 Select user to kick:",
       components: [new ActionRowBuilder().addComponents(menu)],
       ephemeral: true
     });
   }
 
-  // Ban
+  // BAN MENU
   if (action === "ban") {
     const users = channel.members
       .filter(m => m.id !== ownerId)
-      .map(m => ({ label: m.user.username, value: m.id }))
+      .map(m => ({
+        label: m.user.username,
+        value: m.id
+      }))
       .slice(0, 25);
 
     if (!users.length) {
-      return interaction.reply({ content: "❌ No users to ban.", ephemeral: true });
+      return interaction.reply({ content: "❌ No users.", ephemeral: true });
     }
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId(`vc_banselect_${channelId}`)
-      .setPlaceholder("Select user to ban")
+      .setPlaceholder("Select user")
       .addOptions(users);
 
     return interaction.reply({
-      content: "🔨 Select user:",
+      content: "🔨 Select user to ban:",
       components: [new ActionRowBuilder().addComponents(menu)],
       ephemeral: true
     });
   }
 
-  // Unban All
+  // UNBAN
   if (action === "unban") {
     channelBans.set(channelId, new Set());
-    return interaction.reply({ content: "🔓 All banned users removed.", ephemeral: true });
+    return interaction.reply({ content: "🔓 All bans cleared.", ephemeral: true });
   }
 }
 
-// ====================== SELECT HANDLER ======================
+// ====================== SELECT ======================
 async function handlePrivateSelect(interaction) {
   const [_, type, channelId] = interaction.customId.split("_");
+
   const channel = interaction.guild.channels.cache.get(channelId);
   if (!channel) return;
 
-  const userId = interaction.values[0];
+  const userId = interaction.values?.[0];
   const target = interaction.guild.members.cache.get(userId);
   if (!target) return;
 
   if (type === "kickselect") {
     await target.voice.disconnect().catch(() => {});
-    return interaction.update({ content: `👢 ${target.user.tag} kicked.`, components: [] });
+    return interaction.update({ content: `👢 Kicked ${target.user.tag}`, components: [] });
   }
 
   if (type === "banselect") {
     if (!channelBans.has(channelId)) channelBans.set(channelId, new Set());
+
     channelBans.get(channelId).add(userId);
 
     await channel.permissionOverwrites.edit(userId, { Connect: false });
     await target.voice.disconnect().catch(() => {});
 
-    return interaction.update({ content: `🔨 ${target.user.tag} banned.`, components: [] });
+    return interaction.update({ content: `🔨 Banned ${target.user.tag}`, components: [] });
   }
-}
-
-// ====================== MODAL HANDLERS ======================
-async function handleRename(interaction) {
-  const channelId = interaction.customId.split("_")[2];
-  const value = interaction.fields.getTextInputValue("value");
-  const channel = interaction.guild.channels.cache.get(channelId);
-
-  if (!channel) return;
-
-  await channel.setName(value);
-  await interaction.reply({ content: "✏️ Name updated.", ephemeral: true });
-}
-
-async function handleLimit(interaction) {
-  const channelId = interaction.customId.split("_")[2];
-  const value = Number(interaction.fields.getTextInputValue("value"));
-
-  if (isNaN(value) || value < 1 || value > 99) {
-    return interaction.reply({ content: "❌ Enter number between 1-99.", ephemeral: true });
-  }
-
-  const channel = interaction.guild.channels.cache.get(channelId);
-  if (!channel) return;
-
-  await channel.setUserLimit(value);
-  await interaction.reply({ content: `👥 Limit set to ${value}.`, ephemeral: true });
 }
 
 // ====================== WATCHER ======================
 function startWatcher(channelId) {
   const interval = setInterval(async () => {
-    const channel = global.client?.channels?.cache.get(channelId) || 
-                    (await require("discord.js").Client.prototype.channels.fetch(channelId).catch(() => null));
-
-    if (!channel) {
-      clearInterval(interval);
-      return;
-    }
+    const channel = global.client?.channels?.cache.get(channelId);
+    if (!channel) return clearInterval(interval);
 
     if (channel.members.size === 0) {
       await channel.delete().catch(() => {});
@@ -304,8 +299,10 @@ function startWatcher(channelId) {
 
 // ====================== HELPERS ======================
 function cleanup(channelId) {
-  const ownerId = channelOwners.get(channelId);
-  if (ownerId) userChannels.delete(ownerId);
+  const owner = channelOwners.get(channelId);
+
+  if (owner) userChannels.delete(owner);
+
   channelOwners.delete(channelId);
   channelBans.delete(channelId);
 }
@@ -316,16 +313,13 @@ function cooldown(userId) {
 
 // ====================== INIT ======================
 function init(client) {
-  // Zapisz klienta globalnie (potrzebne w watcherze)
   global.client = client;
-  console.log("🔒 Private VC System → załadowany");
+  console.log("🖤 Private VC System (Black Edition) loaded");
 }
 
 module.exports = {
   init,
   handlePrivateChannelCreation,
   handlePrivatePanel,
-  handlePrivateSelect,
-  handleRename,
-  handleLimit
+  handlePrivateSelect
 };
