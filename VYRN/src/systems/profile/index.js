@@ -1,5 +1,5 @@
 // =====================================================
-// PROFILE SYSTEM - VYRN FIXED FULL STABLE VERSION
+// PROFILE SYSTEM - VYRN CLEAN FIXED STABLE
 // =====================================================
 
 const fs = require("fs");
@@ -14,8 +14,8 @@ const PROFILE_TMP_PATH = `${PROFILE_PATH}.tmp`;
 const DEBUG_PROFILE_VOICE = process.env.DEBUG_PROFILE_VOICE === "true";
 
 // ====================== CACHE ======================
-let dbCache = null;
-let writeQueue = Promise.resolve();
+let dbCache = { users: {} };
+let saveLock = Promise.resolve();
 
 // ====================== INIT FOLDER ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -32,112 +32,55 @@ const normalizeUser = (u = {}) => ({
   voice: toSafeNumber(u.voice, 0)
 });
 
-const normalizeDb = (db = {}) => {
-  const out = { users: {} };
-
-  if (!db || typeof db !== "object") return out;
-  if (!db.users || typeof db.users !== "object") return out;
-
-  for (const [id, data] of Object.entries(db.users)) {
-    out.users[id] = normalizeUser(data);
-  }
-
-  return out;
-};
-
-// ====================== LOAD ======================
-function loadProfile() {
-  // 🔥 FIX: nie używaj stale cache bez refresh
-  if (dbCache) {
-    try {
-      const raw = fs.readFileSync(PROFILE_PATH, "utf8");
-      const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
-      dbCache = normalizeDb(parsed);
-    } catch {}
-    return dbCache;
-  }
-
+function loadFile() {
   try {
     if (!fs.existsSync(PROFILE_PATH)) {
-      dbCache = { users: {} };
-      fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
-      return dbCache;
+      fs.writeFileSync(PROFILE_PATH, JSON.stringify({ users: {} }, null, 2));
+      return { users: {} };
     }
 
     const raw = fs.readFileSync(PROFILE_PATH, "utf8");
-    const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
-
-    dbCache = normalizeDb(parsed);
-    return dbCache;
+    return raw.trim() ? JSON.parse(raw) : { users: {} };
 
   } catch (err) {
-    console.error("[PROFILE LOAD]", err.message);
-    dbCache = { users: {} };
-    return dbCache;
+    console.error("[PROFILE LOAD ERROR]", err);
+    return { users: {} };
   }
 }
 
-// ====================== SAVE ======================
-function saveProfile() {
-  if (!dbCache) return;
+function saveFile(data) {
+  const snapshot = JSON.stringify(data, null, 2);
 
-  const snapshot = JSON.stringify(dbCache, null, 2);
-
-  writeQueue = writeQueue
-    .catch(() => null)
+  saveLock = saveLock
     .then(async () => {
-      try {
-        // 🔥 FIX: sanity normalize przed zapisem
-        dbCache = normalizeDb(dbCache);
-
-        await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
-        await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-      } catch (err) {
-        console.error("[PROFILE SAVE]", err.message);
-      }
+      await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
+      await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
+    })
+    .catch(err => {
+      console.error("[PROFILE SAVE ERROR]", err);
     });
 
-  return writeQueue;
+  return saveLock;
 }
 
-// ====================== FLUSH ======================
-async function flushProfile() {
-  try {
-    await writeQueue;
-
-    if (dbCache) {
-      await fs.promises.writeFile(
-        PROFILE_PATH,
-        JSON.stringify(dbCache, null, 2),
-        "utf8"
-      );
-    }
-  } catch (err) {
-    console.error("[PROFILE FLUSH]", err.message);
-  }
-}
-
-// ====================== USER ======================
+// ====================== CORE ======================
 function ensureUser(userId) {
   if (!userId) return null;
 
-  const db = loadProfile();
-
-  if (!db.users) db.users = {};
+  const db = loadFile();
 
   if (!db.users[userId]) {
     db.users[userId] = normalizeUser();
   } else {
-    // 🔥 FIX: tylko sanity check, nie nadpisuj całego obiektu
     db.users[userId] = normalizeUser(db.users[userId]);
   }
 
+  dbCache = db;
   return db.users[userId];
 }
 
-// ====================== GET PROFILE ======================
 function getProfile(userId) {
-  const db = loadProfile();
+  const db = loadFile();
   return db.users?.[userId] || normalizeUser();
 }
 
@@ -146,41 +89,44 @@ function addVoiceTime(userId, seconds) {
   const amount = Math.floor(Number(seconds));
   if (!userId || amount <= 0) return false;
 
-  const user = ensureUser(userId);
-  if (!user) return false;
+  const db = loadFile();
 
-  const old = user.voice;
+  if (!db.users[userId]) {
+    db.users[userId] = normalizeUser();
+  }
+
+  const user = db.users[userId];
+
+  const before = user.voice;
   user.voice += amount;
 
   if (DEBUG_PROFILE_VOICE) {
-    console.log(`[PROFILE VOICE] ${userId} +${amount}s (${old}→${user.voice})`);
+    console.log(`[PROFILE VOICE] ${userId} +${amount}s (${before}→${user.voice})`);
   }
 
-  saveProfile();
+  saveFile(db);
   return true;
 }
 
-// ====================== VOICE MINUTES ======================
 function getVoiceMinutes(userId) {
-  const user = ensureUser(userId);
-  return Math.floor((user?.voice || 0) / 60);
+  const db = loadFile();
+  const user = db.users?.[userId] || normalizeUser();
+
+  return Math.floor((user.voice || 0) / 60);
 }
 
 // ====================== INIT ======================
 function init() {
-  loadProfile();
-  console.log("📁 Profile System loaded");
+  loadFile();
+  console.log("📁 Profile System CLEAN FIX loaded");
 
-  process.on("SIGINT", flushProfile);
-  process.on("SIGTERM", flushProfile);
+  process.on("SIGINT", () => saveFile(dbCache));
+  process.on("SIGTERM", () => saveFile(dbCache));
 }
 
 // ====================== EXPORT ======================
 module.exports = {
   init,
-  loadProfile,
-  saveProfile,
-  flushProfile,
   ensureUser,
   getProfile,
   addVoiceTime,
