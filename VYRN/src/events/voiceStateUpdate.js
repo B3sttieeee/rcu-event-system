@@ -1,90 +1,104 @@
-const profile=require("../profile");
-const economy=require("../economy");
-const level=require("../level");
+// =====================================================
+// VOICE SYSTEM - VYRN PRO (FIXED STABLE)
+// =====================================================
 
-const joinTimes=new Map();
-const sessionData=new Map();
+const profile = require("../systems/profile/index.js");
+const economy = require("../systems/economy");
+const level = require("../systems/level");
 
-const MIN_REWARD_MINUTES=1;
-const COINS_PER_MINUTE=10;
-const XP_PER_MINUTE=6;
+const joinTimes = new Map();
+const sessionData = new Map();
 
-const AFK_CHANNEL_IDS=new Set();
+const MIN_REWARD_MINUTES = 1;
+const COINS_PER_MINUTE = 10;
+const XP_PER_MINUTE = 6;
 
-function getMinutes(ms){
-return Math.floor(ms/60000);
+const AFK_CHANNEL_IDS = new Set();
+
+// ====================== HELPERS ======================
+function getMinutes(ms) {
+  return Math.floor(ms / 60000);
 }
 
-module.exports={
-name:"voiceStateUpdate",
+// ====================== VOICE SYSTEM ======================
+module.exports = {
+  name: "voiceStateUpdate",
 
-async execute(oldState,newState){
-try{
-const member=newState.member||oldState.member;
-if(!member||member.user?.bot)return;
+  async execute(oldState, newState) {
+    try {
+      const member = newState.member || oldState.member;
+      if (!member || member.user?.bot) return;
 
-const id=member.id;
+      const id = member.id;
 
-const oldChannel=oldState.channelId;
-const newChannel=newState.channelId;
+      const oldChannel = oldState.channelId;
+      const newChannel = newState.channelId;
 
-// JOIN
-if(!oldChannel&&newChannel){
-joinTimes.set(id,Date.now());
-sessionData.set(id,{channelId:newChannel,joinedAt:Date.now(),totalMs:0});
-return;
-}
+      // JOIN
+      if (!oldChannel && newChannel) {
+        joinTimes.set(id, Date.now());
 
-// LEAVE
-if(oldChannel&&!newChannel){
-const start=joinTimes.get(id);
-const session=sessionData.get(id);
+        sessionData.set(id, {
+          channelId: newChannel,
+          joinedAt: Date.now(),
+          totalMs: 0
+        });
 
-joinTimes.delete(id);
-if(!start||!session)return;
+        return;
+      }
 
-const duration=Date.now()-start;
-const minutes=getMinutes(duration);
+      // LEAVE
+      if (oldChannel && !newChannel) {
+        const start = joinTimes.get(id);
+        const session = sessionData.get(id);
 
-sessionData.delete(id);
+        joinTimes.delete(id);
 
-if(minutes<MIN_REWARD_MINUTES)return;
+        if (!start || !session) return;
 
-const coins=minutes*COINS_PER_MINUTE;
-const xp=minutes*XP_PER_MINUTE;
+        const duration = Date.now() - start;
+        const minutes = getMinutes(duration);
 
-profile.addVoiceTime(id,minutes);
-economy.addCoins(id,coins);
-level.addXP(member,xp);
+        sessionData.delete(id);
 
-console.log(`[VOICE] ${member.user.tag} | +${minutes}m | +${coins} coins | +${xp} XP`);
+        if (minutes < MIN_REWARD_MINUTES) return;
 
-return;
-}
+        const coins = minutes * COINS_PER_MINUTE;
+        const xp = minutes * XP_PER_MINUTE;
 
-// SWITCH CHANNEL
-if(oldChannel&&newChannel&&oldChannel!==newChannel){
-const start=joinTimes.get(id);
-if(!start)return;
+        profile.addVoiceTime(id, minutes);
+        economy.addCoins(id, coins);
+        level.addXP(member, xp);
 
-const session=sessionData.get(id);
-const duration=Date.now()-start;
+        console.log(
+          `[VOICE] ${member.user.tag} | +${minutes}m | +${coins} coins | +${xp} XP`
+        );
+      }
 
-if(session){
-session.totalMs+=duration;
-session.channelId=newChannel;
-}
+      // SWITCH CHANNEL
+      if (oldChannel && newChannel && oldChannel !== newChannel) {
+        const start = joinTimes.get(id);
 
-joinTimes.set(id,Date.now());
-}
+        if (start) {
+          const session = sessionData.get(id);
+          const duration = Date.now() - start;
 
-// AFK CHECK
-if(AFK_CHANNEL_IDS.has(newChannel)){
-console.log(`[VOICE] ${member.user.tag} AFK`);
-}
+          if (session) {
+            session.totalMs += duration;
+            session.channelId = newChannel;
+          }
 
-}catch(err){
-console.error("[VOICE SYSTEM ERROR]",err);
-}
-}
+          joinTimes.set(id, Date.now());
+        }
+      }
+
+      // AFK
+      if (AFK_CHANNEL_IDS.has(newChannel)) {
+        console.log(`[VOICE] ${member.user.tag} AFK`);
+      }
+
+    } catch (err) {
+      console.error("[VOICE SYSTEM ERROR]", err);
+    }
+  }
 };
