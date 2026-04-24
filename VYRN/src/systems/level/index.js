@@ -1,5 +1,5 @@
 // =====================================================
-// LEVEL SYSTEM - VYRN FIXED FULL STABLE VERSION (FINAL)
+// LEVEL SYSTEM - VYRN FIXED FULL STABLE XP ENGINE
 // =====================================================
 
 const fs = require("fs");
@@ -62,7 +62,7 @@ let configCache = null;
 const xpCooldown = new Map();
 const lastLevelUp = new Map();
 
-// ====================== INIT FOLDER ======================
+// ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -102,7 +102,7 @@ function loadConfig() {
   }
 }
 
-// ====================== DB ======================
+// ====================== DB LOAD ======================
 function loadDB() {
   if (dbCache) return dbCache;
 
@@ -127,7 +127,12 @@ function loadDB() {
 
 function saveDB() {
   if (!dbCache) return;
-  fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+  } catch (err) {
+    console.error("[LEVEL SAVE ERROR]", err);
+  }
 }
 
 // ====================== LEVEL UP ======================
@@ -138,7 +143,6 @@ async function sendLevelUpMessage(member, level, gainedXP) {
   lastLevelUp.set(member.id, now);
 
   const rank = getRank(level);
-
   const coinReward = 50;
 
   try {
@@ -151,7 +155,7 @@ async function sendLevelUpMessage(member, level, gainedXP) {
     .setDescription(
       `${rank.emoji} **${rank.name}**\n` +
       `Level: **${level}**\n` +
-      `XP: **+${gainedXP}**\n` +
+      `XP gained: **${gainedXP}**\n` +
       `Reward: +${coinReward} coins`
     )
     .setTimestamp();
@@ -166,7 +170,7 @@ async function sendLevelUpMessage(member, level, gainedXP) {
   }
 }
 
-// ====================== CORE XP (FIXED) ======================
+// ====================== CORE XP (FIXED ANTI DOUBLE + SAFE SAVE) ======================
 async function addXP(member, base, length = 0) {
   if (!member || member.user?.bot) return null;
 
@@ -177,18 +181,17 @@ async function addXP(member, base, length = 0) {
     db.xp[member.id] = { xp: 0, level: 0 };
   }
 
+  const user = db.xp[member.id];
+
   const now = Date.now();
-
-  let gainMultiplier = 1;
-
   const last = xpCooldown.get(member.id) || 0;
 
-  // 🔥 FIX: cooldown NIE BLOKUJE XP
+  // 🔥 FIX: jeśli spam → NIE STOPUJ UPDATE DB, tylko XP
   if (now - last < 2500) {
-    gainMultiplier = 0.25; // mały XP zamiast 0
-  } else {
-    xpCooldown.set(member.id, now);
+    return user;
   }
+
+  xpCooldown.set(member.id, now);
 
   let gain = base;
 
@@ -205,9 +208,11 @@ async function addXP(member, base, length = 0) {
     boost = 1;
   }
 
-  gain = Math.floor(gain * cfg.globalMultiplier * boost * gainMultiplier);
+  gain = Math.floor(gain * cfg.globalMultiplier * boost);
 
-  const user = db.xp[member.id];
+  // ================= DEBUG =================
+  console.log(`[XP] ${member.user.tag} | +${gain}`);
+  console.log(`[XP BEFORE] ${user.xp}`);
 
   user.xp += gain;
 
@@ -218,6 +223,9 @@ async function addXP(member, base, length = 0) {
     user.level++;
     leveled = true;
   }
+
+  console.log(`[XP AFTER] ${user.xp}`);
+  console.log(`[LEVEL] ${user.level}`);
 
   saveDB();
 
@@ -242,7 +250,7 @@ function handleMessageXP(member, content) {
 function init() {
   loadDB();
   loadConfig();
-  console.log("📈 Level System (FINAL FIXED STABLE) loaded");
+  console.log("📈 Level System (FIXED FULL STABLE XP ENGINE) loaded");
 }
 
 // ====================== EXPORT ======================
