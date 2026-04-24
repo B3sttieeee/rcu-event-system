@@ -1,9 +1,8 @@
 // src/commands/profile.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// Świeże importy za każdym razem
-const { loadDB, neededXP, getRank } = require("../systems/level");
-const { getVoiceMinutes } = require("../systems/profile");
+// Import z nowego Activity System
+const activity = require("../systems/activity");
 const { getCoins } = require("../systems/economy");
 const { getCurrentBoost } = require("../systems/boost");
 
@@ -16,7 +15,7 @@ function createProgressBar(percent) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("profile")
-    .setDescription("📊 Twój profil"),
+    .setDescription("📊 Twój profil w VYRN"),
 
   async execute(interaction) {
     await interaction.deferReply();
@@ -24,18 +23,22 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // Zawsze świeże dane
-      const levelsDB = loadDB();
-      const lvlData = levelsDB.users?.[userId] || levelsDB.xp?.[userId] || { xp: 0, level: 0 };
+      // Pobieranie danych z Activity System
+      const voiceMin = activity.getVoiceMinutes(userId);
+      
+      // Level data (z levelsDB w activity)
+      const levelsDB = require("../systems/activity").levelsDB || {}; // fallback
+      const lvlData = levelsDB.users?.[userId] || { xp: 0, level: 0 };
 
-      const voiceMin = getVoiceMinutes(userId);
       const coins = getCoins(userId);
       const boost = getCurrentBoost(userId) || 1;
 
-      const nextXP = neededXP(lvlData.level);
-      const progress = nextXP > 0 ? Math.min(100, Math.floor((lvlData.xp / nextXP) * 100)) : 0;
+      const nextXP = activity.neededXP ? activity.neededXP(lvlData.level) : 100;
+      const progress = nextXP > 0 
+        ? Math.min(100, Math.floor((lvlData.xp / nextXP) * 100)) 
+        : 0;
 
-      const rank = getRank(lvlData.level);
+      const rank = activity.getRank ? activity.getRank(lvlData.level) : { name: "Iron", emoji: "⚔️" };
 
       const embed = new EmbedBuilder()
         .setColor("#0b0b0f")
@@ -53,16 +56,23 @@ module.exports = {
           `> **${voiceMin}** minut\n\n` +
           `**Economy**\n` +
           `> **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
-          `**Boost**\n` +
-          `> ${boost > 1 ? `**${boost}x**` : "Brak"}`
+          `**Active Boost**\n` +
+          `> ${boost > 1 ? `**${boost}x XP** 🚀` : "**Brak**"}`
         )
-        .setFooter({ text: "VYRN Clan", iconURL: interaction.guild?.iconURL({ dynamic: true }) })
+        .setFooter({ 
+          text: "VYRN Clan • Activity System", 
+          iconURL: interaction.guild?.iconURL({ dynamic: true }) 
+        })
         .setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
+
     } catch (err) {
-      console.error("[PROFILE ERROR]", err);
-      await interaction.editReply({ content: "❌ Błąd ładowania profilu.", ephemeral: true });
+      console.error("[PROFILE COMMAND ERROR]", err);
+      await interaction.editReply({
+        content: "❌ Wystąpił błąd podczas ładowania profilu.",
+        ephemeral: true
+      });
     }
   }
 };
