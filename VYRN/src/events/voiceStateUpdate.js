@@ -1,3 +1,6 @@
+// =====================================================
+// VOICE STATE UPDATE - PROFESSIONAL VERSION
+// =====================================================
 const { Events } = require("discord.js");
 
 const profile = require("../systems/profile");
@@ -5,65 +8,49 @@ const economy = require("../systems/economy");
 const level = require("../systems/level");
 
 // ====================== STATE ======================
-const sessions = new Map();
+const sessions = new Map(); // userId => { interval }
 
 // ====================== CONFIG ======================
 const MINUTE = 60000;
 
-// AFK optional
-const AFK_CHANNELS = new Set();
-
-// ====================== HELP ======================
-function isValid(channelId) {
-  return channelId && !AFK_CHANNELS.has(channelId);
-}
-
-function stop(userId) {
+// ====================== HELPERS ======================
+function stopSession(userId) {
   const data = sessions.get(userId);
-
   if (data?.interval) {
     clearInterval(data.interval);
   }
-
   sessions.delete(userId);
 }
 
-// ====================== START SESSION ======================
-function start(member) {
+function startSession(member) {
   const userId = member.id;
-
-  // zawsze reset starej sesji
-  stop(userId);
+  stopSession(userId); // reset starej sesji
 
   const interval = setInterval(async () => {
     try {
-      const fresh =
-        member.guild.members.cache.get(userId) ||
-        (await member.guild.members.fetch(userId).catch(() => null));
+      // Pobierz aktualny stan membera
+      const freshMember = member.guild.members.cache.get(userId) ||
+                          await member.guild.members.fetch(userId).catch(() => null);
 
-      if (!fresh?.voice?.channelId) {
-        stop(userId);
+      if (!freshMember?.voice?.channelId) {
+        stopSession(userId);
         return;
       }
 
-      if (!isValid(fresh.voice.channelId)) return;
-
       // ====================== REWARDS ======================
-      profile.addVoiceTime(userId, 60); // seconds
-      economy.addCoins(userId, 8);
+      profile.addVoiceTime(userId, 60);                    // +60 sekund voice
+      economy.addCoins(userId, 8);                         // +8 monet za minutę
+      await level.addXP(freshMember, 8, 0);                // +8 XP za minutę (voiceXP)
 
-      const user = level.handleVoiceXP(fresh);
-
-      console.log(
-        `[VOICE] ${fresh.user.tag} | +1m | +8 coins | +10 XP | LVL ${user.level} | XP ${user.totalXP}`
-      );
+      console.log(`[VOICE] ${freshMember.user.tag} | +60s voice | +8 coins | +8 XP`);
 
     } catch (err) {
-      console.error("[VOICE ERROR]", err);
+      console.error(`[VOICE ERROR] ${member.user.tag}`, err.message);
     }
   }, MINUTE);
 
   sessions.set(userId, { interval });
+  console.log(`[VOICE JOIN] ${member.user.tag} — sesja rozpoczęta`);
 }
 
 // ====================== EVENT ======================
@@ -75,37 +62,28 @@ module.exports = {
       const member = newState.member || oldState.member;
       if (!member || member.user.bot) return;
 
-      const id = member.id;
-
-      const oldC = oldState.channelId;
-      const newC = newState.channelId;
+      const oldChannel = oldState.channelId;
+      const newChannel = newState.channelId;
 
       // JOIN
-      if (!oldC && newC) {
-        if (isValid(newC)) {
-          start(member);
-          console.log(`[VOICE JOIN] ${member.user.tag}`);
-        }
+      if (!oldChannel && newChannel) {
+        startSession(member);
         return;
       }
 
       // LEAVE
-      if (oldC && !newC) {
-        stop(id);
+      if (oldChannel && !newChannel) {
+        stopSession(member.id);
         console.log(`[VOICE LEAVE] ${member.user.tag}`);
         return;
       }
 
-      // SWITCH
-      if (oldC && newC && oldC !== newC) {
-        stop(id);
-
-        if (isValid(newC)) {
-          start(member);
-          console.log(`[VOICE SWITCH] ${member.user.tag}`);
-        }
+      // SWITCH CHANNEL
+      if (oldChannel && newChannel && oldChannel !== newChannel) {
+        stopSession(member.id);
+        startSession(member);
+        console.log(`[VOICE SWITCH] ${member.user.tag}`);
       }
-
     } catch (err) {
       console.error("[VOICE STATE ERROR]", err);
     }
