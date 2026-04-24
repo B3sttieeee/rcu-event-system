@@ -18,7 +18,7 @@ const CONFIG = {
   messageCooldown: 15000
 };
 
-const LEVEL_UP_CHANNEL_ID = "1475999590716018719";   // ← kanał na powiadomienia
+const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 
 // ====================== ROLES ======================
 const LEVEL_ROLES = {
@@ -100,7 +100,7 @@ function getRank(level) {
   return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
-// ====================== BLACK LEVEL UP NOTIFICATION ======================
+// ====================== BLACK LEVEL UP ======================
 async function sendLevelUpMessage(member, newLevel) {
   const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
   if (!channel) return;
@@ -132,7 +132,7 @@ function checkLevel(member, user) {
   }
 
   if (leveled) {
-    sendLevelUpMessage(member, user.level);   // ← CZARNE POWIADOMIENIE
+    sendLevelUpMessage(member, user.level);
   }
 
   saveDB();
@@ -179,5 +179,7 @@ module.exports = {
   neededXP,
   getRank,
   handleMessageXP,
-  handleVoiceXP
+  handleVoiceXP,
+  addXP: handleVoiceXP,        // ← DODANE DLA voiceStateUpdate
+  sendLevelUpMessage
 };
