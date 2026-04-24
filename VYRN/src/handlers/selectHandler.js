@@ -5,8 +5,8 @@ const eventSystem = require("../systems/event");
 const { SHOP_BOOSTS, buyBoost } = require("../systems/boost");
 
 /**
- * Główny handler wszystkich StringSelectMenu
- * VYRN • Black Interaction System
+ * VYRN • Select Menu Router (Black Edition)
+ * Fully safe interaction handler
  */
 module.exports = async function selectHandler(interaction) {
   const customId = interaction.customId;
@@ -35,9 +35,17 @@ module.exports = async function selectHandler(interaction) {
 
     // ==================== SHOP SYSTEM ====================
     if (customId === "shop_select_boost") {
-      const boostId = interaction.values[0];
 
-      const boost = SHOP_BOOSTS.find(b => b.id === boostId);
+      const boostId = interaction.values?.[0];
+
+      if (!boostId) {
+        return interaction.reply({
+          content: "❌ No boost selected.",
+          ephemeral: true
+        });
+      }
+
+      const boost = (SHOP_BOOSTS || []).find(b => b?.id === boostId);
 
       if (!boost) {
         return interaction.reply({
@@ -46,11 +54,11 @@ module.exports = async function selectHandler(interaction) {
         });
       }
 
-      const result = buyBoost(interaction.user.id, boostId);
+      const result = buyBoost?.(interaction.user.id, boostId);
 
-      if (!result.success) {
+      if (!result?.success) {
         return interaction.reply({
-          content: `❌ ${result.message}`,
+          content: `❌ ${result?.message || "Purchase failed."}`,
           ephemeral: true
         });
       }
@@ -65,13 +73,14 @@ module.exports = async function selectHandler(interaction) {
     console.warn(`[SELECT] Unhandled select menu: ${customId}`);
 
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({
+      return await interaction.reply({
         content: "❌ This menu is not handled yet.",
         ephemeral: true
       });
     }
+
   } catch (error) {
-    console.error("[SELECT HANDLER ERROR]", error);
+    console.error("🔥 SELECT HANDLER ERROR:", error);
 
     if (!interaction.replied && !interaction.deferred) {
       try {
