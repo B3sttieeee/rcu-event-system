@@ -113,19 +113,10 @@ function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
 }
 
 function neededXP(level) {
-  return 50 + level * 35;   // Level 0→1 = 85, Level 1→2 = 120 itd.
+  return Math.floor(100 * Math.pow(level + 1, 1.5)); // lepsza progresja
 }
 
-function getRank(level) {
-  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
-  if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
-  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
-  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
-  if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
-  if (level >= 5) return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
-  return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
-}
-
+// ====================== LEVEL UP EMBED ======================
 async function sendLevelUpMessage(member, newLevel) {
   const channel = member.guild.channels.cache.get("1475999590716018719");
   if (!channel) return;
@@ -144,10 +135,20 @@ async function sendLevelUpMessage(member, newLevel) {
   channel.send({ embeds: [embed] }).catch(() => {});
 }
 
+function getRank(level) {
+  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
+  if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
+  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
+  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
+  if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
+  if (level >= 5) return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
+  return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
+}
+
 // ====================== INIT ======================
 function init() {
   loadAll();
-  console.log("📊 Activity System → załadowany [FULL STABLE]");
+  console.log("📊 Activity System → załadowany [FINAL STABLE]");
 }
 
 module.exports = {
