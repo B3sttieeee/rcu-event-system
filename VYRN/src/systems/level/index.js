@@ -1,20 +1,18 @@
 // =====================================================
-// src/systems/level/index.js
-// VYRN LEVEL SYSTEM - DEBUG FULL VERSION
+// VYRN LEVEL SYSTEM v2 - CLEAN STABLE NO RESET
 // =====================================================
 
 const fs = require("fs");
 const path = require("path");
-const { EmbedBuilder } = require("discord.js");
 
-// ====================== DEBUG FLAGS ======================
-const DEBUG = process.env.DEBUG_LEVEL === "true";
-
-// ====================== PATHS ======================
+// ====================== CONFIG ======================
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "levels.json");
 
-// ====================== CONFIG ======================
+// DEBUG
+const DEBUG = process.env.DEBUG_LEVEL === "true";
+
+// ====================== CONFIG XP ======================
 const CONFIG = {
   messageXP: 5,
   messageCoins: 5,
@@ -22,10 +20,7 @@ const CONFIG = {
   voiceXP: 10,
   voiceCoins: 8,
 
-  messageCooldown: 15000,
-  voiceInterval: 60000,
-
-  levelUpChannel: "1475999590716018719"
+  messageCooldown: 15000
 };
 
 // ====================== LEVEL ROLES ======================
@@ -38,14 +33,12 @@ const LEVEL_ROLES = {
   75: "1476000992351879229"
 };
 
-// ====================== ECONOMY SAFE IMPORT ======================
+// ====================== SAFE ECONOMY ======================
 let economy;
 try {
   economy = require("../economy");
 } catch {
-  economy = {
-    addCoins: () => {}
-  };
+  economy = { addCoins: () => {} };
 }
 
 // ====================== INIT ======================
@@ -53,43 +46,60 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-let db = null;
-const messageCooldowns = new Map();
+// ====================== CACHE ======================
+let db = { users: {} };
+const cooldown = new Map();
 
-// ====================== LOAD DB ======================
+// ====================== LOAD ======================
 function loadDB() {
   try {
-    const raw = fs.readFileSync(DB_PATH, "utf8");
-    db = JSON.parse(raw || '{"users":{}}');
+    if (!fs.existsSync(DB_PATH)) {
+      db = { users: {} };
+      fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+      return db;
+    }
 
-    if (!db.users) db.users = {};
+    const raw = fs.readFileSync(DB_PATH, "utf8");
+    const parsed = JSON.parse(raw || "{}");
+
+    db = {
+      users: parsed.users || parsed || {}
+    };
 
     return db;
+
   } catch (err) {
+    console.error("[LEVEL LOAD ERROR]", err);
+
     db = { users: {} };
     return db;
   }
 }
 
-// ====================== SAVE DB ======================
+// ====================== SAVE ======================
 function saveDB() {
-  if (!db) return;
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  try {
+    if (!db) db = { users: {} };
+
+    fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+  } catch (err) {
+    console.error("[LEVEL SAVE ERROR]", err);
+  }
 }
 
 // ====================== USER ======================
-function ensureUser(userId) {
+function ensureUser(id) {
   loadDB();
 
-  if (!db.users[userId]) {
-    db.users[userId] = {
+  if (!db.users[id]) {
+    db.users[id] = {
       xp: 0,
       totalXP: 0,
       level: 0
     };
   }
 
-  return db.users[userId];
+  return db.users[id];
 }
 
 // ====================== XP FORMULA ======================
@@ -110,7 +120,7 @@ function getRank(level) {
 }
 
 // ====================== LEVEL CHECK ======================
-async function checkLevel(member, user) {
+function checkLevel(member, user) {
   let leveled = false;
 
   while (user.xp >= neededXP(user.level)) {
@@ -119,10 +129,8 @@ async function checkLevel(member, user) {
     leveled = true;
   }
 
-  if (!leveled) return;
-
-  if (DEBUG) {
-    console.log(`[LEVEL DEBUG] LEVEL UP -> ${member.user.tag} | LVL: ${user.level}`);
+  if (leveled && DEBUG) {
+    console.log(`[LEVEL UP] ${member.user.tag} → LVL ${user.level}`);
   }
 
   saveDB();
@@ -131,22 +139,20 @@ async function checkLevel(member, user) {
 // ====================== MESSAGE XP ======================
 async function handleMessageXP(member) {
   const now = Date.now();
-  const last = messageCooldowns.get(member.id) || 0;
 
+  const last = cooldown.get(member.id) || 0;
   const user = ensureUser(member.id);
 
   if (DEBUG) {
-    console.log(`[LEVEL DEBUG] user=${member.id}`);
-    console.log(`[LEVEL DEBUG] cooldown diff=${now - last}`);
-    console.log(`[LEVEL DEBUG] required=${CONFIG.messageCooldown}`);
+    console.log(`[XP CHECK] ${member.user.tag}`);
   }
 
   if (now - last < CONFIG.messageCooldown) {
-    if (DEBUG) console.log(`[LEVEL DEBUG] ❌ BLOCKED BY COOLDOWN`);
+    if (DEBUG) console.log(`[BLOCKED COOLDOWN] ${member.user.tag}`);
     return user;
   }
 
-  messageCooldowns.set(member.id, now);
+  cooldown.set(member.id, now);
 
   const before = user.xp;
 
@@ -155,21 +161,18 @@ async function handleMessageXP(member) {
 
   economy.addCoins(member.id, CONFIG.messageCoins);
 
-  await checkLevel(member, user);
-
+  checkLevel(member, user);
   saveDB();
 
   if (DEBUG) {
-    console.log(
-      `[LEVEL DEBUG] ✅ XP +${CONFIG.messageXP} | ${before} → ${user.xp}`
-    );
+    console.log(`[XP +${CONFIG.messageXP}] ${before} → ${user.xp}`);
   }
 
   return user;
 }
 
 // ====================== VOICE XP ======================
-async function handleVoiceXP(member) {
+function handleVoiceXP(member) {
   const user = ensureUser(member.id);
 
   const before = user.xp;
@@ -179,14 +182,11 @@ async function handleVoiceXP(member) {
 
   economy.addCoins(member.id, CONFIG.voiceCoins);
 
-  await checkLevel(member, user);
-
+  checkLevel(member, user);
   saveDB();
 
   if (DEBUG) {
-    console.log(
-      `[VOICE DEBUG] ${member.user.tag} +${CONFIG.voiceXP} XP | ${before} → ${user.xp}`
-    );
+    console.log(`[VOICE XP] ${member.user.tag} +${CONFIG.voiceXP}`);
   }
 
   return user;
