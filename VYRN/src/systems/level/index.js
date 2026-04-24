@@ -1,5 +1,5 @@
 // =====================================================
-// VYRN LEVEL SYSTEM - FULL STABLE + BLACK LEVEL UP
+// VYRN LEVEL SYSTEM - FINAL IDEAL VERSION
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -47,7 +47,7 @@ if (!fs.existsSync(DATA_DIR)) {
 let db = { users: {} };
 const cooldown = new Map();
 
-// ====================== LOAD ======================
+// ====================== LOAD / SAVE ======================
 function loadDB() {
   try {
     if (!fs.existsSync(DB_PATH)) {
@@ -67,7 +67,6 @@ function loadDB() {
   }
 }
 
-// ====================== SAVE ======================
 function saveDB() {
   try {
     fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
@@ -76,7 +75,6 @@ function saveDB() {
   }
 }
 
-// ====================== USER ======================
 function ensureUser(id) {
   loadDB();
   if (!db.users[id]) {
@@ -100,7 +98,7 @@ function getRank(level) {
   return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
-// ====================== BLACK LEVEL UP ======================
+// ====================== BEAUTIFUL LEVEL UP EMBED ======================
 async function sendLevelUpMessage(member, newLevel) {
   const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
   if (!channel) return;
@@ -110,13 +108,18 @@ async function sendLevelUpMessage(member, newLevel) {
   const embed = new EmbedBuilder()
     .setColor("#0a0a0a")
     .setAuthor({
-      name: member.user.username,
+      name: `@GG | ${member.user.username} just leveled up!`,
       iconURL: member.user.displayAvatarURL({ dynamic: true })
     })
-    .setTitle(`🎉 AWANS! Level ${newLevel}`)
-    .setDescription(`${rank.emoji} **${rank.name}**`)
+    .setTitle("Level Up!")
+    .addFields(
+      { name: "Rank", value: `${rank.emoji} **${rank.name}**`, inline: true },
+      { name: "Level", value: `**${newLevel}**`, inline: true },
+      { name: "XP Gained", value: `**14**`, inline: true },
+      { name: "Coins Reward", value: `**+50**`, inline: true }
+    )
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true, size: 256 }))
-    .setFooter({ text: "VYRN Clan • Level System" })
+    .setFooter({ text: "VYRN CLAN • Keep grinding harder" })
     .setTimestamp();
 
   channel.send({ embeds: [embed] }).catch(() => {});
@@ -180,6 +183,6 @@ module.exports = {
   getRank,
   handleMessageXP,
   handleVoiceXP,
-  addXP: handleVoiceXP,        // ← DODANE DLA voiceStateUpdate
+  addXP: handleVoiceXP,
   sendLevelUpMessage
 };
