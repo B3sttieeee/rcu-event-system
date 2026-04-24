@@ -1,7 +1,7 @@
 // src/commands/profile.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// Import z nowego Activity System
+// Import z Activity System
 const activity = require("../systems/activity");
 const { getCoins } = require("../systems/economy");
 const { getCurrentBoost } = require("../systems/boost");
@@ -25,20 +25,19 @@ module.exports = {
 
       // Pobieranie danych z Activity System
       const voiceMin = activity.getVoiceMinutes(userId);
-      
-      // Level data (z levelsDB w activity)
-      const levelsDB = require("../systems/activity").levelsDB || {}; // fallback
-      const lvlData = levelsDB.users?.[userId] || { xp: 0, level: 0 };
 
+      // Level data
+      const userLevelData = activity.getLevelData ? activity.getLevelData(userId) : { xp: 0, level: 0 };
+      
       const coins = getCoins(userId);
       const boost = getCurrentBoost(userId) || 1;
 
-      const nextXP = activity.neededXP ? activity.neededXP(lvlData.level) : 100;
+      const nextXP = activity.neededXP ? activity.neededXP(userLevelData.level) : 100;
       const progress = nextXP > 0 
-        ? Math.min(100, Math.floor((lvlData.xp / nextXP) * 100)) 
+        ? Math.min(100, Math.floor((userLevelData.xp / nextXP) * 100)) 
         : 0;
 
-      const rank = activity.getRank ? activity.getRank(lvlData.level) : { name: "Iron", emoji: "⚔️" };
+      const rank = activity.getRank ? activity.getRank(userLevelData.level) : { name: "Iron", emoji: "⚔️" };
 
       const embed = new EmbedBuilder()
         .setColor("#0b0b0f")
@@ -48,9 +47,9 @@ module.exports = {
         })
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setDescription(
-          `**${rank.emoji} ${rank.name}** — Level **${lvlData.level}**\n\n` +
+          `**${rank.emoji} ${rank.name}** — Level **${userLevelData.level}**\n\n` +
           `**Experience**\n` +
-          `> \`${lvlData.xp} / ${nextXP} XP\`\n` +
+          `> \`${userLevelData.xp} / ${nextXP} XP\`\n` +
           `> ${createProgressBar(progress)} **${progress}%**\n\n` +
           `**Voice Activity**\n` +
           `> **${voiceMin}** minut\n\n` +
@@ -59,9 +58,9 @@ module.exports = {
           `**Active Boost**\n` +
           `> ${boost > 1 ? `**${boost}x XP** 🚀` : "**Brak**"}`
         )
-        .setFooter({ 
-          text: "VYRN Clan • Activity System", 
-          iconURL: interaction.guild?.iconURL({ dynamic: true }) 
+        .setFooter({
+          text: "VYRN Clan • Activity System",
+          iconURL: interaction.guild?.iconURL({ dynamic: true })
         })
         .setTimestamp();
 
