@@ -1,5 +1,5 @@
 // =====================================================
-// PROFILE SYSTEM - VYRN FULL STABLE (SINGLE SOURCE)
+// PROFILE SYSTEM - VYRN FULL STABLE (FIXED)
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -8,7 +8,7 @@ const DATA_DIR = process.env.DATA_DIR || "/data";
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
 const TMP_PATH = `${PROFILE_PATH}.tmp`;
 
-const DEBUG = process.env.DEBUG_PROFILE_VOICE === "true" || true; // włączone do testów
+const DEBUG = true; // włączone na stałe do diagnostyki
 
 let db = { users: {} };
 let saveQueue = Promise.resolve();
@@ -50,7 +50,7 @@ function save() {
     try {
       await fs.promises.writeFile(TMP_PATH, snapshot, "utf8");
       await fs.promises.rename(TMP_PATH, PROFILE_PATH);
-      if (DEBUG) console.log(`[PROFILE] ✅ Zapisano profile.json`);
+      console.log(`[PROFILE] ✅ Zapisano profile.json`);
     } catch (err) {
       console.error("[PROFILE SAVE ERROR]", err.message);
     }
@@ -62,6 +62,7 @@ function save() {
 // ====================== USER ======================
 function ensureUser(userId) {
   if (!userId) return null;
+  load(); // zawsze świeże dane
   if (!db.users[userId]) {
     db.users[userId] = { voice: 0 };
   }
@@ -69,6 +70,7 @@ function ensureUser(userId) {
 }
 
 function getProfile(userId) {
+  load(); // zawsze świeże
   return db.users[userId] || { voice: 0 };
 }
 
@@ -85,12 +87,12 @@ function addVoiceTime(userId, seconds) {
     console.log(`[PROFILE][VOICE] ${userId} +${amount}s | ${before} → ${user.voice} (${Math.floor(user.voice/60)} min)`);
   }
 
-  save(); // zapisz
+  save();
   return true;
 }
 
 function getVoiceMinutes(userId) {
-  const user = db.users[userId] || { voice: 0 };
+  const user = getProfile(userId); // używa load()
   const minutes = Math.floor((user.voice || 0) / 60);
 
   if (DEBUG) {
@@ -104,8 +106,8 @@ function init() {
   load();
   console.log("📁 Profile System → załadowany (STABLE)");
 
-  // Awaryjny zapis co 30 sekund
-  setInterval(save, 30000);
+  // Awaryjny zapis co 20 sekund
+  setInterval(save, 20000);
 
   process.on("SIGINT", () => save());
   process.on("SIGTERM", () => save());
