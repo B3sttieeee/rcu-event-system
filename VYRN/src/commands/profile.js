@@ -1,22 +1,17 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// LEVEL SYSTEM (SAFE IMPORT)
+// LEVEL SYSTEM
 const levelSystem = require("../systems/level");
-
 const neededXP = levelSystem.neededXP;
 const getRank = levelSystem.getRank;
+const loadLevelDB = levelSystem.loadDB || (() => ({ xp: {} }));
 
-// 🔥 SAFE FALLBACK (bo u Ciebie brak loadLevelDB w systemie)
-const loadLevelDB =
-  levelSystem.loadDB ||
-  (() => ({ xp: {} }));
-
-// OTHER SYSTEMS
-const { loadProfile, getVoiceMinutes } = require("../systems/profile");
+// SYSTEMS
+const { getVoiceMinutes } = require("../systems/profile");
 const { getCurrentBoost } = require("../systems/boost");
 const { getCoins } = require("../systems/economy");
 
-function createProgressBar(percent) {
+function progressBar(percent) {
   const size = 12;
   const filled = Math.round((percent / 100) * size);
   return "▰".repeat(filled) + "▱".repeat(size - filled);
@@ -25,7 +20,7 @@ function createProgressBar(percent) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("profile")
-    .setDescription("📊 Wyświetla Twój szczegółowy profil w VYRN"),
+    .setDescription("📊 View your VYRN profile"),
 
   async execute(interaction) {
     await interaction.deferReply();
@@ -33,55 +28,57 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // DB LOAD (SAFE)
-      const levelsDB = loadLevelDB();
-      const profileDB = loadProfile?.() || {};
+      // ======================
+      const db = loadLevelDB();
+      const lvl = db?.xp?.[userId] || { xp: 0, level: 0 };
 
-      const lvlData = levelsDB?.xp?.[userId] || {
-        xp: 0,
-        level: 0
-      };
-
-      const totalVoiceMin = getVoiceMinutes(userId);
-      const currentBoost = getCurrentBoost(userId) || 1;
       const coins = getCoins(userId);
+      const voice = getVoiceMinutes(userId);
+      const boost = getCurrentBoost(userId) || 1;
 
-      const nextLevelXP = neededXP(lvlData.level);
+      const rank = getRank(lvl.level);
+      const nextXP = neededXP(lvl.level);
 
-      const progress =
-        nextLevelXP > 0
-          ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100))
-          : 0;
+      const progress = nextXP
+        ? Math.min(100, Math.floor((lvl.xp / nextXP) * 100))
+        : 0;
 
-      const xpLeft = Math.max(0, nextLevelXP - lvlData.xp);
-      const rank = getRank(lvlData.level);
+      const xpLeft = Math.max(0, nextXP - lvl.xp);
 
+      // ======================
       const embed = new EmbedBuilder()
-        .setColor("#0a0a0a")
+        .setColor("#0a0a0a") // pure black aesthetic
         .setAuthor({
-          name: `${interaction.user.username} • VYRN Profile`,
+          name: `${interaction.user.username}`,
           iconURL: interaction.user.displayAvatarURL()
         })
         .setThumbnail(interaction.user.displayAvatarURL())
         .setDescription(
-          `**${rank.emoji} ${rank.name}** — Level **${lvlData.level}**\n\n` +
+          `> 🪪 **PROFILE OVERVIEW**\n` +
+          `> ━━━━━━━━━━━━━━━━━━\n\n` +
 
-          `**Experience**\n` +
-          `> **${lvlData.xp} / ${nextLevelXP} XP**\n` +
-          `> ${createProgressBar(progress)} **${progress}%**\n` +
-          `> **${xpLeft}** XP do następnego poziomu\n\n` +
+          `🎖️ **Rank**\n` +
+          `> ${rank.emoji} **${rank.name}**\n\n` +
 
-          `**Voice Activity**\n` +
-          `> Total: **${totalVoiceMin}** minut\n\n` +
+          `📊 **Level Progress**\n` +
+          `> Level: **${lvl.level}**\n` +
+          `> XP: **${lvl.xp} / ${nextXP}**\n` +
+          `> ${progressBar(progress)} **${progress}%**\n` +
+          `> Next: **${xpLeft} XP**\n\n` +
 
-          `**Economy**\n` +
-          `> Monety: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
+          `💰 **Economy**\n` +
+          `> Balance: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
 
-          `**Active Boost**\n` +
-          `> ${currentBoost > 1 ? `**${currentBoost}x XP** 🚀` : "**Brak**"}`
+          `🎧 **Voice Activity**\n` +
+          `> Total: **${voice} min**\n\n` +
+
+          `🚀 **Boost Status**\n` +
+          `> ${boost > 1 ? `Active **${boost}x XP Boost**` : "No active boost"}\n\n` +
+
+          `> ━━━━━━━━━━━━━━━━━━`
         )
         .setFooter({
-          text: "VYRN CLAN • Grind smarter, not harder",
+          text: "VYRN SYSTEM • black profile UI",
           iconURL: interaction.guild?.iconURL?.() || null
         })
         .setTimestamp();
@@ -89,18 +86,11 @@ module.exports = {
       await interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
-      console.error("❌ Błąd w komendzie /profile:", err);
+      console.error("PROFILE ERROR:", err);
 
-      if (interaction.deferred || interaction.replied) {
-        await interaction.editReply({
-          content: "❌ Wystąpił błąd podczas ładowania profilu."
-        });
-      } else {
-        await interaction.reply({
-          content: "❌ Wystąpił błąd podczas ładowania profilu.",
-          ephemeral: true
-        });
-      }
+      return interaction.editReply({
+        content: "❌ Failed to load profile."
+      });
     }
   }
 };
