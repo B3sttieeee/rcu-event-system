@@ -1,26 +1,25 @@
-// =====================================================
-// ECONOMY SYSTEM - FIXED (STABLE VERSION)
-// =====================================================
 const fs = require("fs");
 const path = require("path");
 
+// ====================== PATH ======================
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const COINS_PATH = path.join(DATA_DIR, "userCoins.json");
-const COINS_TMP_PATH = `${COINS_PATH}.tmp`;
+const TMP_PATH = `${COINS_PATH}.tmp`;
 
+// ====================== CACHE ======================
 let userCoins = new Map();
-let writeQueue = Promise.resolve();
+let saveQueue = Promise.resolve();
 let saveTimeout = null;
 
-// ====================== INIT FOLDER ======================
+// ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// ====================== HELPERS ======================
-function toSafeNumber(value, fallback = 0) {
-  const num = Number(value);
-  return Number.isFinite(num) ? Math.floor(num) : fallback;
+// ====================== SAFE NUMBER ======================
+function toNumber(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.floor(n) : fallback;
 }
 
 // ====================== LOAD ======================
@@ -33,40 +32,44 @@ function loadCoins() {
     }
 
     const raw = fs.readFileSync(COINS_PATH, "utf8");
-    const parsed = raw.trim() ? JSON.parse(raw) : {};
+    const data = raw.trim() ? JSON.parse(raw) : {};
 
-    userCoins = new Map();
+    userCoins = new Map(
+      Object.entries(data).map(([id, value]) => [
+        id,
+        toNumber(value)
+      ])
+    );
 
-    for (const [id, coins] of Object.entries(parsed)) {
-      userCoins.set(id, toSafeNumber(coins));
-    }
+    console.log(`💰 Economy loaded: ${userCoins.size} users`);
+
   } catch (err) {
     console.error("[ECONOMY] LOAD ERROR:", err.message);
     userCoins = new Map();
   }
 }
 
-// ====================== SAVE ======================
+// ====================== SAVE (SAFE ATOMIC) ======================
 function flushSave() {
   const snapshot = JSON.stringify(Object.fromEntries(userCoins), null, 2);
 
-  writeQueue = writeQueue
+  saveQueue = saveQueue
     .catch(() => null)
     .then(async () => {
       try {
-        await fs.promises.writeFile(COINS_TMP_PATH, snapshot);
-        await fs.promises.rename(COINS_TMP_PATH, COINS_PATH);
+        await fs.promises.writeFile(TMP_PATH, snapshot);
+        await fs.promises.rename(TMP_PATH, COINS_PATH);
       } catch (err) {
         console.error("[ECONOMY] SAVE ERROR:", err.message);
       }
     });
 
-  return writeQueue;
+  return saveQueue;
 }
 
 function saveCoins() {
   clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(flushSave, 1000);
+  saveTimeout = setTimeout(flushSave, 800);
 }
 
 // ====================== CORE ======================
@@ -75,7 +78,7 @@ function getCoins(userId) {
 }
 
 function addCoins(userId, amount) {
-  const value = toSafeNumber(amount);
+  const value = toNumber(amount);
   if (!userId || value <= 0) return getCoins(userId);
 
   const updated = getCoins(userId) + value;
@@ -86,17 +89,17 @@ function addCoins(userId, amount) {
 }
 
 function removeCoins(userId, amount) {
-  const value = toSafeNumber(amount);
+  const value = toNumber(amount);
+
   const updated = Math.max(0, getCoins(userId) - value);
-
   userCoins.set(userId, updated);
-  saveCoins();
 
+  saveCoins();
   return updated;
 }
 
 function spendCoins(userId, amount) {
-  const value = toSafeNumber(amount);
+  const value = toNumber(amount);
 
   if (getCoins(userId) < value) return false;
 
@@ -107,7 +110,7 @@ function spendCoins(userId, amount) {
 }
 
 function setCoins(userId, amount) {
-  const value = Math.max(0, toSafeNumber(amount));
+  const value = Math.max(0, toNumber(amount));
 
   userCoins.set(userId, value);
   saveCoins();
@@ -116,11 +119,11 @@ function setCoins(userId, amount) {
 }
 
 function hasEnoughCoins(userId, amount) {
-  return getCoins(userId) >= toSafeNumber(amount);
+  return getCoins(userId) >= toNumber(amount);
 }
 
 function transferCoins(from, to, amount) {
-  const value = toSafeNumber(amount);
+  const value = toNumber(amount);
 
   if (!hasEnoughCoins(from, value)) return false;
 
@@ -130,23 +133,40 @@ function transferCoins(from, to, amount) {
   return true;
 }
 
+// ====================== TOP SUPPORT (🔥 FIX FOR /TOP) ======================
+function getTopUsers(limit = 10) {
+  return [...userCoins.entries()]
+    .map(([userId, coins]) => ({
+      userId,
+      coins: toNumber(coins)
+    }))
+    .sort((a, b) => b.coins - a.coins)
+    .slice(0, limit);
+}
+
+// ====================== RAW EXPORT (DEBUG / SYSTEMS) ======================
+function getAllCoins() {
+  return Object.fromEntries(userCoins);
+}
+
 // ====================== INIT ======================
 function init() {
   loadCoins();
   flushSave();
-  console.log(`💰 Economy loaded: ${userCoins.size} users`);
 }
 
 // ====================== EXPORT ======================
 module.exports = {
   init,
-  loadCoins,
-  flushSave,
+
   getCoins,
   addCoins,
   removeCoins,
   spendCoins,
   setCoins,
   hasEnoughCoins,
-  transferCoins
+  transferCoins,
+
+  getTopUsers,     // 🔥 FIX /top
+  getAllCoins
 };
