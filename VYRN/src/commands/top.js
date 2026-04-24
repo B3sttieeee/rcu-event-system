@@ -1,3 +1,7 @@
+// =====================================================
+// TOP COMMAND - VYRN ECONOMY LEADERBOARD (FIXED)
+// =====================================================
+
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 const { getTopUsers } = require("../systems/economy");
 
@@ -8,50 +12,48 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      // ================= SAFE LOAD =================
-      const top = getTopUsers ? getTopUsers(10) : [];
-
-      console.log("[TOP DEBUG] raw data:", top);
+      const top = getTopUsers?.(10) || [];
 
       const medals = ["🥇", "🥈", "🥉"];
 
-      // ================= BUILD LIST =================
-      const description = Array.isArray(top) && top.length > 0
-        ? top.map((u, i) => {
-            if (!u || !u.userId) return null;
+      if (!Array.isArray(top) || top.length === 0) {
+        return interaction.reply({
+          content: "❌ Brak danych w economy",
+          ephemeral: true
+        });
+      }
 
-            const medal = medals[i] || `#${i + 1}`;
-            const coins = Number(u.coins ?? 0);
+      const description = top
+        .map((u, i) => {
+          if (!u?.userId) return null;
 
-            return `${medal} <@${u.userId}> • **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`;
-          }).filter(Boolean).join("\n")
-        : "❌ Brak danych w economy";
+          const medal = medals[i] || `#${i + 1}`;
+          const coins = Number(u.coins || 0);
 
-      // ================= EMBED =================
+          return `${medal} <@${u.userId}> • **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`;
+        })
+        .filter(Boolean)
+        .join("\n");
+
       const embed = new EmbedBuilder()
         .setColor("#0b0b0f")
         .setTitle("🏆 Economy Leaderboard")
-        .setDescription(
-          `**Top richest players**\n\n${description}`
-        )
+        .setDescription(`**Top richest players**\n\n${description}`)
         .setThumbnail(interaction.guild?.iconURL() || null)
-        .setFooter({
-          text: "VYRN Economy System"
-        })
+        .setFooter({ text: "VYRN Economy System" })
         .setTimestamp();
 
-      // ================= RESPONSE =================
-      return await interaction.reply({
-        embeds: [embed]
-      });
+      return interaction.reply({ embeds: [embed] });
 
     } catch (err) {
       console.error("[TOP COMMAND ERROR]", err);
 
-      return interaction.reply({
-        content: "❌ TOP command crashed (check console)",
-        ephemeral: true
-      });
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ TOP command crashed",
+          ephemeral: true
+        });
+      }
     }
   }
 };
