@@ -4,24 +4,46 @@ const { getCoins } = require("../systems/economy");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("balance")
-    .setDescription("💰 Check your current balance"),
+    .setDescription("💰 Check your wallet balance"),
 
   async execute(interaction) {
-    const coins = getCoins(interaction.user.id);
+    try {
+      if (!interaction.guild) {
+        return interaction.reply({
+          content: "❌ This command only works in servers.",
+          ephemeral: true
+        });
+      }
 
-    const embed = new EmbedBuilder()
-      .setColor("#0a0a0a")
-      .setTitle("💰 Wallet Balance")
-      .setDescription(
-        `Hey **${interaction.user.username}**, here is your current balance:\n\n` +
-        `💵 **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`
-      )
-      .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
-      .setFooter({
-        text: "VYRN Economy System",
-      })
-      .setTimestamp();
+      const coins = Number(getCoins?.(interaction.user.id) || 0);
 
-    await interaction.reply({ embeds: [embed] });
+      const embed = new EmbedBuilder()
+        .setColor("#0b0b0f")
+        .setTitle("💰 Wallet")
+        .setDescription(
+          `> **User:** ${interaction.user}\n\n` +
+          `> 💵 Balance: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
+          `> Keep grinding to earn more.`
+        )
+        .setThumbnail(interaction.user.displayAvatarURL({ size: 256 }))
+        .setFooter({
+          text: "VYRN Economy System"
+        })
+        .setTimestamp();
+
+      return interaction.reply({
+        embeds: [embed]
+      });
+
+    } catch (err) {
+      console.error("BALANCE COMMAND ERROR:", err);
+
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Error while fetching balance.",
+          ephemeral: true
+        });
+      }
+    }
   }
 };
