@@ -1,34 +1,55 @@
 // =====================================================
-// BOOST SYSTEM - BLACK EDITION PRO
+// BOOST SYSTEM - BLACK EDITION PRO (FIXED)
 // =====================================================
 
 const fs = require("fs");
 const path = require("path");
 
+// ====================== PATH ======================
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const BOOST_PATH = path.join(DATA_DIR, "activeBoosts.json");
 
 // ====================== CACHE ======================
 let activeBoosts = new Map();
 
-// ====================== INIT STORAGE ======================
+// ====================== INIT FOLDER ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// ====================== SAFE PARSE ======================
+function safeParse(json, fallback = {}) {
+  try {
+    return JSON.parse(json);
+  } catch {
+    return fallback;
+  }
+}
+
 // ====================== LOAD ======================
 function loadBoosts() {
-  if (!fs.existsSync(BOOST_PATH)) {
-    fs.writeFileSync(BOOST_PATH, JSON.stringify({}, null, 2));
-    console.log("🖤 BOOST → created new file");
-    return;
-  }
-
   try {
-    const raw = fs.readFileSync(BOOST_PATH, "utf8");
-    const data = JSON.parse(raw || "{}");
+    if (!fs.existsSync(BOOST_PATH)) {
+      fs.writeFileSync(BOOST_PATH, JSON.stringify({}, null, 2));
+      activeBoosts = new Map();
+      console.log("🖤 BOOST → created file");
+      return;
+    }
 
-    activeBoosts = new Map(Object.entries(data));
+    const raw = fs.readFileSync(BOOST_PATH, "utf8");
+    const data = safeParse(raw, {});
+
+    activeBoosts = new Map(
+      Object.entries(data).map(([id, boost]) => [
+        id,
+        {
+          multiplier: Number(boost?.multiplier || 1),
+          endTime: Number(boost?.endTime || 0),
+          name: boost?.name || "unknown",
+          type: boost?.type || "shop"
+        }
+      ])
+    );
 
     console.log(`🔥 BOOST → loaded ${activeBoosts.size} boosts`);
   } catch (err) {
@@ -37,7 +58,7 @@ function loadBoosts() {
   }
 }
 
-// ====================== SAVE (SAFE WRITE) ======================
+// ====================== SAVE ======================
 function saveBoosts() {
   try {
     const data = Object.fromEntries(activeBoosts);
@@ -47,7 +68,7 @@ function saveBoosts() {
   }
 }
 
-// ====================== CLEANER ======================
+// ====================== CLEAN EXPIRED ======================
 function cleanExpired() {
   const now = Date.now();
 
@@ -65,12 +86,12 @@ function getCurrentBoost(userId) {
   const boost = activeBoosts.get(userId);
 
   if (!boost) return 1;
-  if (boost.endTime < Date.now()) return 1;
+  if (boost.endTime <= Date.now()) return 1;
 
   return boost.multiplier || 1;
 }
 
-// ====================== SHOP ======================
+// ====================== SHOP BOOSTS ======================
 const SHOP_BOOSTS = [
   { id: "1", name: "1.5x XP", multiplier: 1.5, duration: 25 * 60 * 1000, price: 180 },
   { id: "2", name: "2.0x XP", multiplier: 2.0, duration: 18 * 60 * 1000, price: 350 },
@@ -78,75 +99,46 @@ const SHOP_BOOSTS = [
   { id: "4", name: "3.0x XP", multiplier: 3.0, duration: 8 * 60 * 1000, price: 950 }
 ];
 
-// ====================== BUY BOOST (SAFE + BLACK STYLE) ======================
+// ====================== BUY BOOST ======================
 async function buyBoost(member, boostId) {
   try {
     const boost = SHOP_BOOSTS.find(b => b.id === String(boostId));
-
-    if (!boost) {
-      return {
-        success: false,
-        message: "❌ Boost not found."
-      };
-    }
+    if (!boost) return { success: false, message: "❌ Boost not found." };
 
     const economy = require("../economy");
+    const spendCoins = economy.spendCoins;
 
-    if (!economy.spendCoins?.(member.id, boost.price)) {
+    if (!spendCoins || !spendCoins(member.id, boost.price)) {
       return {
         success: false,
-        message: `❌ Not enough coins. Required: **${boost.price}** <:CASHH:1491180511308157041>`
+        message: `❌ Not enough coins. Required: ${boost.price}`
       };
     }
-
-    const endTime = Date.now() + boost.duration;
 
     activeBoosts.set(member.id, {
       multiplier: boost.multiplier,
-      endTime,
+      endTime: Date.now() + boost.duration,
       name: boost.name,
       type: "shop"
     });
 
     saveBoosts();
 
-    // DM (silent fail)
-    try {
-      await member.send({
-        embeds: [
-          {
-            color: 0x0b0b0f,
-            title: "🖤 Boost Activated",
-            description:
-              `> **${boost.name}**\n` +
-              `> Duration: **${Math.floor(boost.duration / 60000)} min**\n\n` +
-              `> Spent: **${boost.price}** <:CASHH:1491180511308157041>`,
-            footer: { text: "VYRN BOOST SYSTEM" }
-          }
-        ]
-      });
-    } catch {}
-
     return { success: true, boost };
 
   } catch (err) {
-    console.error("🔥 BOOST BUY ERROR:", err);
-    return {
-      success: false,
-      message: "❌ Internal boost error."
-    };
+    console.error("BOOST ERROR:", err);
+    return { success: false, message: "❌ Internal error." };
   }
 }
 
-// ====================== AUTO CLEAN LOOP ======================
-setInterval(() => {
-  cleanExpired();
-}, 60 * 1000);
+// ====================== AUTO CLEAN ======================
+setInterval(cleanExpired, 60 * 1000);
 
 // ====================== INIT ======================
 function init() {
   loadBoosts();
-  console.log("🖤 Boost System (Black Pro) ready");
+  console.log("🖤 Boost System ready");
 }
 
 // ====================== EXPORT ======================
