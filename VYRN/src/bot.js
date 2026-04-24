@@ -69,7 +69,7 @@ function loadEvents() {
     return;
   }
 
-  client.removeAllListeners(); // czyszczenie starych eventów
+  client.removeAllListeners(); // czyszczenie starych listenerów
 
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let count = 0;
@@ -110,7 +110,7 @@ async function loadSystems() {
     "log",
     "economy",
     "boost",
-    "activity",      // ← nowy główny system (voice + xp + coins)
+    "activity",      // ← Główny system (voice + xp + coins + level)
     "clan",
     "rules",
     "event",
@@ -122,7 +122,7 @@ async function loadSystems() {
   for (const sysName of systems) {
     try {
       const sysPath = `./systems/${sysName}`;
-      delete require.cache[require.resolve(sysPath)];
+      delete require.cache[require.resolve(sysPath)]; // odświeżenie cache
 
       const sys = require(sysPath);
 
