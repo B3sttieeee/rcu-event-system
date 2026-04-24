@@ -100,7 +100,7 @@ function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
 
   let leveledUp = false;
 
-  // Poprawiona pętla level up
+  // POPRAWIONA PĘTLA LEVEL UP
   while (user.level.xp >= neededXP(user.level.level)) {
     user.level.xp -= neededXP(user.level.level);
     user.level.level++;
