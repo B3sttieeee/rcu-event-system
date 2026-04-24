@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-const { getCoins } = require("../systems/economy");
+const { getTopUsers } = require("../systems/economy");
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -8,43 +8,50 @@ module.exports = {
 
   async execute(interaction) {
     try {
-      await interaction.deferReply();
+      // ================= SAFE LOAD =================
+      const top = getTopUsers ? getTopUsers(10) : [];
 
-      // ======================
-      // BUILD LEADERBOARD FROM RAW ECONOMY
-      // ======================
-      const coinsMap = global.__ECONOMY_MAP || null;
-
-      if (!coinsMap || !(coinsMap instanceof Map)) {
-        return interaction.editReply("❌ Leaderboard not ready (no data).");
-      }
-
-      const top = [...coinsMap.entries()]
-        .sort((a, b) => (b[1] || 0) - (a[1] || 0))
-        .slice(0, 10);
+      console.log("[TOP DEBUG] raw data:", top);
 
       const medals = ["🥇", "🥈", "🥉"];
 
-      const description = top.length
-        ? top.map(([userId, coins], i) => {
-            const medal = medals[i] || `**#${i + 1}**`;
-            return `${medal} <@${userId}> • **${Number(coins).toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`;
-          }).join("\n")
-        : "```No data available```";
+      // ================= BUILD LIST =================
+      const description = Array.isArray(top) && top.length > 0
+        ? top.map((u, i) => {
+            if (!u || !u.userId) return null;
 
+            const medal = medals[i] || `#${i + 1}`;
+            const coins = Number(u.coins ?? 0);
+
+            return `${medal} <@${u.userId}> • **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`;
+          }).filter(Boolean).join("\n")
+        : "❌ Brak danych w economy";
+
+      // ================= EMBED =================
       const embed = new EmbedBuilder()
-        .setColor("#0a0a0a")
+        .setColor("#0b0b0f")
         .setTitle("🏆 Economy Leaderboard")
-        .setDescription(description)
-        .setThumbnail(interaction.guild.iconURL() || null)
-        .setFooter({ text: "VYRN Economy System" })
+        .setDescription(
+          `**Top richest players**\n\n${description}`
+        )
+        .setThumbnail(interaction.guild?.iconURL() || null)
+        .setFooter({
+          text: "VYRN Economy System"
+        })
         .setTimestamp();
 
-      return interaction.editReply({ embeds: [embed] });
+      // ================= RESPONSE =================
+      return await interaction.reply({
+        embeds: [embed]
+      });
 
     } catch (err) {
-      console.error("[TOP ERROR]", err);
-      return interaction.editReply("❌ Failed to load leaderboard.");
+      console.error("[TOP COMMAND ERROR]", err);
+
+      return interaction.reply({
+        content: "❌ TOP command crashed (check console)",
+        ephemeral: true
+      });
     }
   }
 };
