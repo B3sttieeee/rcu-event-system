@@ -1,10 +1,10 @@
 // =====================================================
-// ECONOMY SYSTEM - FIXED VERSION
+// ECONOMY SYSTEM - FIXED (STABLE VERSION)
 // =====================================================
 const fs = require("fs");
 const path = require("path");
 
-const DATA_DIR = process.env.DATA_DIR || "./data";
+const DATA_DIR = process.env.DATA_DIR || "/data";
 const COINS_PATH = path.join(DATA_DIR, "userCoins.json");
 const COINS_TMP_PATH = `${COINS_PATH}.tmp`;
 
@@ -15,7 +15,6 @@ let saveTimeout = null;
 // ====================== INIT FOLDER ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  console.log(`[ECONOMY] Data directory ready: ${DATA_DIR}`);
 }
 
 // ====================== HELPERS ======================
@@ -30,7 +29,6 @@ function loadCoins() {
     if (!fs.existsSync(COINS_PATH)) {
       fs.writeFileSync(COINS_PATH, JSON.stringify({}, null, 2));
       userCoins = new Map();
-      console.log("[ECONOMY] Created userCoins.json");
       return;
     }
 
@@ -42,8 +40,6 @@ function loadCoins() {
     for (const [id, coins] of Object.entries(parsed)) {
       userCoins.set(id, toSafeNumber(coins));
     }
-
-    console.log(`[ECONOMY] Loaded ${userCoins.size} users`);
   } catch (err) {
     console.error("[ECONOMY] LOAD ERROR:", err.message);
     userCoins = new Map();
@@ -58,10 +54,8 @@ function flushSave() {
     .catch(() => null)
     .then(async () => {
       try {
-        await fs.promises.writeFile(COINS_TMP_PATH, snapshot, "utf8");
+        await fs.promises.writeFile(COINS_TMP_PATH, snapshot);
         await fs.promises.rename(COINS_TMP_PATH, COINS_PATH);
-
-        console.log("[ECONOMY] Saved");
       } catch (err) {
         console.error("[ECONOMY] SAVE ERROR:", err.message);
       }
@@ -72,10 +66,7 @@ function flushSave() {
 
 function saveCoins() {
   clearTimeout(saveTimeout);
-
-  saveTimeout = setTimeout(() => {
-    flushSave();
-  }, 1200);
+  saveTimeout = setTimeout(flushSave, 1000);
 }
 
 // ====================== CORE ======================
@@ -96,12 +87,11 @@ function addCoins(userId, amount) {
 
 function removeCoins(userId, amount) {
   const value = toSafeNumber(amount);
-  if (!userId || value <= 0) return getCoins(userId);
-
   const updated = Math.max(0, getCoins(userId) - value);
-  userCoins.set(userId, updated);
 
+  userCoins.set(userId, updated);
   saveCoins();
+
   return updated;
 }
 
@@ -132,7 +122,6 @@ function hasEnoughCoins(userId, amount) {
 function transferCoins(from, to, amount) {
   const value = toSafeNumber(amount);
 
-  if (!from || !to || from === to) return false;
   if (!hasEnoughCoins(from, value)) return false;
 
   spendCoins(from, value);
@@ -141,51 +130,23 @@ function transferCoins(from, to, amount) {
   return true;
 }
 
-function getTopUsers(limit = 10) {
-  return [...userCoins.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-    .map(([userId, coins], i) => ({
-      rank: i + 1,
-      userId,
-      coins
-    }));
-}
-
 // ====================== INIT ======================
 function init() {
   loadCoins();
-
-  process.on("SIGINT", async () => {
-    await flushSave();
-    process.exit(0);
-  });
-
-  process.on("SIGTERM", async () => {
-    await flushSave();
-    process.exit(0);
-  });
-
-  process.on("beforeExit", async () => {
-    await flushSave();
-  });
-
-  console.log("💰 Economy System loaded");
+  flushSave();
+  console.log(`💰 Economy loaded: ${userCoins.size} users`);
 }
 
 // ====================== EXPORT ======================
 module.exports = {
   init,
   loadCoins,
-  saveCoins,
   flushSave,
-
   getCoins,
   addCoins,
   removeCoins,
   spendCoins,
   setCoins,
   hasEnoughCoins,
-  transferCoins,
-  getTopUsers
+  transferCoins
 };
