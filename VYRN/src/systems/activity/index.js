@@ -51,6 +51,7 @@ function saveAll() {
 
 // ====================== USER ======================
 function ensureUser(userId) {
+  loadAll(); // zawsze świeże dane przed operacją
   if (!profileDB.users[userId]) profileDB.users[userId] = { voice: 0 };
   if (!levelsDB.users[userId]) levelsDB.users[userId] = { xp: 0, level: 0, totalXP: 0 };
   return {
@@ -158,5 +159,13 @@ module.exports = {
   addVoiceTime,
   getVoiceMinutes,
   addActivityXP,
-  getRank
+  getRank,
+  getLevelData: (userId) => {
+    const user = ensureUser(userId);
+    return {
+      xp: user.level.xp || 0,
+      level: user.level.level || 0,
+      totalXP: user.level.totalXP || 0
+    };
+  }
 };
