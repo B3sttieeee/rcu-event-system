@@ -1,5 +1,5 @@
 // =====================================================
-// ECONOMY SYSTEM - VYRN PRO FIXED STABLE
+// ECONOMY SYSTEM - VYRN PRO FIXED STABLE (CLEAN CORE)
 // =====================================================
 
 const fs = require("fs");
@@ -15,12 +15,18 @@ let userCoins = new Map();
 let saveQueue = Promise.resolve();
 let saveTimeout = null;
 
-// expose for leaderboard (IMPORTANT FIX)
-global.__ECONOMY_MAP = userCoins;
-
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// ====================== SAFE PARSE ======================
+function safeJSON(raw, fallback = {}) {
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
 }
 
 // ====================== SAFE NUMBER ======================
@@ -35,31 +41,28 @@ function loadCoins() {
     if (!fs.existsSync(COINS_PATH)) {
       fs.writeFileSync(COINS_PATH, JSON.stringify({}, null, 2));
       userCoins = new Map();
-      global.__ECONOMY_MAP = userCoins;
       return;
     }
 
     const raw = fs.readFileSync(COINS_PATH, "utf8");
-    const data = raw.trim() ? JSON.parse(raw) : {};
+    const data = safeJSON(raw, {});
 
-    userCoins = new Map();
-
-    for (const [id, value] of Object.entries(data)) {
-      userCoins.set(id, toNumber(value));
-    }
-
-    global.__ECONOMY_MAP = userCoins;
+    userCoins = new Map(
+      Object.entries(data).map(([id, value]) => [
+        id,
+        toNumber(value)
+      ])
+    );
 
     console.log(`💰 Economy loaded: ${userCoins.size} users`);
 
   } catch (err) {
     console.error("[ECONOMY] LOAD ERROR:", err.message);
     userCoins = new Map();
-    global.__ECONOMY_MAP = userCoins;
   }
 }
 
-// ====================== SAVE (ATOMIC SAFE) ======================
+// ====================== SAVE ======================
 function flushSave() {
   const snapshot = JSON.stringify(Object.fromEntries(userCoins), null, 2);
 
@@ -143,9 +146,9 @@ function transferCoins(from, to, amount) {
   return true;
 }
 
-// ====================== TOP SYSTEM (FIXED) ======================
+// ====================== TOP (100% SAFE) ======================
 function getTopUsers(limit = 10) {
-  return [...userCoins.entries()]
+  return Array.from(userCoins.entries())
     .map(([userId, coins]) => ({
       userId,
       coins: toNumber(coins)
@@ -154,7 +157,7 @@ function getTopUsers(limit = 10) {
     .slice(0, limit);
 }
 
-// ====================== DEBUG EXPORT ======================
+// ====================== DEBUG ======================
 function getAllCoins() {
   return Object.fromEntries(userCoins);
 }
