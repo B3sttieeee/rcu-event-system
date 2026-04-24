@@ -1,7 +1,7 @@
 // ====================== LEVEL SYSTEM ======================
 const fs = require("fs");
 const path = require("path");
-const { ChannelType, EmbedBuilder } = require("discord.js");
+const { EmbedBuilder } = require("discord.js");
 
 const { getCurrentBoost } = require("../boost");
 const { addCoins } = require("../economy");
@@ -33,7 +33,6 @@ const LEVEL_ROLES = {
 let dbCache = null;
 let configCache = null;
 let writeQueue = Promise.resolve();
-let voiceLoopStarted = false;
 
 const xpCooldown = new Map();
 const lastLevelUp = new Map();
@@ -84,6 +83,7 @@ function loadDB() {
 
   dbCache = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
   if (!dbCache.xp) dbCache.xp = {};
+
   return dbCache;
 }
 
@@ -100,7 +100,7 @@ function saveDB() {
     });
 }
 
-// ====================== LEVEL UP EMBED (TWÓJ STYL 1:1) ======================
+// ====================== LEVEL UP ======================
 async function sendLevelUpMessage(member, level, gainedXP) {
   const now = Date.now();
   if (now - (lastLevelUp.get(member.id) || 0) < 30000) return;
@@ -123,7 +123,7 @@ async function sendLevelUpMessage(member, level, gainedXP) {
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
     .setFooter({
       text: "VYRN CLAN • Keep grinding harder 🔥",
-      iconURL: member.guild.iconURL({ dynamic: true })
+      iconURL: member.guild.iconURL()
     })
     .setTimestamp();
 
@@ -204,17 +204,24 @@ async function handleMessageXP(member, content) {
 }
 
 // ====================== INIT ======================
-function init(client) {
+function init() {
   loadDB();
   loadConfig();
   console.log("📈 Level System loaded");
 }
 
+// ====================== EXPORT (🔥 FIX HERE) ======================
 module.exports = {
   init,
+
+  // CORE
+  loadDB,          // 🔥 TO BYŁ BRAKUJĄCY EXPORT
+  loadConfig,
+
   addXP,
   handleMessageXP,
   sendLevelUpMessage,
+
   neededXP,
   getRank
 };
