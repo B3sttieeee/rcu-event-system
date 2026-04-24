@@ -14,22 +14,20 @@ module.exports = {
     .setDescription("🛒 View XP Boost Shop"),
 
   async execute(interaction) {
-    const coins = getCoins(interaction.user.id);
+    const coins = getCoins(interaction.user.id) || 0;
 
-    // ======================
     const embed = new EmbedBuilder()
-      .setColor("#0a0a0a") // black aesthetic
+      .setColor("#0b0b0f")
       .setTitle("🛒 VYRN SHOP")
       .setDescription(
         `> **XP Boost Store**\n\n` +
-        `💰 Your balance: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
+        `💰 Balance: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
         `Select a boost below to purchase it.`
       )
       .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
-      .setFooter({ text: "VYRN ECONOMY • premium shop system" })
+      .setFooter({ text: "VYRN • Economy Shop" })
       .setTimestamp();
 
-    // ======================
     const options = SHOP_BOOSTS.map(boost => ({
       label: boost.name,
       description: `Price: ${boost.price} coins`,
@@ -37,14 +35,14 @@ module.exports = {
       emoji: "⚡"
     }));
 
-    const selectMenu = new StringSelectMenuBuilder()
+    const menu = new StringSelectMenuBuilder()
       .setCustomId("shop_select_boost")
-      .setPlaceholder("Choose your XP boost...")
+      .setPlaceholder("Select a boost...")
       .addOptions(options);
 
-    const row = new ActionRowBuilder().addComponents(selectMenu);
+    const row = new ActionRowBuilder().addComponents(menu);
 
-    await interaction.reply({
+    return interaction.reply({
       embeds: [embed],
       components: [row]
     });
