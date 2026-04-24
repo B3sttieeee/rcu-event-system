@@ -1,4 +1,3 @@
-// src/bot.js
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
@@ -66,7 +65,7 @@ function loadCommands() {
   console.log(`📊 Commands loaded: ${count}`);
 }
 
-// ====================== LOAD EVENTS (FIXED ANTI DUPLICATE) ======================
+// ====================== LOAD EVENTS (CLEAN FIX) ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
 
@@ -78,20 +77,21 @@ function loadEvents() {
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let count = 0;
 
-  const loadedEvents = new Set(); // 🔥 FIX DUPLICATES
+  const loadedEvents = new Set();
 
   for (const file of files) {
     try {
-      delete require.cache[require.resolve(path.join(eventsPath, file))];
+      const fullPath = path.join(eventsPath, file);
 
-      const event = require(path.join(eventsPath, file));
+      delete require.cache[require.resolve(fullPath)];
+      const event = require(fullPath);
 
       if (!event?.name || typeof event.execute !== "function") {
         console.warn(`⚠️ Invalid event: ${file}`);
         continue;
       }
 
-      // 🔥 BLOCK DUPLICATE EVENTS
+      // FIX DUPLICATES
       if (loadedEvents.has(event.name)) {
         console.warn(`⚠️ DUPLICATE EVENT BLOCKED: ${event.name}`);
         continue;
@@ -167,9 +167,6 @@ client.once("ready", async () => {
   console.log(`📊 Guilds: ${client.guilds.cache.size}`);
   console.log("================================");
 
-  // 🔥 HARD FIX: reset event listeners BEFORE reload
-  client.removeAllListeners("messageCreate");
-
   loadCommands();
   loadEvents();
   await loadSystems();
@@ -177,7 +174,7 @@ client.once("ready", async () => {
   console.log("✅ BOT READY & STABLE");
 });
 
-// ====================== ERROR HANDLING ======================
+// ====================== ERRORS ======================
 process.on("unhandledRejection", (err) => {
   console.error("❌ Unhandled Rejection:", err);
 });
