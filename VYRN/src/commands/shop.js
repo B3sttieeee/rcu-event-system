@@ -25,15 +25,25 @@ module.exports = {
         `Select a boost below to purchase it.`
       )
       .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
-      .setFooter({ text: "VYRN • Economy Shop" })
+      .setFooter({ text: "VYRN • Black Economy System" })
       .setTimestamp();
 
-    const options = SHOP_BOOSTS.map(boost => ({
-      label: boost.name,
-      description: `Price: ${boost.price} coins`,
-      value: boost.id,
-      emoji: "⚡"
-    }));
+    // ================= SAFE OPTIONS =================
+    const options = (SHOP_BOOSTS || [])
+      .filter(b => b?.id && b?.name && b?.price)
+      .map(boost => ({
+        label: String(boost.name).slice(0, 100),
+        description: `Price: ${boost.price} coins`,
+        value: String(boost.id).slice(0, 100),
+        emoji: "⚡"
+      }));
+
+    if (!options.length) {
+      return interaction.reply({
+        content: "❌ Shop is currently unavailable.",
+        ephemeral: true
+      });
+    }
 
     const menu = new StringSelectMenuBuilder()
       .setCustomId("shop_select_boost")
