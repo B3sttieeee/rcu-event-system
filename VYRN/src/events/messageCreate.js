@@ -18,20 +18,20 @@ module.exports = {
       if (!member) {
         member = await message.guild.members.fetch(message.author.id).catch(() => null);
       }
+
       if (!member) return;
 
       const content = message.content || "";
       const lower = content.toLowerCase();
 
-      // 🔥 XP UPDATE
-      const before = await handleMessageXP(member, content);
+      // XP
+      const result = await handleMessageXP(member, content);
 
-      // NIE “gainedXP”, tylko REAL CHECK
-      const gainedXP = before?.xp ?? 0;
+      console.log(`[XP] ${member.user.tag} | gained: ${result?.gained || 0}`);
+      console.log(`[XP] ${member.user.tag} | total: ${result?.xp || 0}`);
+      console.log(`[LEVEL] ${result?.level || 0}`);
 
-      console.log(`[XP] ${member.user.tag} | XP total: ${gainedXP}`);
-
-      // 💰 COINS
+      // Coins
       let coins = BASE_COINS;
 
       const len = content.length;
@@ -43,16 +43,24 @@ module.exports = {
 
       addCoins(member.id, coins);
 
-      // REACTIONS
+      // Reactions
       if (lower.includes("gg") || lower.includes("good game")) {
         message.react("👏").catch(() => {});
       }
 
-      if (lower.includes("brawo") || lower.includes("gratulacje") || lower.includes("gratz")) {
+      if (
+        lower.includes("brawo") ||
+        lower.includes("gratulacje") ||
+        lower.includes("gratz")
+      ) {
         message.react("🎉").catch(() => {});
       }
 
-      if (lower.includes("xd") || lower.includes("haha") || lower.includes("lol")) {
+      if (
+        lower.includes("xd") ||
+        lower.includes("haha") ||
+        lower.includes("lol")
+      ) {
         message.react("😂").catch(() => {});
       }
 
