@@ -77,18 +77,21 @@ module.exports = {
     try {
       await interaction.deferReply();
 
-      // 🔥 FIX: wymuszenie świeżego read z level system
-      const db = levelSystem.loadDB();
-      const u = db?.xp?.[interaction.user.id] || { xp: 0, level: 0 };
+      // 🔥 HARD FIX: zawsze świeży read (bez cache problemów)
+      delete require.cache[require.resolve("../systems/level/index.js")];
+      const freshLevel = require("../systems/level/index.js");
+
+      const db = freshLevel.loadDB();
+      const userData = db?.xp?.[interaction.user.id] || { xp: 0, level: 0 };
 
       const coins = getCoins(interaction.user.id);
       const voice = getVoiceMinutes(interaction.user.id);
       const boostVal = getCurrentBoost(interaction.user.id) || 1;
 
-      const rank = getRank(u.level);
+      const rank = getRank(userData.level);
 
-      const next = neededXP(u.level) || 1;
-      const percent = Math.min(100, Math.floor((u.xp / next) * 100));
+      const next = neededXP(userData.level) || 1;
+      const percent = Math.min(100, Math.floor((userData.xp / next) * 100));
 
       const embed = new EmbedBuilder()
         .setColor("#0b0b0f")
@@ -99,20 +102,20 @@ module.exports = {
         .setThumbnail(interaction.user.displayAvatarURL())
         .setDescription(
           `> **RANK INFORMATION**\n` +
-            `> ${rank.emoji} **${rank.name}**\n` +
-            `> Level: **${u.level}**\n\n` +
+          `> ${rank.emoji} **${rank.name}**\n` +
+          `> Level: **${userData.level}**\n\n` +
 
-            `> **EXPERIENCE**\n` +
-            `> XP: \`${u.xp}/${next}\`\n` +
-            `> Progress: **${percent}%**\n` +
-            `> ${bar(percent)}\n\n` +
+          `> **EXPERIENCE**\n` +
+          `> XP: \`${userData.xp}/${next}\`\n` +
+          `> Progress: **${percent}%**\n` +
+          `> ${bar(percent)}\n\n` +
 
-            `> **ECONOMY**\n` +
-            `> Coins: \`${coins.toLocaleString("pl-PL")}\`\n` +
-            `> Boost: \`${boostVal > 1 ? boostVal + "x" : "none"}\`\n\n` +
+          `> **ECONOMY**\n` +
+          `> Coins: \`${coins.toLocaleString("pl-PL")}\`\n` +
+          `> Boost: \`${boostVal > 1 ? boostVal + "x" : "none"}\`\n\n` +
 
-            `> **ACTIVITY**\n` +
-            `> Voice time: \`${voice} min\`\n`
+          `> **ACTIVITY**\n` +
+          `> Voice time: \`${voice} min\`\n`
         )
         .setFooter({
           text: "VYRN • Black Profile System",
