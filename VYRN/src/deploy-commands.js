@@ -1,17 +1,15 @@
 // =====================================================
-// VYRN BOT - COMMAND DEPLOYER (PRO VERSION)
+// VYRN BOT - COMMAND DEPLOYER (PRO VERSION FIXED)
 // =====================================================
 
 const { REST, Routes } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 
-// ================= CONFIG =================
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID; // optional (for fast testing)
+const GUILD_ID = process.env.GUILD_ID;
 
-// ================= SAFETY CHECKS =================
 if (!TOKEN) {
   console.error("❌ Missing TOKEN in environment variables!");
   process.exit(1);
@@ -22,7 +20,6 @@ if (!CLIENT_ID) {
   process.exit(1);
 }
 
-// ================= LOAD COMMANDS =================
 const commands = [];
 const commandsPath = path.join(__dirname, "commands");
 
@@ -41,6 +38,9 @@ function loadCommandFiles(dir) {
     if (!item.endsWith(".js")) continue;
 
     try {
+      // 🔥 FIX: zawsze czysty require (usuwa ghost cache problemów typu /top)
+      delete require.cache[require.resolve(itemPath)];
+
       const command = require(itemPath);
 
       if (command?.data?.name && typeof command.execute === "function") {
@@ -49,7 +49,9 @@ function loadCommandFiles(dir) {
       } else {
         console.log(`⚠️ Skipped invalid command: ${item}`);
       }
+
     } catch (err) {
+      // 🔥 FIX: nie zabija deploya jak jeden plik (np. /top) się wysypie
       console.error(`❌ Error loading ${item}:`, err.message);
     }
   }
@@ -60,14 +62,13 @@ if (!fs.existsSync(commandsPath)) {
   process.exit(1);
 }
 
-loadCommandFiles(commandsPath);
+loadCommandFiles(commands);
 
 if (commands.length === 0) {
   console.log("⚠️ No commands found to deploy.");
   process.exit(0);
 }
 
-// ================= DEPLOY =================
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
 (async () => {
@@ -98,6 +99,7 @@ const rest = new REST({ version: "10" }).setToken(TOKEN);
     }
 
     console.log("🎉 Deployment finished successfully!\n");
+
   } catch (error) {
     console.error("❌ Deployment failed:", error);
   }
