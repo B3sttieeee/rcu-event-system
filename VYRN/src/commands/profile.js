@@ -1,7 +1,7 @@
 // src/commands/profile.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// Importy z systemów
+// Import z Activity System
 const activity = require("../systems/activity");
 const { getCoins } = require("../systems/economy");
 const { getCurrentBoost } = require("../systems/boost");
@@ -23,19 +23,18 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // Zawsze świeże dane
+      // Zawsze świeże dane z Activity System
       const voiceMin = activity.getVoiceMinutes(userId);
-      const coins = getCoins(userId);                    // zawsze aktualne
+      const levelData = activity.getLevelData(userId);
+      const coins = getCoins(userId);
       const boost = getCurrentBoost(userId) || 1;
 
-      // Level data z activity
-      const levelData = activity.getLevelData ? activity.getLevelData(userId) : { xp: 0, level: 0 };
-      const nextXP = activity.neededXP ? activity.neededXP(levelData.level) : 100;
+      const nextXP = activity.neededXP(levelData.level);
       const progress = nextXP > 0 
         ? Math.min(100, Math.floor((levelData.xp / nextXP) * 100)) 
         : 0;
 
-      const rank = activity.getRank ? activity.getRank(levelData.level) : { name: "Iron", emoji: "⚔️" };
+      const rank = activity.getRank(levelData.level);
 
       const embed = new EmbedBuilder()
         .setColor("#0b0b0f")
@@ -65,9 +64,9 @@ module.exports = {
       await interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
-      console.error("[PROFILE ERROR]", err);
+      console.error("[PROFILE COMMAND ERROR]", err);
       await interaction.editReply({
-        content: "❌ Błąd podczas ładowania profilu.",
+        content: "❌ Wystąpił błąd podczas ładowania profilu.",
         ephemeral: true
       });
     }
