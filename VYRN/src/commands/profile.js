@@ -1,8 +1,17 @@
-// src/commands/profile.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// SYSTEMS (FIXED)
-const { neededXP, getRank, loadLevelDB } = require("../systems/level");
+// LEVEL SYSTEM (SAFE IMPORT)
+const levelSystem = require("../systems/level");
+
+const neededXP = levelSystem.neededXP;
+const getRank = levelSystem.getRank;
+
+// 🔥 SAFE FALLBACK (bo u Ciebie brak loadLevelDB w systemie)
+const loadLevelDB =
+  levelSystem.loadDB ||
+  (() => ({ xp: {} }));
+
+// OTHER SYSTEMS
 const { loadProfile, getVoiceMinutes } = require("../systems/profile");
 const { getCurrentBoost } = require("../systems/boost");
 const { getCoins } = require("../systems/economy");
@@ -24,11 +33,14 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // ✅ FIX: poprawne ładowanie DB
+      // DB LOAD (SAFE)
       const levelsDB = loadLevelDB();
-      const profileDB = loadProfile();
+      const profileDB = loadProfile?.() || {};
 
-      const lvlData = levelsDB?.xp?.[userId] || { xp: 0, level: 0 };
+      const lvlData = levelsDB?.xp?.[userId] || {
+        xp: 0,
+        level: 0
+      };
 
       const totalVoiceMin = getVoiceMinutes(userId);
       const currentBoost = getCurrentBoost(userId) || 1;
@@ -70,7 +82,7 @@ module.exports = {
         )
         .setFooter({
           text: "VYRN CLAN • Grind smarter, not harder",
-          iconURL: interaction.guild.iconURL()
+          iconURL: interaction.guild?.iconURL?.() || null
         })
         .setTimestamp();
 
@@ -79,9 +91,16 @@ module.exports = {
     } catch (err) {
       console.error("❌ Błąd w komendzie /profile:", err);
 
-      await interaction.editReply({
-        content: "❌ Wystąpił błąd podczas ładowania profilu."
-      });
+      if (interaction.deferred || interaction.replied) {
+        await interaction.editReply({
+          content: "❌ Wystąpił błąd podczas ładowania profilu."
+        });
+      } else {
+        await interaction.reply({
+          content: "❌ Wystąpił błąd podczas ładowania profilu.",
+          ephemeral: true
+        });
+      }
     }
   }
 };
