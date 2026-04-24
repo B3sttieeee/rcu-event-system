@@ -1,12 +1,12 @@
 // ====================== LEVEL SYSTEM ======================
-// VYRN • BLACK FIXED FINAL
+// VYRN • BLACK FIXED FINAL (STABLE)
 
 const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
-const { getCurrentBoost } = require("../systems/boost");
-const { addCoins } = require("../systems/economy");
+const boostSystem = require("../boost");
+const economy = require("../economy");
 
 // ====================== PATHS ======================
 const DATA_DIR = process.env.DATA_DIR || "/data";
@@ -24,16 +24,6 @@ const DEFAULT_CONFIG = {
   globalMultiplier: 1
 };
 
-// ====================== LEVEL ROLES ======================
-const LEVEL_ROLES = {
-  5: "1476000458987278397",
-  15: "1476000995501670534",
-  30: "1476000459595448442",
-  45: "1476000991206707221",
-  60: "1476000991823532032",
-  75: "1476000992351879229"
-};
-
 // ====================== CACHE ======================
 let dbCache = null;
 let configCache = null;
@@ -44,6 +34,28 @@ const lastLevelUp = new Map();
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// ====================== CONFIG ======================
+function loadConfig() {
+  if (configCache) return configCache;
+
+  try {
+    if (!fs.existsSync(CONFIG_PATH)) {
+      fs.writeFileSync(CONFIG_PATH, JSON.stringify(DEFAULT_CONFIG, null, 2));
+      configCache = DEFAULT_CONFIG;
+      return configCache;
+    }
+
+    const raw = fs.readFileSync(CONFIG_PATH, "utf8");
+    configCache = raw ? JSON.parse(raw) : DEFAULT_CONFIG;
+
+    return configCache;
+  } catch (err) {
+    console.error("[LEVEL] CONFIG ERROR:", err.message);
+    configCache = DEFAULT_CONFIG;
+    return configCache;
+  }
 }
 
 // ====================== HELPERS ======================
@@ -65,18 +77,24 @@ function getRank(level) {
 function loadDB() {
   if (dbCache) return dbCache;
 
-  if (!fs.existsSync(DB_PATH)) {
+  try {
+    if (!fs.existsSync(DB_PATH)) {
+      dbCache = { xp: {} };
+      fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+      return dbCache;
+    }
+
+    const raw = fs.readFileSync(DB_PATH, "utf8");
+    dbCache = raw ? JSON.parse(raw) : { xp: {} };
+
+    if (!dbCache.xp) dbCache.xp = {};
+
+    return dbCache;
+  } catch (err) {
+    console.error("[LEVEL] DB ERROR:", err.message);
     dbCache = { xp: {} };
-    fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
     return dbCache;
   }
-
-  const raw = fs.readFileSync(DB_PATH, "utf8");
-  dbCache = raw ? JSON.parse(raw) : { xp: {} };
-
-  if (!dbCache.xp) dbCache.xp = {};
-
-  return dbCache;
 }
 
 function saveDB() {
@@ -94,7 +112,9 @@ async function sendLevelUpMessage(member, level, gainedXP) {
   const rank = getRank(level);
   const coinReward = 50;
 
-  addCoins(member.id, coinReward);
+  try {
+    economy.addCoins(member.id, coinReward);
+  } catch {}
 
   const embed = new EmbedBuilder()
     .setColor("#0b0b0f")
@@ -102,7 +122,7 @@ async function sendLevelUpMessage(member, level, gainedXP) {
     .setDescription(
       `${rank.emoji} **${rank.name}**\n` +
       `Level: **${level}**\n` +
-      `XP: \`${gainedXP}\`\n` +
+      `XP gained: \`${gainedXP}\`\n` +
       `Reward: +${coinReward} coins`
     )
     .setTimestamp();
@@ -135,7 +155,11 @@ async function addXP(member, base, length = 0) {
     gain += Math.floor(length * cfg.lengthBonus);
   }
 
-  const boost = Number(getCurrentBoost(member.id) || 1);
+  let boost = 1;
+
+  try {
+    boost = Number(boostSystem.getCurrentBoost(member.id)) || 1;
+  } catch {}
 
   gain = Math.floor(gain * cfg.globalMultiplier * boost);
 
@@ -155,7 +179,9 @@ async function addXP(member, base, length = 0) {
 
   if (leveled) {
     await sendLevelUpMessage(member, user.level, gain);
-    addCoins(member.id, 50 + user.level * 5);
+    try {
+      economy.addCoins(member.id, 50 + user.level * 5);
+    } catch {}
   }
 
   return user;
@@ -163,13 +189,14 @@ async function addXP(member, base, length = 0) {
 
 // ====================== MESSAGE XP ======================
 async function handleMessageXP(member, content) {
-  const cfg = DEFAULT_CONFIG;
+  const cfg = loadConfig();
   return addXP(member, cfg.messageXP, content?.length || 0);
 }
 
 // ====================== EXPORT ======================
 module.exports = {
   loadDB,
+  loadConfig,
   addXP,
   handleMessageXP,
   neededXP,
