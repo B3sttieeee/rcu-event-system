@@ -1,3 +1,7 @@
+// =====================================================
+// MESSAGE XP + ECONOMY EVENT - VYRN FIXED
+// =====================================================
+
 const { Events } = require("discord.js");
 const { handleMessageXP } = require("../systems/level");
 const { addCoins } = require("../systems/economy");
@@ -6,38 +10,67 @@ module.exports = {
   name: Events.MessageCreate,
 
   async execute(message) {
-    if (!message.guild) return;
-    if (message.author.bot || message.system || message.webhookId) return;
+    try {
+      // ====================== SAFETY ======================
+      if (!message.guild) return;
+      if (message.author.bot) return;
+      if (message.system || message.webhookId) return;
 
-    let member = message.member;
-    if (!member) {
-      member = await message.guild.members.fetch(message.author.id).catch(() => null);
-    }
-    if (!member) return;
+      // ====================== MEMBER FIX ======================
+      let member = message.member;
 
-    await handleMessageXP(member, message.content || "").catch(() => {});
+      if (!member) {
+        member = await message.guild.members
+          .fetch(message.author.id)
+          .catch(() => null);
+      }
 
-    addCoins(member.id, 5); // ← TU MONETY
+      if (!member) return;
 
-    const content = message.content.toLowerCase().trim();
+      // ====================== XP SYSTEM ======================
+      const xpResult = await handleMessageXP(member, message.content || "");
 
-    if (content.includes("gg") || content.includes("good game")) {
-      message.react("👏").catch(() => {});
-    }
+      console.log(
+        `[XP DEBUG] ${member.user.tag} | XP result:`,
+        xpResult?.xp ?? "NO DATA"
+      );
 
-    if (content.includes("brawo") || content.includes("gratulacje") || content.includes("gratz")) {
-      message.react("🎉").catch(() => {});
-    }
+      // ====================== COINS ======================
+      addCoins(member.id, 5);
 
-    if (content.includes("xd") || content.includes("haha") || content.includes("lol")) {
-      message.react("😂").catch(() => {});
-    }
+      // ====================== REACTIONS ======================
+      const content = (message.content || "").toLowerCase().trim();
 
-    if (content === "!stats" || content === "moje staty" || content === "staty") {
-      message.reply({
-        content: `📊 **${member}**, sprawdź swoje staty komendą \`/profile\`!`,
-        allowedMentions: { repliedUser: false }
-      }).catch(() => {});
+      if (content.includes("gg") || content.includes("good game")) {
+        message.react("👏").catch(() => {});
+      }
+
+      if (
+        content.includes("brawo") ||
+        content.includes("gratulacje") ||
+        content.includes("gratz")
+      ) {
+        message.react("🎉").catch(() => {});
+      }
+
+      if (content.includes("xd") || content.includes("haha") || content.includes("lol")) {
+        message.react("😂").catch(() => {});
+      }
+
+      // ====================== STATS COMMAND (TEXT TRIGGER) ======================
+      if (
+        content === "!stats" ||
+        content === "moje staty" ||
+        content === "staty"
+      ) {
+        message.reply({
+          content: `📊 **${member.user.username}**, use \`/profile\` to check your stats!`,
+          allowedMentions: { repliedUser: false }
+        }).catch(() => {});
+      }
+
+    } catch (err) {
+      console.error("[MESSAGE XP ERROR]", err);
     }
   }
 };
