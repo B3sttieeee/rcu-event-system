@@ -20,7 +20,6 @@ let writeQueue = Promise.resolve();
 // ====================== INIT FOLDER ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  console.log(`[PROFILE] Data directory created: ${DATA_DIR}`);
 }
 
 // ====================== HELPERS ======================
@@ -54,7 +53,6 @@ function loadProfile() {
     if (!fs.existsSync(PROFILE_PATH)) {
       dbCache = { users: {} };
       fs.writeFileSync(PROFILE_PATH, JSON.stringify(dbCache, null, 2));
-      console.log(`[PROFILE] Created profile.json`);
       return dbCache;
     }
 
@@ -62,10 +60,10 @@ function loadProfile() {
     const parsed = raw.trim() ? JSON.parse(raw) : { users: {} };
 
     dbCache = normalizeDb(parsed);
-
     return dbCache;
+
   } catch (err) {
-    console.error(`[PROFILE] LOAD ERROR: ${err.message}`);
+    console.error("[PROFILE] LOAD ERROR:", err.message);
     dbCache = { users: {} };
     return dbCache;
   }
@@ -83,10 +81,8 @@ function saveProfile() {
       try {
         await fs.promises.writeFile(PROFILE_TMP_PATH, snapshot, "utf8");
         await fs.promises.rename(PROFILE_TMP_PATH, PROFILE_PATH);
-
-        console.log(`[PROFILE] Saved profile.json`);
       } catch (err) {
-        console.error(`[PROFILE] SAVE ERROR: ${err.message}`);
+        console.error("[PROFILE] SAVE ERROR:", err.message);
       }
     });
 
@@ -97,9 +93,8 @@ function saveProfile() {
 async function flushProfile() {
   try {
     await writeQueue;
-    console.log(`[PROFILE] Flushed`);
   } catch (err) {
-    console.error(`[PROFILE] Flush error:`, err.message);
+    console.error("[PROFILE] FLUSH ERROR:", err.message);
   }
 }
 
@@ -113,14 +108,14 @@ function ensureUser(userId) {
 
   if (!db.users[userId]) {
     db.users[userId] = normalizeUser();
+  } else {
+    db.users[userId] = normalizeUser(db.users[userId]);
   }
-
-  db.users[userId] = normalizeUser(db.users[userId]);
 
   return db.users[userId];
 }
 
-// ====================== GET PROFILE (FIX FOR OTHER SYSTEMS) ======================
+// ====================== GET PROFILE ======================
 function getProfile(userId) {
   const db = loadProfile();
   return db.users?.[userId] || normalizeUser();
@@ -137,9 +132,7 @@ function addVoiceTime(userId, seconds) {
   user.voice += amount;
 
   if (DEBUG_PROFILE_VOICE) {
-    console.log(
-      `[PROFILE][VOICE] ${userId} +${amount}s (${old}s → ${user.voice}s)`
-    );
+    console.log(`[PROFILE][VOICE] ${userId} +${amount}s (${old}s → ${user.voice}s)`);
   }
 
   saveProfile();
@@ -156,8 +149,8 @@ function init() {
   loadProfile();
   console.log("📁 Profile System loaded");
 
-  process.on("SIGINT", async () => await flushProfile());
-  process.on("SIGTERM", async () => await flushProfile());
+  process.on("SIGINT", flushProfile);
+  process.on("SIGTERM", flushProfile);
 }
 
 // ====================== EXPORT ======================
