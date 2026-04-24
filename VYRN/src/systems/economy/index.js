@@ -1,3 +1,7 @@
+// =====================================================
+// ECONOMY SYSTEM - VYRN PRO FIXED STABLE
+// =====================================================
+
 const fs = require("fs");
 const path = require("path");
 
@@ -10,6 +14,9 @@ const TMP_PATH = `${COINS_PATH}.tmp`;
 let userCoins = new Map();
 let saveQueue = Promise.resolve();
 let saveTimeout = null;
+
+// expose for leaderboard (IMPORTANT FIX)
+global.__ECONOMY_MAP = userCoins;
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -28,28 +35,31 @@ function loadCoins() {
     if (!fs.existsSync(COINS_PATH)) {
       fs.writeFileSync(COINS_PATH, JSON.stringify({}, null, 2));
       userCoins = new Map();
+      global.__ECONOMY_MAP = userCoins;
       return;
     }
 
     const raw = fs.readFileSync(COINS_PATH, "utf8");
     const data = raw.trim() ? JSON.parse(raw) : {};
 
-    userCoins = new Map(
-      Object.entries(data).map(([id, value]) => [
-        id,
-        toNumber(value)
-      ])
-    );
+    userCoins = new Map();
+
+    for (const [id, value] of Object.entries(data)) {
+      userCoins.set(id, toNumber(value));
+    }
+
+    global.__ECONOMY_MAP = userCoins;
 
     console.log(`💰 Economy loaded: ${userCoins.size} users`);
 
   } catch (err) {
     console.error("[ECONOMY] LOAD ERROR:", err.message);
     userCoins = new Map();
+    global.__ECONOMY_MAP = userCoins;
   }
 }
 
-// ====================== SAVE (SAFE ATOMIC) ======================
+// ====================== SAVE (ATOMIC SAFE) ======================
 function flushSave() {
   const snapshot = JSON.stringify(Object.fromEntries(userCoins), null, 2);
 
@@ -133,7 +143,7 @@ function transferCoins(from, to, amount) {
   return true;
 }
 
-// ====================== TOP SUPPORT (🔥 FIX FOR /TOP) ======================
+// ====================== TOP SYSTEM (FIXED) ======================
 function getTopUsers(limit = 10) {
   return [...userCoins.entries()]
     .map(([userId, coins]) => ({
@@ -144,7 +154,7 @@ function getTopUsers(limit = 10) {
     .slice(0, limit);
 }
 
-// ====================== RAW EXPORT (DEBUG / SYSTEMS) ======================
+// ====================== DEBUG EXPORT ======================
 function getAllCoins() {
   return Object.fromEntries(userCoins);
 }
@@ -167,6 +177,6 @@ module.exports = {
   hasEnoughCoins,
   transferCoins,
 
-  getTopUsers,     // 🔥 FIX /top
+  getTopUsers,
   getAllCoins
 };
