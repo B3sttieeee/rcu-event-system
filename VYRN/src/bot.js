@@ -17,7 +17,7 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// Rate limit logging
+// ====================== RATE LIMIT ======================
 client.rest.on("rateLimited", (info) => {
   console.warn(`[RATE LIMIT] ${info.method} ${info.url} — ${info.timeToReset}ms`);
 });
@@ -25,8 +25,10 @@ client.rest.on("rateLimited", (info) => {
 // ====================== LOAD COMMANDS ======================
 function loadCommands() {
   const commandsPath = path.join(__dirname, "commands");
+
   if (!fs.existsSync(commandsPath)) {
-    return console.warn("⚠️ Folder 'commands' nie istnieje!");
+    console.warn("⚠️ Folder 'commands' nie istnieje!");
+    return;
   }
 
   let count = 0;
@@ -34,6 +36,7 @@ function loadCommands() {
   const loadFile = (filePath) => {
     try {
       const cmd = require(filePath);
+
       if (cmd?.data?.name && typeof cmd.execute === "function") {
         client.commands.set(cmd.data.name, cmd);
         console.log(`✅ Command: /${cmd.data.name}`);
@@ -45,6 +48,7 @@ function loadCommands() {
   };
 
   const items = fs.readdirSync(commandsPath);
+
   for (const item of items) {
     const itemPath = path.join(commandsPath, item);
 
@@ -57,14 +61,16 @@ function loadCommands() {
     }
   }
 
-  console.log(`📊 Załadowano ${count} komend`);
+  console.log(`📊 Commands loaded: ${count}`);
 }
 
 // ====================== LOAD EVENTS ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
+
   if (!fs.existsSync(eventsPath)) {
-    return console.warn("⚠️ Folder 'events' nie istnieje!");
+    console.warn("⚠️ Folder 'events' nie istnieje!");
+    return;
   }
 
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
@@ -75,7 +81,7 @@ function loadEvents() {
       const event = require(path.join(eventsPath, file));
 
       if (!event?.name || typeof event.execute !== "function") {
-        console.warn(`⚠️ Event ${file} nie ma poprawnej struktury (brak .name lub .execute)`);
+        console.warn(`⚠️ Invalid event: ${file}`);
         continue;
       }
 
@@ -94,12 +100,12 @@ function loadEvents() {
     }
   }
 
-  console.log(`📊 Załadowano ${count} eventów`);
+  console.log(`📊 Events loaded: ${count}`);
 }
 
 // ====================== LOAD SYSTEMS ======================
 async function loadSystems() {
-  console.log("\n🚀 Ładowanie systemów...");
+  console.log("\n🚀 Loading systems...");
 
   const systems = [
     "log",
@@ -120,51 +126,52 @@ async function loadSystems() {
       const sys = require(`./systems/${sysName}`);
 
       if (typeof sys.init === "function") {
-        if (sys.init.constructor.name === "AsyncFunction") {
-          await sys.init(client);
-        } else {
-          sys.init(client);
+        // 🔥 UNIFIED INIT (no client spam, only when needed)
+        const result = sys.init.length ? sys.init(client) : sys.init();
+
+        if (result instanceof Promise) {
+          await result;
         }
+
         console.log(`✅ ${sysName.padEnd(12)} → OK`);
       } else {
         console.log(`⚠️  ${sysName.padEnd(12)} → brak init()`);
       }
     } catch (e) {
-      console.error(`❌ ${sysName.padEnd(12)} → BŁĄD: ${e.message}`);
+      console.error(`❌ ${sysName.padEnd(12)} → ERROR: ${e.message}`);
     }
   }
 
-  console.log("🎉 Wszystkie systemy załadowane!\n");
+  console.log("🎉 All systems loaded!\n");
 }
 
 // ====================== READY ======================
 client.once("ready", async () => {
   console.log("================================");
-  console.log(`🔥 ${client.user.tag} jest online`);
-  console.log(`📊 Serwery: ${client.guilds.cache.size}`);
+  console.log(`🔥 Logged in as ${client.user.tag}`);
+  console.log(`📊 Guilds: ${client.guilds.cache.size}`);
   console.log("================================");
 
   loadCommands();
   loadEvents();
   await loadSystems();
 
-  console.log("✅ BOT W PEŁNI GOTOWY DO DZIAŁANIA!");
+  console.log("✅ BOT READY & STABLE");
 });
 
-// ====================== GLOBAL ERROR HANDLING ======================
+// ====================== ERROR HANDLING ======================
 process.on("unhandledRejection", (err) => {
   console.error("❌ Unhandled Rejection:", err);
 });
 
 process.on("uncaughtException", (err) => {
   console.error("❌ Uncaught Exception:", err);
-  // Nie zabijamy bota przy każdym błędzie - lepiej logować
 });
 
 // ====================== LOGIN ======================
 client.login(process.env.TOKEN)
-  .then(() => console.log("🔑 Zalogowano pomyślnie"))
+  .then(() => console.log("🔑 Login successful"))
   .catch(err => {
-    console.error("❌ BŁĄD LOGOWANIA:", err.message);
+    console.error("❌ LOGIN ERROR:", err.message);
     process.exit(1);
   });
