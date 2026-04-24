@@ -1,96 +1,58 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// LEVEL SYSTEM
 const levelSystem = require("../systems/level");
 const neededXP = levelSystem.neededXP;
 const getRank = levelSystem.getRank;
 const loadLevelDB = levelSystem.loadDB || (() => ({ xp: {} }));
 
-// SYSTEMS
+const { getCoins } = require("../systems/economy");
 const { getVoiceMinutes } = require("../systems/profile");
 const { getCurrentBoost } = require("../systems/boost");
-const { getCoins } = require("../systems/economy");
 
-function progressBar(percent) {
-  const size = 12;
-  const filled = Math.round((percent / 100) * size);
-  return "▰".repeat(filled) + "▱".repeat(size - filled);
+function bar(p) {
+  return "▰".repeat(Math.round(p / 10)) + "▱".repeat(10 - Math.round(p / 10));
 }
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("profile")
-    .setDescription("📊 View your VYRN profile"),
+    .setDescription("📊 View profile"),
 
   async execute(interaction) {
     await interaction.deferReply();
 
-    try {
-      const userId = interaction.user.id;
+    const db = loadLevelDB();
+    const u = db.xp[interaction.user.id] || { xp: 0, level: 0 };
 
-      // ======================
-      const db = loadLevelDB();
-      const lvl = db?.xp?.[userId] || { xp: 0, level: 0 };
+    const coins = getCoins(interaction.user.id);
+    const voice = getVoiceMinutes(interaction.user.id);
+    const boost = getCurrentBoost(interaction.user.id) || 1;
 
-      const coins = getCoins(userId);
-      const voice = getVoiceMinutes(userId);
-      const boost = getCurrentBoost(userId) || 1;
+    const rank = getRank(u.level);
+    const next = neededXP(u.level);
+    const percent = Math.min(100, Math.floor((u.xp / next) * 100));
 
-      const rank = getRank(lvl.level);
-      const nextXP = neededXP(lvl.level);
+    const embed = new EmbedBuilder()
+      .setColor("#0a0a0a")
+      .setAuthor({
+        name: interaction.user.username,
+        iconURL: interaction.user.displayAvatarURL()
+      })
+      .setThumbnail(interaction.user.displayAvatarURL())
+      .setDescription(
+        `${rank.emoji} **${rank.name} | Level ${u.level}**\n` +
+        `━━━━━━━━━━━━━━━━━━\n\n` +
 
-      const progress = nextXP
-        ? Math.min(100, Math.floor((lvl.xp / nextXP) * 100))
-        : 0;
+        `📊 **XP**: ${u.xp}/${next} (${percent}%)\n` +
+        `${bar(percent)}\n\n` +
 
-      const xpLeft = Math.max(0, nextXP - lvl.xp);
+        `💰 **Coins**: ${coins.toLocaleString("pl-PL")}\n` +
+        `🎧 **Voice**: ${voice} min\n` +
+        `🚀 **Boost**: ${boost > 1 ? boost + "x" : "none"}`
+      )
+      .setFooter({ text: "VYRN • compact profile" })
+      .setTimestamp();
 
-      // ======================
-      const embed = new EmbedBuilder()
-        .setColor("#0a0a0a") // pure black aesthetic
-        .setAuthor({
-          name: `${interaction.user.username}`,
-          iconURL: interaction.user.displayAvatarURL()
-        })
-        .setThumbnail(interaction.user.displayAvatarURL())
-        .setDescription(
-          `> 🪪 **PROFILE OVERVIEW**\n` +
-          `> ━━━━━━━━━━━━━━━━━━\n\n` +
-
-          `🎖️ **Rank**\n` +
-          `> ${rank.emoji} **${rank.name}**\n\n` +
-
-          `📊 **Level Progress**\n` +
-          `> Level: **${lvl.level}**\n` +
-          `> XP: **${lvl.xp} / ${nextXP}**\n` +
-          `> ${progressBar(progress)} **${progress}%**\n` +
-          `> Next: **${xpLeft} XP**\n\n` +
-
-          `💰 **Economy**\n` +
-          `> Balance: **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>\n\n` +
-
-          `🎧 **Voice Activity**\n` +
-          `> Total: **${voice} min**\n\n` +
-
-          `🚀 **Boost Status**\n` +
-          `> ${boost > 1 ? `Active **${boost}x XP Boost**` : "No active boost"}\n\n` +
-
-          `> ━━━━━━━━━━━━━━━━━━`
-        )
-        .setFooter({
-          text: "VYRN SYSTEM • black profile UI",
-          iconURL: interaction.guild?.iconURL?.() || null
-        })
-        .setTimestamp();
-
-      await interaction.editReply({ embeds: [embed] });
-
-    } catch (err) {
-      console.error("PROFILE ERROR:", err);
-
-      return interaction.editReply({
-        content: "❌ Failed to load profile."
-      });
-    }
+    await interaction.editReply({ embeds: [embed] });
   }
 };
