@@ -15,23 +15,22 @@ module.exports = {
       top.length > 0
         ? top
             .map((u, i) => {
-              const medal = medals[i] || `**#${i + 1}**`;
+              const medal = medals[i] || `#${i + 1}`;
               return `${medal} <@${u.userId}> • **${u.coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`;
             })
             .join("\n")
-        : "```No data available```";
+        : "No data available";
 
     const embed = new EmbedBuilder()
-      .setColor("#0a0a0a") // pure black aesthetic
+      .setColor("#0b0b0f")
       .setTitle("🏆 Economy Leaderboard")
       .setDescription(
-        `> **Top richest players on the server**\n\n` +
-        description +
-        `\n\n━━━━━━━━━━━━━━━━━━`
+        `Top richest players on the server\n\n` +
+        description
       )
       .setThumbnail(interaction.guild.iconURL({ dynamic: true }))
       .setFooter({
-        text: "VYRN ECONOMY • competitive ranking system",
+        text: "VYRN Economy",
         iconURL: interaction.guild.iconURL()
       })
       .setTimestamp();
