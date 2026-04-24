@@ -35,6 +35,8 @@ function loadCommands() {
 
   const loadFile = (filePath) => {
     try {
+      delete require.cache[require.resolve(filePath)];
+
       const cmd = require(filePath);
 
       if (cmd?.data?.name && typeof cmd.execute === "function") {
@@ -64,7 +66,7 @@ function loadCommands() {
   console.log(`📊 Commands loaded: ${count}`);
 }
 
-// ====================== LOAD EVENTS ======================
+// ====================== LOAD EVENTS (FIXED ANTI DUPLICATE) ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
 
@@ -76,14 +78,26 @@ function loadEvents() {
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let count = 0;
 
+  const loadedEvents = new Set(); // 🔥 FIX DUPLICATES
+
   for (const file of files) {
     try {
+      delete require.cache[require.resolve(path.join(eventsPath, file))];
+
       const event = require(path.join(eventsPath, file));
 
       if (!event?.name || typeof event.execute !== "function") {
         console.warn(`⚠️ Invalid event: ${file}`);
         continue;
       }
+
+      // 🔥 BLOCK DUPLICATE EVENTS
+      if (loadedEvents.has(event.name)) {
+        console.warn(`⚠️ DUPLICATE EVENT BLOCKED: ${event.name}`);
+        continue;
+      }
+
+      loadedEvents.add(event.name);
 
       const runner = (...args) => event.execute(...args, client);
 
@@ -95,6 +109,7 @@ function loadEvents() {
 
       console.log(`✅ Event: ${event.name}`);
       count++;
+
     } catch (e) {
       console.error(`❌ EVENT ERROR ${file}:`, e.message);
     }
@@ -126,7 +141,6 @@ async function loadSystems() {
       const sys = require(`./systems/${sysName}`);
 
       if (typeof sys.init === "function") {
-        // 🔥 UNIFIED INIT (no client spam, only when needed)
         const result = sys.init.length ? sys.init(client) : sys.init();
 
         if (result instanceof Promise) {
@@ -137,6 +151,7 @@ async function loadSystems() {
       } else {
         console.log(`⚠️  ${sysName.padEnd(12)} → brak init()`);
       }
+
     } catch (e) {
       console.error(`❌ ${sysName.padEnd(12)} → ERROR: ${e.message}`);
     }
@@ -151,6 +166,9 @@ client.once("ready", async () => {
   console.log(`🔥 Logged in as ${client.user.tag}`);
   console.log(`📊 Guilds: ${client.guilds.cache.size}`);
   console.log("================================");
+
+  // 🔥 HARD FIX: reset event listeners BEFORE reload
+  client.removeAllListeners("messageCreate");
 
   loadCommands();
   loadEvents();
