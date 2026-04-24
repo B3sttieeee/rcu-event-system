@@ -6,9 +6,10 @@ const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
-// ====================== SYSTEM IMPORTS ======================
-const boostSystem = require("../systems/boost");
-const economy = require("../systems/economy");
+// ====================== FIXED IMPORTS ======================
+// ❗ FIX: poprawna ścieżka (JESTEŚ W /systems/level)
+const boostSystem = require("../boost");
+const economy = require("../economy");
 
 // ====================== PATHS ======================
 const DATA_DIR = process.env.DATA_DIR || "/data";
@@ -49,12 +50,19 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// ====================== INIT (FIX BRUTAL) ======================
+function init() {
+  loadDB();
+  loadConfig();
+  console.log("📈 Level System (Black Edition) initialized");
+}
+
 // ====================== HELPERS ======================
 function neededXP(level) {
   return Math.floor(100 * Math.pow(level + 1, 1.5));
 }
 
-// 🔥 EMOTKI PRZYWRÓCONE 1:1
+// 🔥 EMOTKI 1:1 (NIE DOTYKANE)
 function getRank(level) {
   if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
   if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
@@ -117,21 +125,14 @@ async function sendLevelUpMessage(member, level, gainedXP) {
     .setColor("#0b0b0f")
     .setTitle("LEVEL UP")
     .setDescription(
-      `${rank.emoji} **${rank.name}**\n` +
-      `Level: **${level}**\n` +
-      `XP: \`${gainedXP}\`\n` +
-      `Reward: +${coinReward} coins`
+      `${rank.emoji} **${rank.name}**\nLevel: **${level}**\nXP: \`${gainedXP}\`\nReward: +${coinReward} coins`
     )
     .setTimestamp();
 
-  const channel =
-    member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
+  const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
 
   if (channel) {
-    channel.send({
-      content: `${member}`,
-      embeds: [embed]
-    }).catch(() => {});
+    channel.send({ content: `${member}`, embeds: [embed] }).catch(() => {});
   }
 }
 
@@ -183,26 +184,13 @@ async function addXP(member, base, length = 0) {
   return user;
 }
 
-// ====================== MESSAGE XP ======================
-async function handleMessageXP(member, content) {
-  const cfg = loadConfig();
-  return addXP(member, cfg.messageXP, content?.length || 0);
-}
-
-// ====================== INIT ======================
-function init() {
-  loadDB();
-  loadConfig();
-  console.log("📈 Level System (Black Edition) initialized");
-}
-
 // ====================== EXPORT ======================
 module.exports = {
   init,
   loadDB,
   loadConfig,
   addXP,
-  handleMessageXP,
+  handleMessageXP: (m, c) => addXP(m, DEFAULT_CONFIG.messageXP, c?.length || 0),
   sendLevelUpMessage,
   neededXP,
   getRank
