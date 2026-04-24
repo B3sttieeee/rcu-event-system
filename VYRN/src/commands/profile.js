@@ -16,7 +16,7 @@ function bar(p) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("profile")
-    .setDescription("📊 View profile"),
+    .setDescription("📊 View your profile"),
 
   async execute(interaction) {
     await interaction.deferReply();
@@ -33,24 +33,23 @@ module.exports = {
     const percent = Math.min(100, Math.floor((u.xp / next) * 100));
 
     const embed = new EmbedBuilder()
-      .setColor("#0a0a0a")
+      .setColor("#0b0b0f")
       .setAuthor({
         name: interaction.user.username,
         iconURL: interaction.user.displayAvatarURL()
       })
       .setThumbnail(interaction.user.displayAvatarURL())
       .setDescription(
-        `${rank.emoji} **${rank.name} | Level ${u.level}**\n` +
-        `━━━━━━━━━━━━━━━━━━\n\n` +
+        `${rank.emoji} ${rank.name} • Level ${u.level}\n\n` +
 
-        `📊 **XP**: ${u.xp}/${next} (${percent}%)\n` +
+        `XP \`${u.xp}/${next}\` • ${percent}%\n` +
         `${bar(percent)}\n\n` +
 
-        `💰 **Coins**: ${coins.toLocaleString("pl-PL")}\n` +
-        `🎧 **Voice**: ${voice} min\n` +
-        `🚀 **Boost**: ${boost > 1 ? boost + "x" : "none"}`
+        `Coins \`${coins.toLocaleString("en-US")}\`\n` +
+        `Voice \`${voice} min\`\n` +
+        `Boost \`${boost > 1 ? boost + "x" : "none"}\``
       )
-      .setFooter({ text: "VYRN • compact profile" })
+      .setFooter({ text: "VYRN • profile system" })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
