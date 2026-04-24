@@ -1,5 +1,5 @@
 // =====================================================
-// ACTIVITY SYSTEM - FULL DEBUG + STABLE (VOICE + XP + COINS + LEVEL)
+// ACTIVITY SYSTEM - FINAL STABLE VERSION (VOICE + XP + COINS + LEVEL)
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -12,7 +12,7 @@ const LEVELS_PATH = path.join(DATA_DIR, "levels.json");
 let profileDB = { users: {} };
 let levelsDB = { users: {} };
 
-const DEBUG = true; // włączone na stałe
+const DEBUG = true; // włączone na stałe do diagnostyki
 
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
@@ -33,7 +33,9 @@ function loadAll() {
     if (!profileDB.users) profileDB.users = {};
     if (!levelsDB.users) levelsDB.users = {};
 
-    console.log(`[ACTIVITY] Załadowano ${Object.keys(profileDB.users).length} profili | ${Object.keys(levelsDB.users).length} leveli`);
+    if (DEBUG) {
+      console.log(`[ACTIVITY] Załadowano ${Object.keys(profileDB.users).length} profili | ${Object.keys(levelsDB.users).length} leveli`);
+    }
   } catch (e) {
     console.error("[ACTIVITY] LOAD ERROR", e.message);
   }
@@ -43,7 +45,7 @@ function saveAll() {
   try {
     fs.writeFileSync(PROFILE_PATH, JSON.stringify(profileDB, null, 2));
     fs.writeFileSync(LEVELS_PATH, JSON.stringify(levelsDB, null, 2));
-    if (DEBUG) console.log(`[ACTIVITY] ✅ Zapisano oba pliki`);
+    if (DEBUG) console.log(`[ACTIVITY] ✅ Zapisano profile.json i levels.json`);
   } catch (e) {
     console.error("[ACTIVITY] SAVE ERROR", e.message);
   }
@@ -51,7 +53,7 @@ function saveAll() {
 
 // ====================== USER ======================
 function ensureUser(userId) {
-  loadAll(); // zawsze świeże dane przed operacją
+  loadAll(); // ZAWSZE świeże dane przed operacją
   if (!profileDB.users[userId]) profileDB.users[userId] = { voice: 0 };
   if (!levelsDB.users[userId]) levelsDB.users[userId] = { xp: 0, level: 0, totalXP: 0 };
   return {
@@ -97,8 +99,8 @@ function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
   user.level.totalXP += xpAmount;
 
   let leveledUp = false;
-  while (user.level.xp >= (50 + user.level.level * 35)) {
-    user.level.xp -= (50 + user.level.level * 35);
+  while (user.level.xp >= neededXP(user.level.level)) {
+    user.level.xp -= neededXP(user.level.level);
     user.level.level++;
     leveledUp = true;
   }
@@ -113,10 +115,14 @@ function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
   }
 
   if (DEBUG) {
-    console.log(`[ACTIVITY][XP] ${member.user.tag} +${xpAmount} XP | ${beforeXP} → ${user.level.xp}`);
+    console.log(`[ACTIVITY][XP] ${member.user.tag} +${xpAmount} XP | ${beforeXP} → ${user.level.xp} | Level ${user.level.level}`);
   }
 
   saveAll();
+}
+
+function neededXP(level) {
+  return 50 + level * 35;
 }
 
 // ====================== LEVEL UP EMBED ======================
