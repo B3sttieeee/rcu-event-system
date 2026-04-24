@@ -1,8 +1,8 @@
 // src/commands/profile.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// Importy z systemów
-const { loadDB, neededXP, getRank } = require("../systems/level");
+// SYSTEMS (FIXED)
+const { neededXP, getRank, loadLevelDB } = require("../systems/level");
 const { loadProfile, getVoiceMinutes } = require("../systems/profile");
 const { getCurrentBoost } = require("../systems/boost");
 const { getCoins } = require("../systems/economy");
@@ -24,31 +24,33 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // Ładowanie danych z systemów
-      const levelsDB = loadDB();
+      // ✅ FIX: poprawne ładowanie DB
+      const levelsDB = loadLevelDB();
       const profileDB = loadProfile();
-      
-      const lvlData = levelsDB.xp?.[userId] || { xp: 0, level: 0 };
+
+      const lvlData = levelsDB?.xp?.[userId] || { xp: 0, level: 0 };
+
       const totalVoiceMin = getVoiceMinutes(userId);
       const currentBoost = getCurrentBoost(userId) || 1;
       const coins = getCoins(userId);
 
-      // Obliczenia poziomu
       const nextLevelXP = neededXP(lvlData.level);
-      const progress = nextLevelXP > 0 
-        ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100)) 
-        : 0;
-      const xpLeft = Math.max(0, nextLevelXP - lvlData.xp);
 
+      const progress =
+        nextLevelXP > 0
+          ? Math.min(100, Math.floor((lvlData.xp / nextLevelXP) * 100))
+          : 0;
+
+      const xpLeft = Math.max(0, nextLevelXP - lvlData.xp);
       const rank = getRank(lvlData.level);
 
       const embed = new EmbedBuilder()
         .setColor("#0a0a0a")
         .setAuthor({
           name: `${interaction.user.username} • VYRN Profile`,
-          iconURL: interaction.user.displayAvatarURL({ dynamic: true })
+          iconURL: interaction.user.displayAvatarURL()
         })
-        .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
+        .setThumbnail(interaction.user.displayAvatarURL())
         .setDescription(
           `**${rank.emoji} ${rank.name}** — Level **${lvlData.level}**\n\n` +
 
@@ -68,7 +70,7 @@ module.exports = {
         )
         .setFooter({
           text: "VYRN CLAN • Grind smarter, not harder",
-          iconURL: interaction.guild.iconURL({ dynamic: true })
+          iconURL: interaction.guild.iconURL()
         })
         .setTimestamp();
 
@@ -76,9 +78,9 @@ module.exports = {
 
     } catch (err) {
       console.error("❌ Błąd w komendzie /profile:", err);
+
       await interaction.editReply({
-        content: "❌ Wystąpił błąd podczas ładowania profilu.",
-        ephemeral: true
+        content: "❌ Wystąpił błąd podczas ładowania profilu."
       });
     }
   }
