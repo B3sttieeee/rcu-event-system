@@ -1,8 +1,6 @@
-const { handlePrivateChannelCreation } = require("../systems/privatevc");
 const { addVoiceTime } = require("../systems/profile");
 const { addCoins } = require("../systems/economy");
-
-const CREATE_CHANNEL_ID = "1496280414237491220";
+const { handleMessageXP } = require("../systems/level");
 
 const joinTimes = new Map();
 
@@ -16,36 +14,36 @@ module.exports = {
 
       const userId = member.id;
 
-      if (
-        newState.channelId === CREATE_CHANNEL_ID &&
-        oldState.channelId !== CREATE_CHANNEL_ID
-      ) {
-        await handlePrivateChannelCreation(member);
-      }
-
+      // JOIN
       if (!oldState.channelId && newState.channelId) {
         joinTimes.set(userId, Date.now());
         return;
       }
 
+      // LEAVE
       if (oldState.channelId && !newState.channelId) {
         const joinedAt = joinTimes.get(userId);
         if (!joinedAt) return;
 
-        const diff = Date.now() - joinedAt;
-
-        const minutes = Math.floor(diff / 60000);
-        if (minutes < 1) return;
+        const minutes = Math.floor((Date.now() - joinedAt) / 60000);
 
         joinTimes.delete(userId);
 
-        // 🔥 FIX: voice system EXPECTS SECONDS, not minutes
-        addVoiceTime(userId, minutes * 60);
+        if (minutes < 1) return;
 
+        addVoiceTime(userId, minutes);
         addCoins(userId, minutes * 10);
+
+        // VOICE XP BONUS
+        await handleMessageXP(member, `voice-${minutes}`);
       }
 
-      if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+      // SWITCH CHANNEL
+      if (
+        oldState.channelId &&
+        newState.channelId &&
+        oldState.channelId !== newState.channelId
+      ) {
         joinTimes.set(userId, Date.now());
       }
 
