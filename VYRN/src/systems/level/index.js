@@ -1,13 +1,14 @@
-// ====================== LEVEL SYSTEM ======================
-// VYRN • BLACK EDITION FIXED (FULL STABLE + EMOTES RESTORED)
+// =====================================================
+// LEVEL SYSTEM - VYRN BLACK EDITION FIXED (FULL STABLE)
+// =====================================================
 
 const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
-// ✅ FIXED IMPORTS (tak jak chciałeś)
-const boostSystem = require("../boost");
-const economy = require("../economy");
+// ====================== SYSTEM IMPORTS ======================
+const boostSystem = require("../systems/boost");
+const economy = require("../systems/economy");
 
 // ====================== PATHS ======================
 const DATA_DIR = process.env.DATA_DIR || "/data";
@@ -43,7 +44,7 @@ let configCache = null;
 const xpCooldown = new Map();
 const lastLevelUp = new Map();
 
-// ====================== INIT ======================
+// ====================== INIT FOLDER ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -53,7 +54,7 @@ function neededXP(level) {
   return Math.floor(100 * Math.pow(level + 1, 1.5));
 }
 
-// 🔥 TWOJE EMOTKI PRZYWRÓCONE 1:1
+// 🔥 EMOTKI PRZYWRÓCONE 1:1
 function getRank(level) {
   if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
   if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
@@ -89,6 +90,7 @@ function loadDB() {
   }
 
   dbCache = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+
   if (!dbCache.xp) dbCache.xp = {};
 
   return dbCache;
@@ -102,8 +104,8 @@ function saveDB() {
 // ====================== LEVEL UP ======================
 async function sendLevelUpMessage(member, level, gainedXP) {
   const now = Date.now();
-  if (now - (lastLevelUp.get(member.id) || 0) < 15000) return;
 
+  if (now - (lastLevelUp.get(member.id) || 0) < 15000) return;
   lastLevelUp.set(member.id, now);
 
   const rank = getRank(level);
@@ -122,7 +124,8 @@ async function sendLevelUpMessage(member, level, gainedXP) {
     )
     .setTimestamp();
 
-  const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
+  const channel =
+    member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
 
   if (channel) {
     channel.send({
@@ -154,7 +157,6 @@ async function addXP(member, base, length = 0) {
     gain += Math.floor(length * cfg.lengthBonus);
   }
 
-  // BOOST FIXED IMPORT
   const boost = Number(boostSystem.getCurrentBoost(member.id) || 1);
 
   gain = Math.floor(gain * cfg.globalMultiplier * boost);
@@ -187,12 +189,21 @@ async function handleMessageXP(member, content) {
   return addXP(member, cfg.messageXP, content?.length || 0);
 }
 
+// ====================== INIT ======================
+function init() {
+  loadDB();
+  loadConfig();
+  console.log("📈 Level System (Black Edition) initialized");
+}
+
 // ====================== EXPORT ======================
 module.exports = {
+  init,
   loadDB,
   loadConfig,
   addXP,
   handleMessageXP,
+  sendLevelUpMessage,
   neededXP,
   getRank
 };
