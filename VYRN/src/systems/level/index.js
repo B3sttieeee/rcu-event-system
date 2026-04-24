@@ -167,7 +167,7 @@ async function sendLevelUpMessage(member, level, gainedXP) {
 
 // ====================== CORE XP ======================
 async function addXP(member, base, length = 0) {
-  if (!member || member.user?.bot) return;
+  if (!member || member.user?.bot) return null;
 
   const cfg = loadConfig();
   const db = loadDB();
@@ -178,9 +178,12 @@ async function addXP(member, base, length = 0) {
 
   const now = Date.now();
 
-  // cooldown FIX (twoje XP "stanie" było tu)
   const last = xpCooldown.get(member.id) || 0;
-  if (now - last < 2500) return;
+
+  // 🔥 FIX: NIE BLOKUJ XP, tylko cooldown
+  if (now - last < 2500) {
+    return db.xp[member.id];
+  }
 
   xpCooldown.set(member.id, now);
 
@@ -193,7 +196,8 @@ async function addXP(member, base, length = 0) {
   let boost = 1;
 
   try {
-    boost = Number(boostSystem.getCurrentBoost(member.id) || 1);
+    boost = Number(boostSystem.getCurrentBoost(member.id));
+    if (!boost || boost < 1) boost = 1;
   } catch {
     boost = 1;
   }
@@ -247,5 +251,6 @@ module.exports = {
   handleMessageXP,
   sendLevelUpMessage,
   neededXP,
-  getRank
+  getRank,
+  LEVEL_ROLES
 };
