@@ -1,5 +1,5 @@
 // =====================================================
-// ECONOMY SYSTEM - ULTRA STABLE SAVE
+// ECONOMY SYSTEM - STABLE VERSION
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -13,6 +13,7 @@ let userCoins = new Map();
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+  console.log(`[ECONOMY] Data directory ready: ${DATA_DIR}`);
 }
 
 // ====================== LOAD ======================
@@ -20,7 +21,7 @@ function loadCoins() {
   try {
     if (!fs.existsSync(COINS_PATH)) {
       fs.writeFileSync(COINS_PATH, JSON.stringify({}, null, 2));
-      console.log("[ECONOMY] Utworzono nowy userCoins.json");
+      console.log("[ECONOMY] Utworzono nowy plik userCoins.json");
       userCoins = new Map();
       return;
     }
@@ -29,36 +30,26 @@ function loadCoins() {
     const parsed = raw.trim() ? JSON.parse(raw) : {};
 
     userCoins = new Map();
-    for (const [id, val] of Object.entries(parsed)) {
-      userCoins.set(id, Math.floor(Number(val) || 0));
+    for (const [userId, value] of Object.entries(parsed)) {
+      userCoins.set(userId, Math.floor(Number(value) || 0));
     }
 
-    console.log(`[ECONOMY] Załadowano ${userCoins.size} użytkowników`);
+    console.log(`[ECONOMY] Załadowano monety dla ${userCoins.size} użytkowników`);
   } catch (err) {
     console.error("[ECONOMY] LOAD ERROR:", err.message);
     userCoins = new Map();
   }
 }
 
-// ====================== SAVE (ATOMIC + SYNC FALLBACK) ======================
+// ====================== SAVE ======================
 function saveCoins() {
   try {
-    const data = Object.fromEntries(userCoins);
-    const snapshot = JSON.stringify(data, null, 2);
-
-    // Atomic write
+    const snapshot = JSON.stringify(Object.fromEntries(userCoins), null, 2);
     fs.writeFileSync(COINS_TMP_PATH, snapshot, "utf8");
     fs.renameSync(COINS_TMP_PATH, COINS_PATH);
-
-    console.log(`[ECONOMY] ✅ Zapisano userCoins.json (${userCoins.size} użytkowników)`);
+    console.log(`[ECONOMY] ✅ Zapisano userCoins.json`);
   } catch (err) {
     console.error("[ECONOMY] SAVE ERROR:", err.message);
-    // Fallback - spróbuj zapisać bezpośrednio
-    try {
-      fs.writeFileSync(COINS_PATH, JSON.stringify(Object.fromEntries(userCoins), null, 2));
-    } catch (e2) {
-      console.error("[ECONOMY] CRITICAL SAVE FAILED", e2.message);
-    }
   }
 }
 
@@ -77,9 +68,9 @@ function addCoins(userId, amount) {
   const newVal = current + val;
 
   userCoins.set(userId, newVal);
-  saveCoins();                    // ZAPIS OD RAZU
+  saveCoins();
 
-  console.log(`[ECONOMY] +${val} | ${userId} | ${current} → ${newVal}`);
+  console.log(`[ECONOMY] +${val} monet | ${userId} | ${current} → ${newVal}`);
   return newVal;
 }
 
@@ -96,18 +87,36 @@ function spendCoins(userId, amount) {
   return true;
 }
 
+function setCoins(userId, amount) {
+  if (!userId) return 0;
+  const val = Math.floor(Math.max(0, Number(amount) || 0));
+  userCoins.set(userId, val);
+  saveCoins();
+  return val;
+}
+
+function hasEnoughCoins(userId, amount) {
+  return getCoins(userId) >= Math.floor(Number(amount) || 0);
+}
+
+// ====================== TOP ======================
+function getTopUsers(limit = 10) {
+  return Array.from(userCoins.entries())
+    .map(([userId, coins]) => ({ userId, coins }))
+    .sort((a, b) => b.coins - a.coins)
+    .slice(0, limit);
+}
+
 // ====================== INIT ======================
 function init() {
   loadCoins();
   console.log("💰 Economy System → załadowany");
 
-  // Awaryjny zapis co 15 sekund
-  setInterval(saveCoins, 15000);
+  // Backup co 20 sekund
+  setInterval(saveCoins, 20000);
 
-  // Zapis przy wyłączaniu
   process.on("SIGINT", saveCoins);
   process.on("SIGTERM", saveCoins);
-  process.on("beforeExit", saveCoins);
 }
 
 module.exports = {
@@ -115,5 +124,7 @@ module.exports = {
   getCoins,
   addCoins,
   spendCoins,
-  // możesz dodać setCoins, hasEnoughCoins, getTopUsers jeśli potrzebujesz
+  setCoins,
+  hasEnoughCoins,
+  getTopUsers
 };
