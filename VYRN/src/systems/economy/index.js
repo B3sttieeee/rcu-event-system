@@ -1,5 +1,5 @@
 // =====================================================
-// ECONOMY SYSTEM - STABLE VERSION
+// ECONOMY SYSTEM - FINAL STABLE VERSION
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -41,12 +41,14 @@ function loadCoins() {
   }
 }
 
-// ====================== SAVE ======================
+// ====================== SAVE (ATOMIC) ======================
 function saveCoins() {
   try {
     const snapshot = JSON.stringify(Object.fromEntries(userCoins), null, 2);
+    
     fs.writeFileSync(COINS_TMP_PATH, snapshot, "utf8");
     fs.renameSync(COINS_TMP_PATH, COINS_PATH);
+    
     console.log(`[ECONOMY] ✅ Zapisano userCoins.json`);
   } catch (err) {
     console.error("[ECONOMY] SAVE ERROR:", err.message);
@@ -61,6 +63,7 @@ function getCoins(userId) {
 
 function addCoins(userId, amount) {
   if (!userId) return 0;
+
   const val = Math.floor(Math.max(0, Number(amount) || 0));
   if (val <= 0) return getCoins(userId);
 
@@ -99,7 +102,6 @@ function hasEnoughCoins(userId, amount) {
   return getCoins(userId) >= Math.floor(Number(amount) || 0);
 }
 
-// ====================== TOP ======================
 function getTopUsers(limit = 10) {
   return Array.from(userCoins.entries())
     .map(([userId, coins]) => ({ userId, coins }))
