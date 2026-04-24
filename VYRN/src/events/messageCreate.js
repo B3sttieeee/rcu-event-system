@@ -1,8 +1,3 @@
-// =====================================================
-// src/events/messagecreate.js
-// VYRN CLEAN MESSAGE XP SYSTEM - FIXED STABLE
-// =====================================================
-
 const { Events } = require("discord.js");
 const { handleMessageXP } = require("../systems/level");
 const { addCoins } = require("../systems/economy");
@@ -12,19 +7,16 @@ module.exports = {
 
   async execute(message) {
     try {
-      // ====================== BASIC CHECKS ======================
+      // ====================== CHECKS ======================
       if (!message.guild) return;
-      if (!message.author) return;
-      if (message.author.bot) return;
+      if (!message.author || message.author.bot) return;
       if (message.webhookId) return;
       if (message.system) return;
 
       let member = message.member;
 
       if (!member) {
-        member = await message.guild.members
-          .fetch(message.author.id)
-          .catch(() => null);
+        member = await message.guild.members.fetch(message.author.id).catch(() => null);
       }
 
       if (!member) return;
@@ -33,30 +25,20 @@ module.exports = {
       const lower = content.toLowerCase();
 
       // ====================== XP SYSTEM ======================
-      const user = handleMessageXP(member);
+      const user = await handleMessageXP(member); // 🔥 FIX HERE
 
       const xp = user?.xp ?? 0;
       const level = user?.level ?? 0;
       const totalXP = user?.totalXP ?? 0;
 
       console.log(
-        `[XP] ${member.user.tag} | TOTAL XP: ${totalXP} | LVL: ${level}`
+        `[XP] ${member.user.tag} | +5 XP | TOTAL XP: ${totalXP} | LVL: ${level}`
       );
 
       // ====================== BONUS COINS ======================
-      // dodatkowe coinsy (level system daje podstawowe)
-
-      if (content.length > 40) {
-        addCoins(member.id, 2);
-      }
-
-      if (content.length > 100) {
-        addCoins(member.id, 3);
-      }
-
-      if (message.mentions.users.size > 0) {
-        addCoins(member.id, 2);
-      }
+      if (content.length > 40) addCoins(member.id, 2);
+      if (content.length > 100) addCoins(member.id, 3);
+      if (message.mentions.users.size > 0) addCoins(member.id, 2);
 
       // ====================== REACTIONS ======================
       if (lower.includes("gg") || lower.includes("good game")) {
