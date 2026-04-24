@@ -1,22 +1,42 @@
-// =====================================================
-// LEVEL SYSTEM - VYRN FULL FIXED STABLE
-// =====================================================
+// ====================== LEVEL SYSTEM ======================
+// VYRN • BLACK FIXED FINAL
 
 const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
-const { getCurrentBoost } = require("../boost");
-const { addCoins } = require("../economy");
+const { getCurrentBoost } = require("../systems/boost");
+const { addCoins } = require("../systems/economy");
 
-// ====================== PATH ======================
+// ====================== PATHS ======================
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "levels.json");
+const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 
 const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 
+// ====================== DEFAULT CONFIG ======================
+const DEFAULT_CONFIG = {
+  messageXP: 10,
+  voiceXP: 8,
+  lengthBonus: 0.3,
+  lengthThreshold: 30,
+  globalMultiplier: 1
+};
+
+// ====================== LEVEL ROLES ======================
+const LEVEL_ROLES = {
+  5: "1476000458987278397",
+  15: "1476000995501670534",
+  30: "1476000459595448442",
+  45: "1476000991206707221",
+  60: "1476000991823532032",
+  75: "1476000992351879229"
+};
+
 // ====================== CACHE ======================
 let dbCache = null;
+let configCache = null;
 
 const xpCooldown = new Map();
 const lastLevelUp = new Map();
@@ -32,13 +52,13 @@ function neededXP(level) {
 }
 
 function getRank(level) {
-  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
-  if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
-  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
-  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
-  if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
-  if (level >= 5) return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
-  return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
+  if (level >= 75) return { name: "Legend", emoji: "🏆" };
+  if (level >= 60) return { name: "Ruby", emoji: "💎" };
+  if (level >= 45) return { name: "Diamond", emoji: "🔷" };
+  if (level >= 30) return { name: "Platinum", emoji: "⚪" };
+  if (level >= 15) return { name: "Gold", emoji: "🟡" };
+  if (level >= 5) return { name: "Bronze", emoji: "🟤" };
+  return { name: "Iron", emoji: "⚫" };
 }
 
 // ====================== DB ======================
@@ -51,8 +71,11 @@ function loadDB() {
     return dbCache;
   }
 
-  dbCache = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+  const raw = fs.readFileSync(DB_PATH, "utf8");
+  dbCache = raw ? JSON.parse(raw) : { xp: {} };
+
   if (!dbCache.xp) dbCache.xp = {};
+
   return dbCache;
 }
 
@@ -62,12 +85,16 @@ function saveDB() {
 }
 
 // ====================== LEVEL UP ======================
-async function sendLevelUp(member, level, gainedXP) {
+async function sendLevelUpMessage(member, level, gainedXP) {
   const now = Date.now();
   if (now - (lastLevelUp.get(member.id) || 0) < 15000) return;
+
   lastLevelUp.set(member.id, now);
 
   const rank = getRank(level);
+  const coinReward = 50;
+
+  addCoins(member.id, coinReward);
 
   const embed = new EmbedBuilder()
     .setColor("#0b0b0f")
@@ -75,9 +102,9 @@ async function sendLevelUp(member, level, gainedXP) {
     .setDescription(
       `${rank.emoji} **${rank.name}**\n` +
       `Level: **${level}**\n` +
-      `XP gained: **${gainedXP}**`
+      `XP: \`${gainedXP}\`\n` +
+      `Reward: +${coinReward} coins`
     )
-    .setThumbnail(member.user.displayAvatarURL())
     .setTimestamp();
 
   const channel = member.guild.channels.cache.get(LEVEL_UP_CHANNEL_ID);
@@ -90,6 +117,7 @@ async function sendLevelUp(member, level, gainedXP) {
 async function addXP(member, base, length = 0) {
   if (!member || member.user?.bot) return;
 
+  const cfg = loadConfig();
   const db = loadDB();
 
   if (!db.xp[member.id]) {
@@ -98,16 +126,18 @@ async function addXP(member, base, length = 0) {
 
   const now = Date.now();
   if (now - (xpCooldown.get(member.id) || 0) < 3000) return;
+
   xpCooldown.set(member.id, now);
 
   let gain = base;
 
-  if (length > 30) {
-    gain += Math.floor(length * 0.3);
+  if (length >= cfg.lengthThreshold) {
+    gain += Math.floor(length * cfg.lengthBonus);
   }
 
-  const boost = getCurrentBoost(member.id) || 1;
-  gain = Math.floor(gain * boost);
+  const boost = Number(getCurrentBoost(member.id) || 1);
+
+  gain = Math.floor(gain * cfg.globalMultiplier * boost);
 
   const user = db.xp[member.id];
 
@@ -124,7 +154,7 @@ async function addXP(member, base, length = 0) {
   saveDB();
 
   if (leveled) {
-    await sendLevelUp(member, user.level, gain);
+    await sendLevelUpMessage(member, user.level, gain);
     addCoins(member.id, 50 + user.level * 5);
   }
 
@@ -132,15 +162,16 @@ async function addXP(member, base, length = 0) {
 }
 
 // ====================== MESSAGE XP ======================
-function handleMessageXP(member, content) {
-  return addXP(member, 10, content?.length || 0);
+async function handleMessageXP(member, content) {
+  const cfg = DEFAULT_CONFIG;
+  return addXP(member, cfg.messageXP, content?.length || 0);
 }
 
 // ====================== EXPORT ======================
 module.exports = {
+  loadDB,
   addXP,
   handleMessageXP,
   neededXP,
-  getRank,
-  loadDB
+  getRank
 };
