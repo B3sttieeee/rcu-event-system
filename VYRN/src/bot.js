@@ -65,7 +65,7 @@ function loadCommands() {
   console.log(`📊 Commands loaded: ${count}`);
 }
 
-// ====================== LOAD EVENTS (CLEAN FIX) ======================
+// ====================== LOAD EVENTS (FIXED HARD RESET) ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
 
@@ -73,6 +73,9 @@ function loadEvents() {
     console.warn("⚠️ Folder 'events' nie istnieje!");
     return;
   }
+
+  // 🔥 HARD FIX: usuń WSZYSTKIE eventy przed reloadem
+  client.removeAllListeners();
 
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let count = 0;
@@ -91,7 +94,6 @@ function loadEvents() {
         continue;
       }
 
-      // FIX DUPLICATES
       if (loadedEvents.has(event.name)) {
         console.warn(`⚠️ DUPLICATE EVENT BLOCKED: ${event.name}`);
         continue;
@@ -138,7 +140,10 @@ async function loadSystems() {
 
   for (const sysName of systems) {
     try {
-      const sys = require(`./systems/${sysName}`);
+      const sysPath = `./systems/${sysName}`;
+
+      delete require.cache[require.resolve(sysPath)];
+      const sys = require(sysPath);
 
       if (typeof sys.init === "function") {
         const result = sys.init.length ? sys.init(client) : sys.init();
