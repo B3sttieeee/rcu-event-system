@@ -1,5 +1,5 @@
 // =====================================================
-// ECONOMY SYSTEM - VYRN PRO FIXED STABLE
+// ECONOMY SYSTEM - VYRN PRO FIXED STABLE (FINAL FIX)
 // =====================================================
 
 const fs = require("fs");
@@ -10,13 +10,12 @@ const COINS_PATH = path.join(DATA_DIR, "userCoins.json");
 const TMP_PATH = `${COINS_PATH}.tmp`;
 
 let userCoins = new Map();
-let saveQueue = Promise.resolve();
-let saveTimeout = null;
 
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// ====================== SAFE ======================
 function safeJSON(raw, fallback = {}) {
   try {
     return JSON.parse(raw);
@@ -30,11 +29,13 @@ function toNumber(v, fallback = 0) {
   return Number.isFinite(n) ? Math.floor(n) : fallback;
 }
 
+// ====================== LOAD ======================
 function loadCoins() {
   try {
     if (!fs.existsSync(COINS_PATH)) {
       fs.writeFileSync(COINS_PATH, JSON.stringify({}, null, 2));
       userCoins = new Map();
+      console.log("💰 Economy file created");
       return;
     }
 
@@ -42,37 +43,32 @@ function loadCoins() {
     const data = safeJSON(raw, {});
 
     userCoins = new Map();
+
     for (const [id, value] of Object.entries(data)) {
       userCoins.set(id, toNumber(value));
     }
 
     console.log(`💰 Economy loaded: ${userCoins.size} users`);
   } catch (err) {
-    console.error("[ECONOMY] LOAD ERROR:", err.message);
+    console.error("[ECONOMY LOAD ERROR]", err);
     userCoins = new Map();
   }
 }
 
-function flushSave() {
-  const snapshot = JSON.stringify(Object.fromEntries(userCoins), null, 2);
-
-  saveQueue = saveQueue
-    .catch(() => null)
-    .then(async () => {
-      try {
-        await fs.promises.writeFile(TMP_PATH, snapshot);
-        await fs.promises.rename(TMP_PATH, COINS_PATH);
-      } catch (err) {
-        console.error("[ECONOMY] SAVE ERROR:", err.message);
-      }
-    });
-}
-
+// ====================== SAVE (SYNC SAFE) ======================
 function saveCoins() {
-  clearTimeout(saveTimeout);
-  saveTimeout = setTimeout(flushSave, 800);
+  try {
+    const snapshot = JSON.stringify(Object.fromEntries(userCoins), null, 2);
+
+    fs.writeFileSync(TMP_PATH, snapshot);
+    fs.renameSync(TMP_PATH, COINS_PATH);
+
+  } catch (err) {
+    console.error("[ECONOMY SAVE ERROR]", err);
+  }
 }
 
+// ====================== SAFE WRAPS ======================
 function getCoins(userId) {
   return userCoins.get(userId) || 0;
 }
@@ -83,15 +79,8 @@ function addCoins(userId, amount) {
 
   const updated = getCoins(userId) + value;
   userCoins.set(userId, updated);
-  saveCoins();
-  return updated;
-}
 
-function removeCoins(userId, amount) {
-  const value = toNumber(amount);
-  const updated = Math.max(0, getCoins(userId) - value);
-  userCoins.set(userId, updated);
-  saveCoins();
+  saveCoins(); // 🔥 NATYCHMIAST ZAPIS
   return updated;
 }
 
@@ -104,54 +93,23 @@ function spendCoins(userId, amount) {
   return true;
 }
 
-function setCoins(userId, amount) {
-  const value = Math.max(0, toNumber(amount));
-  userCoins.set(userId, value);
-  saveCoins();
-  return value;
-}
-
-function hasEnoughCoins(userId, amount) {
-  return getCoins(userId) >= toNumber(amount);
-}
-
-function transferCoins(from, to, amount) {
-  const value = toNumber(amount);
-  if (!hasEnoughCoins(from, value)) return false;
-
-  spendCoins(from, value);
-  addCoins(to, value);
-  return true;
-}
-
-function getTopUsers(limit = 10) {
-  return Array.from(userCoins.entries())
-    .map(([userId, coins]) => ({
-      userId,
-      coins: toNumber(coins)
-    }))
-    .sort((a, b) => b.coins - a.coins)
-    .slice(0, limit);
-}
-
-function getAllCoins() {
-  return Object.fromEntries(userCoins);
-}
-
+// ====================== INIT ======================
 function init() {
   loadCoins();
-  flushSave();
+
+  // 🔥 BACKUP SAVE ON EXIT
+  process.on("SIGINT", saveCoins);
+  process.on("SIGTERM", saveCoins);
+  process.on("exit", saveCoins);
+
+  console.log("💰 Economy INIT OK");
 }
 
 module.exports = {
   init,
   getCoins,
   addCoins,
-  removeCoins,
   spendCoins,
-  setCoins,
-  hasEnoughCoins,
-  transferCoins,
-  getTopUsers,
-  getAllCoins
+  loadCoins,
+  saveCoins
 };
