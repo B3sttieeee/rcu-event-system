@@ -1,35 +1,35 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
 // ====================== SAFE IMPORTS ======================
-let levelSystem = {};
+let levelSystem;
 try {
   levelSystem = require("../systems/level/index.js");
 } catch (e) {
   console.error("[PROFILE] level system not loaded");
 }
 
-let economy = {};
+let economy;
 try {
   economy = require("../systems/economy/index.js");
 } catch (e) {
   console.error("[PROFILE] economy not loaded");
 }
 
-let profile = {};
+let profile;
 try {
   profile = require("../systems/profile/index.js");
 } catch (e) {
   console.error("[PROFILE] profile not loaded");
 }
 
-let boost = {};
+let boost;
 try {
   boost = require("../systems/boost/index.js");
 } catch (e) {
   console.error("[PROFILE] boost not loaded");
 }
 
-// ====================== SAFE FUNCTIONS ======================
+// ====================== SAFE FALLBACKS ======================
 const neededXP =
   typeof levelSystem?.neededXP === "function"
     ? levelSystem.neededXP
@@ -43,7 +43,7 @@ const getRank =
 const loadLevelDB =
   typeof levelSystem?.loadDB === "function"
     ? levelSystem.loadDB
-    : () => ({ xp: {} });
+    : () => ({ users: {} });
 
 const getCoins =
   typeof economy?.getCoins === "function"
@@ -77,12 +77,17 @@ module.exports = {
     try {
       await interaction.deferReply();
 
-      // 🔥 HARD FIX: zawsze świeży read (bez cache problemów)
-      delete require.cache[require.resolve("../systems/level/index.js")];
+      // 🔥 ALWAYS FRESH LOAD (NO CACHE BUGS)
       const freshLevel = require("../systems/level/index.js");
-
       const db = freshLevel.loadDB();
-      const userData = db?.xp?.[interaction.user.id] || { xp: 0, level: 0 };
+
+      // ✅ FIX: correct structure = users
+      const userData =
+        db?.users?.[interaction.user.id] || {
+          xp: 0,
+          level: 0,
+          totalXP: 0,
+        };
 
       const coins = getCoins(interaction.user.id);
       const voice = getVoiceMinutes(interaction.user.id);
@@ -91,35 +96,38 @@ module.exports = {
       const rank = getRank(userData.level);
 
       const next = neededXP(userData.level) || 1;
-      const percent = Math.min(100, Math.floor((userData.xp / next) * 100));
+      const percent = Math.min(
+        100,
+        Math.floor((userData.xp / next) * 100)
+      );
 
       const embed = new EmbedBuilder()
         .setColor("#0b0b0f")
         .setAuthor({
           name: `${interaction.user.username} • Profile`,
-          iconURL: interaction.user.displayAvatarURL()
+          iconURL: interaction.user.displayAvatarURL(),
         })
         .setThumbnail(interaction.user.displayAvatarURL())
         .setDescription(
           `> **RANK INFORMATION**\n` +
-          `> ${rank.emoji} **${rank.name}**\n` +
-          `> Level: **${userData.level}**\n\n` +
+            `> ${rank.emoji} **${rank.name}**\n` +
+            `> Level: **${userData.level}**\n\n` +
 
-          `> **EXPERIENCE**\n` +
-          `> XP: \`${userData.xp}/${next}\`\n` +
-          `> Progress: **${percent}%**\n` +
-          `> ${bar(percent)}\n\n` +
+            `> **EXPERIENCE**\n` +
+            `> XP: \`${userData.xp}/${next}\`\n` +
+            `> Progress: **${percent}%**\n` +
+            `> ${bar(percent)}\n\n` +
 
-          `> **ECONOMY**\n` +
-          `> Coins: \`${coins.toLocaleString("pl-PL")}\`\n` +
-          `> Boost: \`${boostVal > 1 ? boostVal + "x" : "none"}\`\n\n` +
+            `> **ECONOMY**\n` +
+            `> Coins: \`${coins.toLocaleString("pl-PL")}\`\n` +
+            `> Boost: \`${boostVal > 1 ? boostVal + "x" : "none"}\`\n\n` +
 
-          `> **ACTIVITY**\n` +
-          `> Voice time: \`${voice} min\`\n`
+            `> **ACTIVITY**\n` +
+            `> Voice time: \`${voice} min\`\n`
         )
         .setFooter({
           text: "VYRN • Black Profile System",
-          iconURL: interaction.guild.iconURL()
+          iconURL: interaction.guild.iconURL(),
         })
         .setTimestamp();
 
@@ -131,9 +139,9 @@ module.exports = {
       if (!interaction.replied) {
         await interaction.reply({
           content: "❌ Error loading profile.",
-          ephemeral: true
+          ephemeral: true,
         });
       }
     }
-  }
+  },
 };
