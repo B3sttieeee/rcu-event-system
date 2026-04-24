@@ -1,4 +1,6 @@
 // ====================== LEVEL SYSTEM ======================
+// VYRN • Black Edition
+
 const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
@@ -6,12 +8,14 @@ const { EmbedBuilder } = require("discord.js");
 const { getCurrentBoost } = require("../boost");
 const { addCoins } = require("../economy");
 
+// ====================== PATHS ======================
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "levels.json");
 const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 
 const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 
+// ====================== DEFAULT CONFIG ======================
 const DEFAULT_CONFIG = {
   messageXP: 10,
   voiceXP: 8,
@@ -21,6 +25,7 @@ const DEFAULT_CONFIG = {
   boostRole: "1476000398107217980"
 };
 
+// ====================== LEVEL ROLES ======================
 const LEVEL_ROLES = {
   5: "1476000458987278397",
   15: "1476000995501670534",
@@ -30,6 +35,7 @@ const LEVEL_ROLES = {
   75: "1476000992351879229"
 };
 
+// ====================== CACHE ======================
 let dbCache = null;
 let configCache = null;
 let writeQueue = Promise.resolve();
@@ -112,19 +118,16 @@ async function sendLevelUpMessage(member, level, gainedXP) {
   addCoins(member.id, coinReward);
 
   const embed = new EmbedBuilder()
-    .setColor("#0a0a0a")
-    .setTitle("🎉 Level Up!")
+    .setColor("#0b0b0f") // BLACK THEME
+    .setTitle("Level Up")
     .setDescription(
-      `> **${rank.emoji} ${rank.name}**\n` +
-      `> **Level ${level}**\n\n` +
-      `**XP Gained:** \`${gainedXP}\`\n` +
-      `**Coins Reward:** \`+${coinReward}\` <:CASHH:1491180511308157041>`
+      `${rank.emoji} ${rank.name}\n` +
+      `Level ${level}\n\n` +
+      `XP gained \`${gainedXP}\`\n` +
+      `Reward \`+${coinReward}\` coins`
     )
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setFooter({
-      text: "VYRN CLAN • Keep grinding harder 🔥",
-      iconURL: member.guild.iconURL()
-    })
+    .setFooter({ text: "VYRN • Level System", iconURL: member.guild.iconURL() })
     .setTimestamp();
 
   const channel =
@@ -134,7 +137,7 @@ async function sendLevelUpMessage(member, level, gainedXP) {
   if (!channel) return;
 
   channel.send({
-    content: `> **${member}** just leveled up!`,
+    content: `${member}`,
     embeds: [embed]
   }).catch(() => {});
 }
@@ -207,15 +210,14 @@ async function handleMessageXP(member, content) {
 function init() {
   loadDB();
   loadConfig();
-  console.log("📈 Level System loaded");
+  console.log("📈 Level System (Black Edition) loaded");
 }
 
-// ====================== EXPORT (🔥 FIX HERE) ======================
+// ====================== EXPORT ======================
 module.exports = {
   init,
 
-  // CORE
-  loadDB,          // 🔥 TO BYŁ BRAKUJĄCY EXPORT
+  loadDB,
   loadConfig,
 
   addXP,
