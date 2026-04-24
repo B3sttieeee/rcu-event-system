@@ -1,5 +1,6 @@
 // =====================================================
-// LEVEL SYSTEM - VYRN FIXED FULL STABLE XP ENGINE
+// LEVEL SYSTEM - VYRN FULL FIXED (XP SAVE BUG PATCHED)
+// src/systems/level/index.js
 // =====================================================
 
 const fs = require("fs");
@@ -12,8 +13,7 @@ let economy;
 
 try {
   boostSystem = require("../boost/index.js");
-} catch (err) {
-  console.warn("[LEVEL] Boost system missing → fallback 1x");
+} catch {
   boostSystem = {
     getCurrentBoost: () => 1
   };
@@ -21,8 +21,7 @@ try {
 
 try {
   economy = require("../economy/index.js");
-} catch (err) {
-  console.warn("[LEVEL] Economy missing → fallback coins disabled");
+} catch {
   economy = {
     addCoins: () => {}
   };
@@ -35,7 +34,7 @@ const CONFIG_PATH = path.join(DATA_DIR, "levelConfig.json");
 
 const LEVEL_UP_CHANNEL_ID = "1475999590716018719";
 
-// ====================== CONFIG ======================
+// ====================== DEFAULT CONFIG ======================
 const DEFAULT_CONFIG = {
   messageXP: 10,
   voiceXP: 8,
@@ -62,7 +61,7 @@ let configCache = null;
 const xpCooldown = new Map();
 const lastLevelUp = new Map();
 
-// ====================== INIT ======================
+// ====================== INIT FOLDER ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -79,10 +78,11 @@ function getRank(level) {
   if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
   if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
   if (level >= 5) return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
+
   return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
-// ====================== CONFIG LOAD ======================
+// ====================== CONFIG ======================
 function loadConfig() {
   if (configCache) return configCache;
 
@@ -98,11 +98,12 @@ function loadConfig() {
 
   } catch (err) {
     console.error("[LEVEL CONFIG ERROR]", err);
-    return DEFAULT_CONFIG;
+    configCache = { ...DEFAULT_CONFIG };
+    return configCache;
   }
 }
 
-// ====================== DB LOAD ======================
+// ====================== DB ======================
 function loadDB() {
   if (dbCache) return dbCache;
 
@@ -113,7 +114,8 @@ function loadDB() {
       return dbCache;
     }
 
-    dbCache = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
+    const raw = fs.readFileSync(DB_PATH, "utf8");
+    dbCache = raw.trim() ? JSON.parse(raw) : { xp: {} };
 
     if (!dbCache.xp) dbCache.xp = {};
 
@@ -121,7 +123,8 @@ function loadDB() {
 
   } catch (err) {
     console.error("[LEVEL DB ERROR]", err);
-    return { xp: {} };
+    dbCache = { xp: {} };
+    return dbCache;
   }
 }
 
@@ -139,14 +142,14 @@ function saveDB() {
 async function sendLevelUpMessage(member, level, gainedXP) {
   const now = Date.now();
 
-  if (now - (lastLevelUp.get(member.id) || 0) < 12000) return;
+  if (now - (lastLevelUp.get(member.id) || 0) < 10000) return;
   lastLevelUp.set(member.id, now);
 
   const rank = getRank(level);
-  const coinReward = 50;
+  const reward = 50;
 
   try {
-    economy.addCoins(member.id, coinReward);
+    economy.addCoins(member.id, reward);
   } catch {}
 
   const embed = new EmbedBuilder()
@@ -155,8 +158,8 @@ async function sendLevelUpMessage(member, level, gainedXP) {
     .setDescription(
       `${rank.emoji} **${rank.name}**\n` +
       `Level: **${level}**\n` +
-      `XP gained: **${gainedXP}**\n` +
-      `Reward: +${coinReward} coins`
+      `Reward: **+${reward} coins**\n` +
+      `XP Gain: **+${gainedXP}**`
     )
     .setTimestamp();
 
@@ -170,7 +173,20 @@ async function sendLevelUpMessage(member, level, gainedXP) {
   }
 }
 
-// ====================== CORE XP (FIXED ANTI DOUBLE + SAFE SAVE) ======================
+// ====================== ROLE REWARD ======================
+async function checkRoles(member, level) {
+  try {
+    const roleId = LEVEL_ROLES[level];
+    if (!roleId) return;
+
+    const role = member.guild.roles.cache.get(roleId);
+    if (!role) return;
+
+    await member.roles.add(role).catch(() => {});
+  } catch {}
+}
+
+// ====================== CORE XP ======================
 async function addXP(member, base, length = 0) {
   if (!member || member.user?.bot) return null;
 
@@ -178,7 +194,10 @@ async function addXP(member, base, length = 0) {
   const db = loadDB();
 
   if (!db.xp[member.id]) {
-    db.xp[member.id] = { xp: 0, level: 0 };
+    db.xp[member.id] = {
+      xp: 0,
+      level: 0
+    };
   }
 
   const user = db.xp[member.id];
@@ -186,14 +205,18 @@ async function addXP(member, base, length = 0) {
   const now = Date.now();
   const last = xpCooldown.get(member.id) || 0;
 
-  // 🔥 FIX: jeśli spam → NIE STOPUJ UPDATE DB, tylko XP
+  // cooldown tylko blokuje spam
   if (now - last < 2500) {
-    return user;
+    return {
+      gained: 0,
+      xp: user.xp,
+      level: user.level
+    };
   }
 
   xpCooldown.set(member.id, now);
 
-  let gain = base;
+  let gain = Number(base) || 0;
 
   if (length >= cfg.lengthThreshold) {
     gain += Math.floor(length * cfg.lengthBonus);
@@ -202,16 +225,14 @@ async function addXP(member, base, length = 0) {
   let boost = 1;
 
   try {
-    boost = Number(boostSystem.getCurrentBoost(member.id));
-    if (!boost || boost < 1) boost = 1;
+    boost = Number(boostSystem.getCurrentBoost(member.id) || 1);
+    if (boost < 1) boost = 1;
   } catch {
     boost = 1;
   }
 
   gain = Math.floor(gain * cfg.globalMultiplier * boost);
 
-  // ================= DEBUG =================
-  console.log(`[XP] ${member.user.tag} | +${gain}`);
   console.log(`[XP BEFORE] ${user.xp}`);
 
   user.xp += gain;
@@ -224,20 +245,24 @@ async function addXP(member, base, length = 0) {
     leveled = true;
   }
 
-  console.log(`[XP AFTER] ${user.xp}`);
-  console.log(`[LEVEL] ${user.level}`);
-
   saveDB();
+
+  console.log(`[XP AFTER] ${user.xp}`);
 
   if (leveled) {
     await sendLevelUpMessage(member, user.level, gain);
+    await checkRoles(member, user.level);
 
     try {
       economy.addCoins(member.id, 50 + user.level * 5);
     } catch {}
   }
 
-  return user;
+  return {
+    gained: gain,
+    xp: user.xp,
+    level: user.level
+  };
 }
 
 // ====================== MESSAGE XP ======================
@@ -250,7 +275,8 @@ function handleMessageXP(member, content) {
 function init() {
   loadDB();
   loadConfig();
-  console.log("📈 Level System (FIXED FULL STABLE XP ENGINE) loaded");
+
+  console.log("📈 Level System FULL FIXED loaded");
 }
 
 // ====================== EXPORT ======================
@@ -258,6 +284,7 @@ module.exports = {
   init,
   loadDB,
   loadConfig,
+  saveDB,
   addXP,
   handleMessageXP,
   sendLevelUpMessage,
