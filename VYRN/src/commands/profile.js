@@ -35,21 +35,31 @@ module.exports = {
     const embed = new EmbedBuilder()
       .setColor("#0b0b0f")
       .setAuthor({
-        name: interaction.user.username,
+        name: `${interaction.user.username} • Profile`,
         iconURL: interaction.user.displayAvatarURL()
       })
       .setThumbnail(interaction.user.displayAvatarURL())
       .setDescription(
-        `${rank.emoji} ${rank.name} • Level ${u.level}\n\n` +
+        `> **RANK INFORMATION**\n` +
+        `> ${rank.emoji} **${rank.name}**\n` +
+        `> Level: **${u.level}**\n\n` +
 
-        `XP \`${u.xp}/${next}\` • ${percent}%\n` +
-        `${bar(percent)}\n\n` +
+        `> **EXPERIENCE**\n` +
+        `> XP: \`${u.xp}/${next}\`\n` +
+        `> Progress: **${percent}%**\n` +
+        `> ${bar(percent)}\n\n` +
 
-        `Coins \`${coins.toLocaleString("en-US")}\`\n` +
-        `Voice \`${voice} min\`\n` +
-        `Boost \`${boost > 1 ? boost + "x" : "none"}\``
+        `> **ECONOMY**\n` +
+        `> Coins: \`${coins.toLocaleString("pl-PL")}\`\n` +
+        `> Boost: \`${boost > 1 ? boost + "x" : "none"}\`\n\n` +
+
+        `> **ACTIVITY**\n` +
+        `> Voice time: \`${voice} min\`\n`
       )
-      .setFooter({ text: "VYRN • profile system" })
+      .setFooter({
+        text: "VYRN • Black Profile System",
+        iconURL: interaction.guild.iconURL()
+      })
       .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
