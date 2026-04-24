@@ -282,15 +282,11 @@ function init() {
 
 module.exports = {
   init,
-
   loadDB,
   loadConfig,
-
   addXP,
   handleMessageXP,
-
   sendLevelUpMessage,
-
   neededXP,
   getRank
 };
