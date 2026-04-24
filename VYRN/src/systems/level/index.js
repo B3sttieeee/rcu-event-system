@@ -127,7 +127,12 @@ function loadDB() {
 
 function saveDB() {
   if (!dbCache) return;
-  fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+
+  try {
+    fs.writeFileSync(DB_PATH, JSON.stringify(dbCache, null, 2));
+  } catch (err) {
+    console.error("[LEVEL SAVE ERROR]", err);
+  }
 }
 
 // ====================== LEVEL UP ======================
@@ -178,15 +183,6 @@ async function addXP(member, base, length = 0) {
 
   const now = Date.now();
 
-  const last = xpCooldown.get(member.id) || 0;
-
-  // 🔥 FIX: NIE BLOKUJ XP, tylko cooldown
-  if (now - last < 2500) {
-    return db.xp[member.id];
-  }
-
-  xpCooldown.set(member.id, now);
-
   let gain = base;
 
   if (length >= cfg.lengthThreshold) {
@@ -196,8 +192,7 @@ async function addXP(member, base, length = 0) {
   let boost = 1;
 
   try {
-    boost = Number(boostSystem.getCurrentBoost(member.id));
-    if (!boost || boost < 1) boost = 1;
+    boost = Number(boostSystem.getCurrentBoost(member.id)) || 1;
   } catch {
     boost = 1;
   }
@@ -217,6 +212,8 @@ async function addXP(member, base, length = 0) {
   }
 
   saveDB();
+
+  console.log(`[XP] ${member.user.tag} | +${gain} XP`);
 
   if (leveled) {
     await sendLevelUpMessage(member, user.level, gain);
