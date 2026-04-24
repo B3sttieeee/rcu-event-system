@@ -1,60 +1,57 @@
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
+const { getTopUsers } = require("../systems/economy");
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("top")
-    .setDescription("🏆 Economy leaderboard"),
+    .setDescription("🏆 View the richest players"),
 
   async execute(interaction) {
     try {
-      const economy = require("../systems/economy");
-      const getTopUsers = economy?.getTopUsers;
+      const top = getTopUsers(10);
 
-      if (!interaction.guild) {
-        return interaction.reply({
-          content: "❌ This command works only in servers.",
-          ephemeral: true
-        });
-      }
+      const medals = ["🥇", "🥈", "🥉"];
 
-      if (typeof getTopUsers !== "function") {
-        return interaction.reply({
-          content: "❌ Leaderboard system not available.",
-          ephemeral: true
-        });
-      }
+      const description = top?.length
+        ? top.map((u, i) => {
+            const medal = medals[i] || `**#${i + 1}**`;
 
-      const top = getTopUsers(10) || [];
+            return (
+              `${medal} <@${u.userId}>` +
+              ` • **${Number(u.coins || 0).toLocaleString("pl-PL")}**` +
+              ` <:CASHH:1491180511308157041>`
+            );
+          }).join("\n")
+        : "No data available.";
 
       const embed = new EmbedBuilder()
         .setColor("#0b0b0f")
         .setTitle("🏆 Economy Leaderboard")
         .setDescription(
-          top.length
-            ? top.map((u, i) => {
-                const coins = Number(u?.coins || 0);
-
-                const medal =
-                  i === 0 ? "🥇" :
-                  i === 1 ? "🥈" :
-                  i === 2 ? "🥉" :
-                  `#${i + 1}`;
-
-                return `> ${medal} <@${u.userId}> — **${coins.toLocaleString("pl-PL")}** <:CASHH:1491180511308157041>`;
-              }).join("\n")
-            : "> No data available"
+          `**Top richest players on the server**\n\n` +
+          description +
+          `\n\n> Updated live ranking system`
         )
+        .setThumbnail(interaction.guild?.iconURL({ dynamic: true }))
+        .setFooter({
+          text: "VYRN Economy • Leaderboard",
+          iconURL: interaction.guild?.iconURL()
+        })
         .setTimestamp();
 
-      return interaction.reply({ embeds: [embed] });
+      return await interaction.reply({
+        embeds: [embed]
+      });
 
     } catch (err) {
-      console.error("TOP ERROR:", err);
+      console.error("[TOP COMMAND ERROR]", err);
 
-      return interaction.reply({
-        content: "❌ Error loading leaderboard.",
-        ephemeral: true
-      });
+      if (!interaction.replied) {
+        return interaction.reply({
+          content: "❌ Error while loading leaderboard.",
+          ephemeral: true
+        });
+      }
     }
   }
 };
