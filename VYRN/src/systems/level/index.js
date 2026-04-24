@@ -1,13 +1,13 @@
 // =====================================================
 // src/systems/level/index.js
-// VYRN CLEAN LEVEL SYSTEM - FINAL
+// VYRN CLEAN LEVEL SYSTEM - FIXED FINAL
 // =====================================================
 
 const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
-// ====================== PATHS ======================
+// ====================== PATH ======================
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const DB_PATH = path.join(DATA_DIR, "levels.json");
 
@@ -16,11 +16,10 @@ const CONFIG = {
   messageXP: 5,
   messageCoins: 5,
 
-  voiceXP: 10,        // 1 min
-  voiceCoins: 8,      // 1 min
+  voiceXP: 10,
+  voiceCoins: 8,
 
   messageCooldown: 15000,
-  voiceInterval: 60000,
 
   levelUpChannel: "1475999590716018719"
 };
@@ -35,49 +34,48 @@ const LEVEL_ROLES = {
   75: "1476000992351879229"
 };
 
-// ====================== IMPORT ECONOMY ======================
+// ====================== ECONOMY SAFE IMPORT ======================
 let economy;
-
 try {
-  economy = require("../economy");
+  economy = require("../economy/index.js");
 } catch {
   economy = {
     addCoins: () => {}
   };
 }
 
-// ====================== INIT ======================
+// ====================== INIT FOLDER ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
+// ====================== CACHE ======================
 let db = null;
 const messageCooldowns = new Map();
 
-// ====================== LOAD ======================
+// ====================== LOAD DB ======================
 function loadDB() {
   if (db) return db;
 
   try {
     if (!fs.existsSync(DB_PATH)) {
       db = { users: {} };
-      saveDB();
+      fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
       return db;
     }
 
     db = JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-
     if (!db.users) db.users = {};
 
     return db;
-
-  } catch {
+  } catch (err) {
+    console.error("[LEVEL LOAD ERROR]", err.message);
     db = { users: {} };
     return db;
   }
 }
 
-// ====================== SAVE ======================
+// ====================== SAVE DB ======================
 function saveDB() {
   if (!db) return;
   fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
@@ -100,7 +98,7 @@ function ensureUser(userId) {
 
 // ====================== XP FORMULA ======================
 function neededXP(level) {
-  return 50 + (level * 35);
+  return 50 + level * 35;
 }
 
 // ====================== RANK ======================
@@ -126,7 +124,7 @@ async function giveLevelRole(member, level) {
   await member.roles.add(role).catch(() => {});
 }
 
-// ====================== LEVEL UP EMBED ======================
+// ====================== LEVEL UP ======================
 async function sendLevelUp(member, level) {
   const channel = member.guild.channels.cache.get(CONFIG.levelUpChannel);
   if (!channel) return;
@@ -139,16 +137,14 @@ async function sendLevelUp(member, level) {
     .setDescription(
       `${member}\n\n` +
       `${rank.emoji} Rank: **${rank.name}**\n` +
-      `🔥 New Level: **${level}**`
+      `🔥 Level: **${level}**`
     )
     .setTimestamp();
 
-  await channel.send({
-    embeds: [embed]
-  }).catch(() => {});
+  channel.send({ embeds: [embed] }).catch(() => {});
 }
 
-// ====================== LEVEL CHECK ======================
+// ====================== CHECK LEVEL ======================
 async function checkLevel(member, user) {
   let leveled = false;
 
@@ -171,19 +167,20 @@ async function handleMessageXP(member) {
 
   const user = ensureUser(member.id);
 
+  // cooldown
   if (now - last < CONFIG.messageCooldown) {
     return user;
   }
 
   messageCooldowns.set(member.id, now);
 
+  // XP + coins
   user.xp += CONFIG.messageXP;
   user.totalXP += CONFIG.messageXP;
 
   economy.addCoins(member.id, CONFIG.messageCoins);
 
   await checkLevel(member, user);
-
   saveDB();
 
   return user;
@@ -199,24 +196,27 @@ async function handleVoiceXP(member) {
   economy.addCoins(member.id, CONFIG.voiceCoins);
 
   await checkLevel(member, user);
-
   saveDB();
 
   return user;
 }
 
+// ====================== INIT (FIX BRAK INIT ERROR) ======================
+function init() {
+  loadDB();
+  console.log("🔥 LEVEL SYSTEM INIT OK");
+}
+
 // ====================== EXPORT ======================
 module.exports = {
+  init,
   CONFIG,
   LEVEL_ROLES,
-
   loadDB,
   saveDB,
   ensureUser,
-
   neededXP,
   getRank,
-
   handleMessageXP,
   handleVoiceXP
 };
