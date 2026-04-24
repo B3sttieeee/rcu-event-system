@@ -1,29 +1,32 @@
-require("dotenv").config();
+// =====================================================
+// VYRN BOT - COMMAND DEPLOYER (PRO VERSION)
+// =====================================================
 
 const { REST, Routes } = require("discord.js");
 const fs = require("fs");
 const path = require("path");
 
-// ====================== ENV CHECK ======================
+// ================= CONFIG =================
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
-const GUILD_ID = process.env.GUILD_ID; // optional
+const GUILD_ID = process.env.GUILD_ID; // optional (for fast testing)
 
+// ================= SAFETY CHECKS =================
 if (!TOKEN) {
-  console.error("❌ Missing TOKEN in .env");
+  console.error("❌ Missing TOKEN in environment variables!");
   process.exit(1);
 }
 
 if (!CLIENT_ID) {
-  console.error("❌ Missing CLIENT_ID in .env");
+  console.error("❌ Missing CLIENT_ID in environment variables!");
   process.exit(1);
 }
 
-// ====================== LOAD COMMANDS ======================
+// ================= LOAD COMMANDS =================
 const commands = [];
 const commandsPath = path.join(__dirname, "commands");
 
-function loadCommands(dir) {
+function loadCommandFiles(dir) {
   const items = fs.readdirSync(dir);
 
   for (const item of items) {
@@ -31,7 +34,7 @@ function loadCommands(dir) {
     const stat = fs.statSync(itemPath);
 
     if (stat.isDirectory()) {
-      loadCommands(itemPath);
+      loadCommandFiles(itemPath);
       continue;
     }
 
@@ -43,6 +46,8 @@ function loadCommands(dir) {
       if (command?.data?.name && typeof command.execute === "function") {
         commands.push(command.data.toJSON());
         console.log(`📦 Loaded: /${command.data.name}`);
+      } else {
+        console.log(`⚠️ Skipped invalid command: ${item}`);
       }
     } catch (err) {
       console.error(`❌ Error loading ${item}:`, err.message);
@@ -55,40 +60,45 @@ if (!fs.existsSync(commandsPath)) {
   process.exit(1);
 }
 
-loadCommands(commandsPath);
+loadCommandFiles(commandsPath);
 
-// ====================== VALIDATION ======================
 if (commands.length === 0) {
-  console.warn("⚠️ No commands found to deploy.");
+  console.log("⚠️ No commands found to deploy.");
   process.exit(0);
 }
 
-// ====================== REST CLIENT ======================
+// ================= DEPLOY =================
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 
-// ====================== DEPLOY ======================
 (async () => {
   try {
-    console.log(`\n🚀 Deploying ${commands.length} commands...`);
+    console.log("\n🚀 Starting deployment...");
+    console.log(`📊 Total commands: ${commands.length}`);
 
-    let route;
+    commands.forEach(c => console.log(`   → /${c.name}`));
 
     if (GUILD_ID) {
-      route = Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID);
-      console.log(`📡 Mode: GUILD (${GUILD_ID})`);
+      console.log(`\n⚡ Deploying to GUILD: ${GUILD_ID}`);
+
+      await rest.put(
+        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+        { body: commands }
+      );
+
+      console.log("✅ Guild commands deployed instantly!");
     } else {
-      route = Routes.applicationCommands(CLIENT_ID);
-      console.log(`🌍 Mode: GLOBAL (can take up to 1h)`);
+      console.log("\n🌍 Deploying GLOBAL commands (may take up to 1h)...");
+
+      await rest.put(
+        Routes.applicationCommands(CLIENT_ID),
+        { body: commands }
+      );
+
+      console.log("✅ Global commands deployed!");
     }
 
-    const response = await rest.put(route, {
-      body: commands,
-    });
-
-    console.log(`\n✅ SUCCESS`);
-    console.log(`📊 Deployed: ${response.length} commands`);
+    console.log("🎉 Deployment finished successfully!\n");
   } catch (error) {
-    console.error("\n❌ DEPLOY FAILED");
-    console.error(error?.rawError || error);
+    console.error("❌ Deployment failed:", error);
   }
 })();
