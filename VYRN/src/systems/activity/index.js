@@ -1,5 +1,5 @@
 // =====================================================
-// ACTIVITY SYSTEM - FINAL STABLE VERSION
+// ACTIVITY SYSTEM - OPTIMIZED & STABLE
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -12,9 +12,9 @@ const LEVELS_PATH = path.join(DATA_DIR, "levels.json");
 let profileDB = { users: {} };
 let levelsDB = { users: {} };
 
-const DEBUG = true;
+const DEBUG = false; // Zmienione na false, żeby nie spamować konsoli przy każdej minucie
 
-// ====================== INIT ======================
+// ====================== INIT FILES ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
@@ -39,7 +39,7 @@ function saveAll() {
   try {
     fs.writeFileSync(PROFILE_PATH, JSON.stringify(profileDB, null, 2));
     fs.writeFileSync(LEVELS_PATH, JSON.stringify(levelsDB, null, 2));
-    if (DEBUG) console.log(`[ACTIVITY] ✅ Zapisano dane`);
+    if (DEBUG) console.log(`[ACTIVITY] ✅ Zapisano dane w tle`);
   } catch (e) {
     console.error("[ACTIVITY] SAVE ERROR", e.message);
   }
@@ -47,7 +47,7 @@ function saveAll() {
 
 // ====================== USER ======================
 function ensureUser(userId) {
-  loadAll();
+  // USUNIĘTO loadAll()! Dane są ładowane tylko raz przy starcie.
   if (!profileDB.users[userId]) profileDB.users[userId] = { voice: 0 };
   if (!levelsDB.users[userId]) levelsDB.users[userId] = { xp: 0, level: 0, totalXP: 0 };
   return {
@@ -69,7 +69,7 @@ function addVoiceTime(userId, seconds) {
     console.log(`[ACTIVITY][VOICE] ${userId} +${amount}s | ${before} → ${user.voice.voice} (${Math.floor(user.voice.voice/60)} min)`);
   }
 
-  saveAll();
+  // USUNIĘTO saveAll()
   return true;
 }
 
@@ -89,13 +89,13 @@ function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
 
   let leveledUp = false;
 
-  // Poprawiona pętla level up
   while (user.level.xp >= neededXP(user.level.level)) {
     user.level.xp -= neededXP(user.level.level);
     user.level.level++;
     leveledUp = true;
   }
 
+  // To automatycznie dodaje monety przez system ekonomii
   if (coinsAmount > 0) {
     require("../economy").addCoins(member.id, coinsAmount);
   }
@@ -109,11 +109,11 @@ function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
     console.log(`[ACTIVITY][XP] ${member.user.tag} +${xpAmount} XP | ${beforeXP} → ${user.level.xp} | Level ${user.level.level}`);
   }
 
-  saveAll();
+  // USUNIĘTO saveAll()
 }
 
 function neededXP(level) {
-  return Math.floor(100 * Math.pow(level + 1, 1.5)); // lepsza progresja
+  return Math.floor(100 * Math.pow(level + 1, 1.5));
 }
 
 // ====================== LEVEL UP EMBED ======================
@@ -148,7 +148,13 @@ function getRank(level) {
 // ====================== INIT ======================
 function init() {
   loadAll();
-  console.log("📊 Activity System → załadowany [FINAL STABLE]");
+  console.log("📊 Activity System → załadowany [ZOPTYMALIZOWANY]");
+  
+  // Zapisujemy dane zbiorczo co 30 sekund zamiast przy każdej wiadomości/minucie
+  setInterval(saveAll, 30000);
+  
+  process.on("SIGINT", saveAll);
+  process.on("SIGTERM", saveAll);
 }
 
 module.exports = {
