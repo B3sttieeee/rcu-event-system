@@ -1,5 +1,5 @@
 // =====================================================
-// VYRN • EVENT SYSTEM (BLACK EDITION V2 - FULL VERSION)
+// VYRN • EVENT SYSTEM (BLACK EDITION - TEXT COUNTER)
 // =====================================================
 const {
   EmbedBuilder,
@@ -29,56 +29,53 @@ const CONFIG = {
       emoji: "🍯" 
     },
   },
-  REFRESH_INTERVAL: 30000, // Odświeżanie panelu (30s)
-  CHECK_INTERVAL: 10000,   // Sprawdzanie startu eventu (10s)
-  DELETE_AFTER: 15 * 60 * 1000, // Usunięcie komunikatu o evencie po 15 min
+  REFRESH_INTERVAL: 10000, // Odświeżanie licznika (co 10 sekund)
+  DELETE_AFTER: 15 * 60 * 1000, 
 };
 
-// ====================== DATABASE ======================
 const DB_PATH = path.join(process.env.DATA_DIR || "/data", "eventDB.json");
 
+// ====================== DATABASE ======================
 const loadDB = () => {
   if (!fs.existsSync(DB_PATH)) return { dm: {} };
-  try {
-    const data = fs.readFileSync(DB_PATH, "utf8");
-    return JSON.parse(data);
-  } catch {
-    return { dm: {} };
-  }
+  try { return JSON.parse(fs.readFileSync(DB_PATH, "utf8")); } catch { return { dm: {} }; }
+};
+const saveDB = (db) => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+
+// ====================== TIME CALCULATOR (TEXT TIMER) ======================
+const getWarsawNow = () => {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
 };
 
-const saveDB = (db) => {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
-};
-
-// ====================== TIME HELPERS (WARSAW FIX) ======================
-const getWarsawDate = () => {
-  const now = new Date();
-  return new Date(now.toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
-};
-
-const getNextOccurrence = (hours) => {
-  const now = getWarsawDate();
-  const currentHour = now.getHours();
+const getEventStatus = (hours) => {
+  const now = getWarsawNow();
+  const currentH = now.getHours();
   
-  let nextHour = hours.find(h => h > currentHour);
+  // Szukamy następnej godziny
+  let nextH = hours.find(h => h > currentH);
   let isNextDay = false;
 
-  if (nextHour === undefined) {
-    nextHour = hours[0];
+  if (nextH === undefined) {
+    nextH = hours[0];
     isNextDay = true;
   }
 
   const target = new Date(now);
   if (isNextDay) target.setDate(target.getDate() + 1);
-  target.setHours(nextHour, 0, 0, 0);
-  
-  return Math.floor(target.getTime() / 1000);
-};
+  target.setHours(nextH, 0, 0, 0);
 
-// ====================== CACHE & STATE ======================
-const processed = new Set();
-let panelMessage = null;
+  const diff = target - now;
+  const totalSeconds = Math.floor(diff / 1000);
+  
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+
+  return {
+    nextTime: `${nextH}:00`,
+    countdown: `${h}h ${m}m ${s}s`
+  };
+};
 
 // ====================== EMBEDS ======================
 const buildPanelEmbed = () => {
@@ -86,28 +83,19 @@ const buildPanelEmbed = () => {
     .setColor("#0a0a0a")
     .setTitle("🎫 EVENT CENTER")
     .setImage(CONFIG.IMAGES.PANEL)
-    .setFooter({ text: "VYRN • Event Tracker" })
+    .setFooter({ text: "VYRN • Live Tracker" })
     .setTimestamp();
 
   const description = Object.entries(CONFIG.EVENTS).map(([key, e]) => {
-    const timestamp = getNextOccurrence(e.hours);
+    const status = getEventStatus(e.hours);
     return `**${e.name.toUpperCase()} EVENT**\n` +
-           `Next: <t:${timestamp}:t>\n` +
-           `Starts: <t:${timestamp}:R>`;
+           `Next: \`${status.nextTime}\`\n` +
+           `Starts in: **${status.countdown}**`;
   }).join("\n\n━━━━━━━━━━━━━━\n\n");
 
   embed.setDescription(description);
   return embed;
 };
-
-const buildEventEmbed = (name, image) => 
-  new EmbedBuilder()
-    .setColor("#22c55e")
-    .setTitle(`🎉 ${name.toUpperCase()} EVENT STARTED`)
-    .setDescription("📢 Event is now **ACTIVE**\n\n👉 Join now and participate!")
-    .setImage(image || null)
-    .setFooter({ text: "VYRN • Event System" })
-    .setTimestamp();
 
 // ====================== COMPONENTS ======================
 const buildButtons = () => new ActionRowBuilder().addComponents(
@@ -116,162 +104,124 @@ const buildButtons = () => new ActionRowBuilder().addComponents(
   new ButtonBuilder().setCustomId("get_event_dm").setLabel("Notifications").setStyle(ButtonStyle.Primary)
 );
 
-const buildRoleMenu = () => {
+const buildMenu = (id, placeholder) => {
   const options = Object.entries(CONFIG.EVENTS).map(([key, e]) => ({
     label: e.name, value: key, emoji: e.emoji
   }));
   return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("role_menu")
-      .setPlaceholder("Select event roles")
-      .addOptions(options)
-  );
-};
-
-const buildDmMenu = () => {
-  const options = Object.entries(CONFIG.EVENTS).map(([key, e]) => ({
-    label: e.name, value: key, emoji: e.emoji
-  }));
-  return new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("dm_menu")
-      .setPlaceholder("Event notifications DM")
-      .addOptions(options)
+    new StringSelectMenuBuilder().setCustomId(id).setPlaceholder(placeholder).addOptions(options)
   );
 };
 
 // ====================== CORE ENGINE ======================
+const processed = new Set();
+let panelMessage = null;
+
 async function checkEvents(client) {
-  const now = getWarsawDate();
+  const now = getWarsawNow();
   const h = now.getHours();
   const m = now.getMinutes();
   const day = now.getDate();
 
   for (const [key, e] of Object.entries(CONFIG.EVENTS)) {
     const roleId = CONFIG.ROLES[e.roleKey];
-    const image = CONFIG.IMAGES[key.toUpperCase()];
 
-    // 1. POWIADOMIENIE: 5 minut przed startem
-    for (const eventHour of e.hours) {
-      const preHour = (eventHour === 0) ? 23 : eventHour - 1;
-      const preKey = `pre-${key}-${eventHour}-${day}`;
-
-      if (h === preHour && m === 55 && !processed.has(preKey)) {
+    for (const eventH of e.hours) {
+      // 5 min przed startem
+      const preH = eventH === 0 ? 23 : eventH - 1;
+      const preKey = `pre-${key}-${eventH}-${day}`;
+      if (h === preH && m === 55 && !processed.has(preKey)) {
         processed.add(preKey);
-        const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-        if (channel) {
-          channel.send(`<@&${roleId}> **${e.name}** starts in 5 minutes! ⏳`).catch(() => {});
-        }
+        const ch = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+        if (ch) ch.send(`<@&${roleId}> **${e.name}** starts in 5 minutes! ⏳`).catch(() => {});
       }
 
-      // 2. START EVENTU: Pełna godzina
-      const startKey = `start-${key}-${eventHour}-${day}`;
-      if (h === eventHour && m === 0 && !processed.has(startKey)) {
+      // Start eventu
+      const startKey = `start-${key}-${eventH}-${day}`;
+      if (h === eventH && m === 0 && !processed.has(startKey)) {
         processed.add(startKey);
-        await triggerEvent(client, key, e, roleId, image);
+        await triggerEvent(client, key, e, roleId);
       }
     }
   }
-
-  // Czyść cache starego dnia o północy
-  if (h === 0 && m === 10) processed.clear();
+  if (h === 0 && m === 5) processed.clear();
 }
 
-async function triggerEvent(client, key, eventData, roleId, image) {
-  const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-  if (!channel) return;
+async function triggerEvent(client, key, eventData, roleId) {
+  const ch = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+  if (!ch) return;
 
-  const msg = await channel.send({
-    content: `<@&${roleId}>`,
-    embeds: [buildEventEmbed(eventData.name, image)]
-  }).catch(() => null);
+  const embed = new EmbedBuilder()
+    .setColor("#22c55e")
+    .setTitle(`🎉 ${eventData.name.toUpperCase()} STARTED`)
+    .setDescription("📢 Event is now **ACTIVE**!\n👉 Join and participate!")
+    .setImage(CONFIG.IMAGES[key.toUpperCase()] || null)
+    .setTimestamp();
 
-  // Wysyłanie DM do zapisanych użytkowników
+  const msg = await ch.send({ content: `<@&${roleId}>`, embeds: [embed] });
+
   const db = loadDB();
-  const subscribers = Object.entries(db.dm || {}).filter(([_, subs]) => subs.includes(key));
-
-  for (const [userId] of subscribers) {
-    const user = await client.users.fetch(userId).catch(() => null);
-    if (user) {
-      user.send({
-        content: `🔔 **VYRN Alert:** The **${eventData.name}** event has just started!`,
-        embeds: [buildEventEmbed(eventData.name, image)]
-      }).catch(() => {});
+  for (const [uid, subs] of Object.entries(db.dm)) {
+    if (subs.includes(key)) {
+      const user = await client.users.fetch(uid).catch(() => null);
+      if (user) user.send({ content: `🔔 **VYRN:** Event **${eventData.name}** wystartował!`, embeds: [embed] }).catch(() => {});
     }
   }
 
-  if (msg) setTimeout(() => msg.delete().catch(() => {}), CONFIG.DELETE_AFTER);
+  setTimeout(() => msg.delete().catch(() => {}), CONFIG.DELETE_AFTER);
 }
 
-// ====================== HANDLERS ======================
+// ====================== HANDLER ======================
 async function handleEventInteraction(interaction) {
   const { customId, member, values, user } = interaction;
 
-  try {
-    if (customId === "refresh_events") {
-      return await interaction.update({ embeds: [buildPanelEmbed()], components: [buildButtons()] });
-    }
+  if (customId === "refresh_events") {
+    return await interaction.update({ embeds: [buildPanelEmbed()] });
+  }
 
-    if (customId === "get_event_roles") {
-      return await interaction.reply({ content: "🎭 Select event roles:", components: [buildRoleMenu()], ephemeral: true });
-    }
+  if (customId === "get_event_roles") {
+    return await interaction.reply({ content: "🎭 Wybierz role:", components: [buildMenu("role_menu", "Select Roles")], ephemeral: true });
+  }
 
-    if (customId === "get_event_dm") {
-      return await interaction.reply({ content: "📩 Event notifications DM:", components: [buildDmMenu()], ephemeral: true });
-    }
+  if (customId === "get_event_dm") {
+    return await interaction.reply({ content: "📩 Powiadomienia DM:", components: [buildMenu("dm_menu", "Select DM Alerts")], ephemeral: true });
+  }
 
-    if (customId === "role_menu") {
-      const selectedKey = values[0];
-      const roleId = CONFIG.ROLES[CONFIG.EVENTS[selectedKey].roleKey];
-      
-      if (member.roles.cache.has(roleId)) {
-        await member.roles.remove(roleId);
-        return await interaction.reply({ content: `❌ Removed role for **${selectedKey}**`, ephemeral: true });
-      } else {
-        await member.roles.add(roleId);
-        return await interaction.reply({ content: `✅ Added role for **${selectedKey}**`, ephemeral: true });
-      }
+  if (customId === "role_menu") {
+    const roleId = CONFIG.ROLES[CONFIG.EVENTS[values[0]].roleKey];
+    if (member.roles.cache.has(roleId)) {
+      await member.roles.remove(roleId);
+      return await interaction.reply({ content: "❌ Usunięto rolę.", ephemeral: true });
+    } else {
+      await member.roles.add(roleId);
+      return await interaction.reply({ content: "✅ Dodano rolę.", ephemeral: true });
     }
+  }
 
-    if (customId === "dm_menu") {
-      const db = loadDB();
-      db.dm[user.id] = values;
-      saveDB(db);
-      return await interaction.reply({ content: "✅ DM notifications saved!", ephemeral: true });
-    }
-  } catch (err) {
-    console.error("[EVENT INTERACTION ERROR]", err);
+  if (customId === "dm_menu") {
+    const db = loadDB();
+    db.dm[user.id] = values;
+    saveDB(db);
+    return await interaction.reply({ content: "✅ Zapisano powiadomienia!", ephemeral: true });
   }
 }
 
 // ====================== INIT ======================
 async function syncPanel(client) {
-  const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-  if (!channel) return;
+  const ch = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+  if (!ch) return;
+  const msgs = await ch.messages.fetch({ limit: 10 });
+  panelMessage = msgs.find(m => m.embeds[0]?.title === "🎫 EVENT CENTER");
 
-  const messages = await channel.messages.fetch({ limit: 10 });
-  panelMessage = messages.find(m => m.embeds[0]?.title === "🎫 EVENT CENTER");
-
-  if (panelMessage) {
-    await panelMessage.edit({ embeds: [buildPanelEmbed()], components: [buildButtons()] });
-  } else {
-    panelMessage = await channel.send({ embeds: [buildPanelEmbed()], components: [buildButtons()] });
-  }
+  if (panelMessage) await panelMessage.edit({ embeds: [buildPanelEmbed()], components: [buildButtons()] });
+  else panelMessage = await ch.send({ embeds: [buildPanelEmbed()], components: [buildButtons()] });
 }
 
 function init(client) {
-  console.log("🎫 Event System [Black Edition Full] → załadowany");
-  
   syncPanel(client);
-
-  // Sprawdzanie startów eventów i powiadomień 5min
-  setInterval(() => checkEvents(client), CONFIG.CHECK_INTERVAL);
-
-  // Odświeżanie panelu (odliczanie) co 30 sekund
+  setInterval(() => checkEvents(client), 10000);
   setInterval(() => {
-    if (panelMessage) {
-      panelMessage.edit({ embeds: [buildPanelEmbed()] }).catch(() => syncPanel(client));
-    }
+    if (panelMessage) panelMessage.edit({ embeds: [buildPanelEmbed()] }).catch(() => syncPanel(client));
   }, CONFIG.REFRESH_INTERVAL);
 }
 
