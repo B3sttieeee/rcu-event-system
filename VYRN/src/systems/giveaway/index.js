@@ -182,7 +182,7 @@ function startTimer(messageId) {
       if (channel) {
         const message = await channel.messages.fetch(messageId).catch(() => null);
         if (message) {
-          await message.edit({ embeds: [buildEmbed(data)] });
+          await message.edit({ embeds: [buildEmbed(data)] }).catch(() => {});
         }
       }
     } catch (err) {
@@ -191,7 +191,7 @@ function startTimer(messageId) {
   }, 10000);
 }
 
-// ====================== END GIVEAWAY (z % szans) ======================
+// ====================== END GIVEAWAY ======================
 async function endGiveaway(messageId) {
   const data = giveaways.get(messageId);
   if (!data || data.ended) return;
@@ -206,40 +206,45 @@ async function endGiveaway(messageId) {
     const message = await channel.messages.fetch(messageId).catch(() => null);
     if (!message) return;
 
+    // Przypadek 1: Nikt nie dołączył
     if (data.users.length === 0) {
-      await message.edit({ embeds: [buildEmbed(data)], components: [] }).catch(() => {});
-      await channel.send("❌ Giveaway zakończony – brak uczestników.");
+      const failEmbed = buildEmbed(data);
+      failEmbed.setDescription("❌ **Giveaway zakończony – brak uczestników.**");
+      failEmbed.setColor("#ef4444");
+      
+      await message.edit({ embeds: [failEmbed], components: [] }).catch(console.error);
+      await channel.send(`❌ Nikt nie wziął udziału w losowaniu o **${data.prize}**. \n🔗 ${message.url}`);
       return;
     }
 
-    // Obliczanie szans
+    // Obliczanie szans (Poprawione: zawsze min. 1 los)
     let weightedUsers = [];
     const userChances = new Map();
 
     for (const userId of data.users) {
+      let entries = 1; // Zabezpieczenie! Użytkownik ZAWSZE dostaje min. 1 los.
       const member = await channel.guild.members.fetch(userId).catch(() => null);
       if (member) {
-        const entries = getEntries(member);
-        userChances.set(userId, entries);
-        for (let i = 0; i < entries; i++) weightedUsers.push(userId);
+        entries = getEntries(member);
       }
+      userChances.set(userId, entries);
+      for (let i = 0; i < entries; i++) weightedUsers.push(userId);
     }
 
     const totalEntries = weightedUsers.length;
-    if (totalEntries === 0) {
-      await channel.send("❌ Brak ważnych uczestników.");
-      return;
-    }
-
+    
+    // Losowanie
     const winners = [];
     let pool = [...weightedUsers];
-    const count = Math.min(data.winners, pool.length);
+    const count = Math.min(data.winners, [...new Set(pool)].length); // Unikamy wylosowania tej samej osoby dwa razy
 
     for (let i = 0; i < count; i++) {
+      if (pool.length === 0) break;
       const index = Math.floor(Math.random() * pool.length);
       const winnerId = pool[index];
       winners.push(winnerId);
-      pool = pool.filter(id => id !== winnerId);
+      // Usuwamy wszystkie losy tego zwycięzcy, żeby nie wygrał dwa razy
+      pool = pool.filter(id => id !== winnerId); 
     }
 
     const winnerLines = winners.map(winnerId => {
@@ -257,12 +262,19 @@ async function endGiveaway(messageId) {
         `Łączna pula losowań: **${totalEntries}**`
       )
       .setImage(data.image || null)
+      .setFooter({ text: `Host: ${data.hostId ? `<@${data.hostId}>` : "Nieznany"} • VYRN` })
       .setTimestamp();
 
-    // Edytujemy oryginalny embed zamiast tworzyć nowy
-    await message.edit({ embeds: [endEmbed], components: [] }).catch(() => {});
+    // 1. Zaktualizuj embeda usuwając przyciski
+    await message.edit({ embeds: [endEmbed], components: [] }).catch(e => console.error("[GIVEAWAY] Nie udało się edytować wiadomości:", e.message));
 
-    console.log(`[GIVEAWAY] Giveaway ${messageId} zakończony.`);
+    // 2. WYŚLIJ WIADOMOŚĆ Z PINGIEM!
+    const pingWinners = winners.map(w => `<@${w}>`).join(", ");
+    await channel.send({
+      content: `🎉 Gratulacje ${pingWinners}! Wygrałeś/aś **${data.prize}**!\n🔗 Link do losowania: ${message.url}`
+    }).catch(e => console.error("[GIVEAWAY] Nie udało się wysłać pingu:", e.message));
+
+    console.log(`[GIVEAWAY] Giveaway ${messageId} zakończony. Wygrali: ${winners.join(", ")}`);
 
   } catch (err) {
     console.error(`[GIVEAWAY] End error ${messageId}:`, err);
@@ -289,7 +301,8 @@ async function handleGiveaway(interaction) {
     saveDB();
 
     await interaction.reply({ content: "🎟 Dołączyłeś do giveawayu!", flags: 64 });
-    await interaction.message.edit({ embeds: [buildEmbed(data)] }).catch(() => {});
+    // Drobna optymalizacja - nie edytujemy embeda przy każdym dołączeniu, 
+    // timer co 10s i tak odświeży liczbę uczestników, więc bot nie dostanie rate limitu!
 
   } else if (customId === "gw_leave") {
     if (!data.users.includes(userId)) {
@@ -299,7 +312,6 @@ async function handleGiveaway(interaction) {
     saveDB();
 
     await interaction.reply({ content: "❌ Zostałeś wypisany.", flags: 64 });
-    await interaction.message.edit({ embeds: [buildEmbed(data)] }).catch(() => {});
   }
 }
 
@@ -313,12 +325,13 @@ async function reroll(interaction, messageId) {
   const userChances = new Map();
 
   for (const userId of data.users) {
+    let entries = 1;
     const member = await interaction.guild.members.fetch(userId).catch(() => null);
     if (member) {
-      const entries = getEntries(member);
-      userChances.set(userId, entries);
-      for (let i = 0; i < entries; i++) weightedUsers.push(userId);
+      entries = getEntries(member);
     }
+    userChances.set(userId, entries);
+    for (let i = 0; i < entries; i++) weightedUsers.push(userId);
   }
 
   if (weightedUsers.length === 0) {
@@ -328,9 +341,10 @@ async function reroll(interaction, messageId) {
   const totalEntries = weightedUsers.length;
   const winners = [];
   let pool = [...weightedUsers];
-  const count = Math.min(data.winners, pool.length);
+  const count = Math.min(data.winners, [...new Set(pool)].length);
 
   for (let i = 0; i < count; i++) {
+    if (pool.length === 0) break;
     const index = Math.floor(Math.random() * pool.length);
     const winnerId = pool[index];
     winners.push(winnerId);
@@ -372,14 +386,14 @@ function init(botClient) {
 
     const remaining = g.end - Date.now();
     if (remaining > 0) {
-      setTimeout(() => endGiveaway(id), remaining);
+      startTimer(id); // <--- Poprawka: Odtwarzamy pełny timer, a nie tylko goły setTimeout
       console.log(`[GIVEAWAY] Wznowiono timer dla ${id} — pozostało ${Math.floor(remaining/1000)}s`);
     } else {
       endGiveaway(id);
     }
   }
 
-  console.log(`🎁 Giveaway System załadowany (${loaded} aktywnych)`);
+  console.log(`[SYSTEM] 🎁 Giveaway System załadowany (${loaded} aktywnych)`);
 }
 
 module.exports = {
