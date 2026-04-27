@@ -1,4 +1,3 @@
-// src/systems/economy.js
 const fs = require("fs");
 const path = require("path");
 
@@ -8,12 +7,8 @@ const COINS_TMP_PATH = `${COINS_PATH}.tmp`;
 
 let userCoins = new Map();
 
-// ====================== INIT ======================
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// ====================== LOAD & SAVE ======================
 function loadCoins() {
   try {
     if (!fs.existsSync(COINS_PATH)) {
@@ -44,7 +39,6 @@ function saveCoins() {
   }
 }
 
-// ====================== CORE ======================
 function getCoins(userId) {
   if (!userId) return 0;
   return userCoins.get(userId) || 0;
@@ -54,44 +48,14 @@ function addCoins(userId, amount) {
   if (!userId) return 0;
   const val = Math.floor(Math.max(0, Number(amount) || 0));
   if (val <= 0) return getCoins(userId);
-
-  const current = getCoins(userId);
-  const newVal = current + val;
+  const newVal = (userCoins.get(userId) || 0) + val;
   userCoins.set(userId, newVal);
   return newVal;
 }
 
-function spendCoins(userId, amount) {
-  if (!userId) return false;
-  const val = Math.floor(Math.max(0, Number(amount) || 0));
-  if (val <= 0) return true;
-
-  const current = getCoins(userId);
-  if (current < val) return false;
-
-  userCoins.set(userId, current - val);
-  return true;
-}
-
-function setCoins(userId, amount) {
-  if (!userId) return 0;
-  const val = Math.floor(Math.max(0, Number(amount) || 0));
-  userCoins.set(userId, val);
-  return val;
-}
-
-// ====================== INIT EXPORT ======================
 function init() {
   loadCoins();
-  setInterval(saveCoins, 20000); // Automatyczny zapis co 20 sekund
-  process.on("SIGINT", saveCoins);
-  process.on("SIGTERM", saveCoins);
+  setInterval(saveCoins, 20000);
 }
 
-module.exports = {
-  init,
-  getCoins,
-  addCoins,
-  spendCoins,
-  setCoins
-};
+module.exports = { init, getCoins, addCoins };
