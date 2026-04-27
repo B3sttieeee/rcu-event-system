@@ -1,10 +1,7 @@
-// src/commands/profile.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
-
-// Popraw ścieżki jeśli systemy masz w innym folderze
 const activity = require("../systems/activity");
-const { getCoins } = require("../systems/economy");
-const { getCurrentBoost } = require("../systems/boost");
+const economy = require("../systems/economy");
+const boostSystem = require("../systems/boost"); // Zakładam, że tam też jest folder z index.js
 
 function createProgressBar(percent) {
   const size = 12;
@@ -19,46 +16,25 @@ module.exports = {
 
   async execute(interaction) {
     await interaction.deferReply();
+    const userId = interaction.user.id;
 
     try {
-      const userId = interaction.user.id;
+      const voiceMin = activity.getVoiceMinutes(userId);
+      const levelData = activity.getLevelData(userId);
+      const coins = economy.getCoins(userId);
+      const boost = boostSystem?.getCurrentBoost ? boostSystem.getCurrentBoost(userId) : 1;
 
-      // VOICE
-      const voiceMin = typeof activity.getVoiceMinutes === "function" 
-        ? activity.getVoiceMinutes(userId) 
-        : 0;
+      const progress = Math.min(100, Math.floor((levelData.xp / levelData.nextXP) * 100));
+      const rank = activity.getRank(levelData.level);
 
-      // LEVEL & XP
-      let levelData = { xp: 0, level: 0, nextXP: 100 };
-      if (typeof activity.getLevelData === "function") {
-        levelData = activity.getLevelData(userId);
-      }
-      
-      const nextXP = levelData.nextXP || 100;
-      const progress = nextXP > 0 
-        ? Math.min(100, Math.floor((levelData.xp / nextXP) * 100)) 
-        : 0;
-
-      const rank = typeof activity.getRank === "function" 
-        ? activity.getRank(levelData.level) 
-        : { name: "Iron", emoji: "⚔️" };
-
-      // ECONOMY & BOOSTS
-      const coins = getCoins(userId);
-      const boost = getCurrentBoost(userId) || 1;
-
-      // EMBED BUILDER
       const embed = new EmbedBuilder()
-        .setColor("#0a0a0a") // Styl VYRN Black Edition
-        .setAuthor({
-          name: `${interaction.user.username} • VYRN Profile`,
-          iconURL: interaction.user.displayAvatarURL({ dynamic: true })
-        })
+        .setColor("#0a0a0a")
+        .setAuthor({ name: `${interaction.user.username} • VYRN Profile`, iconURL: interaction.user.displayAvatarURL() })
         .setThumbnail(interaction.user.displayAvatarURL({ dynamic: true }))
         .setDescription(
           `**${rank.emoji} ${rank.name}** — Level **${levelData.level}**\n\n` +
           `**Experience**\n` +
-          `> \`${levelData.xp} / ${nextXP} XP\`\n` +
+          `> \`${levelData.xp} / ${levelData.nextXP} XP\`\n` +
           `> ${createProgressBar(progress)} **${progress}%**\n\n` +
           `**Voice Activity**\n` +
           `> **${voiceMin}** minut\n\n` +
@@ -67,20 +43,12 @@ module.exports = {
           `**Active Boost**\n` +
           `> ${boost > 1 ? `**${boost}x XP** 🚀` : "**Brak**"}`
         )
-        .setFooter({
-          text: "VYRN Clan • Activity System",
-          iconURL: interaction.guild?.iconURL({ dynamic: true })
-        })
-        .setTimestamp();
+        .setFooter({ text: "VYRN Clan • Activity System" }).setTimestamp();
 
       await interaction.editReply({ embeds: [embed] });
-
     } catch (err) {
-      console.error("🔥 [PROFILE COMMAND ERROR]:", err);
-      await interaction.editReply({
-        content: "❌ Wystąpił błąd podczas ładowania profilu. Spróbuj ponownie.",
-        ephemeral: true
-      });
+      console.error("[PROFILE ERROR]", err);
+      await interaction.editReply({ content: "❌ Błąd ładowania profilu.", ephemeral: true });
     }
   }
 };
