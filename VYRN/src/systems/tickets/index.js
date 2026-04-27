@@ -9,8 +9,7 @@ const {
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
-  PermissionFlagsBits,
-  ComponentType
+  PermissionFlagsBits
 } = require("discord.js");
 
 // ====================== CONFIG ======================
@@ -18,51 +17,51 @@ const CONFIG = {
   PANEL_CHANNEL_ID: "1475558248487583805",
   LOG_CHANNEL_ID: "1494072832827850953",
   CATEGORY_ID: "1475985874385899530",
-  ADMIN_ROLE: "1475998527191519302", // Główna rola zarządzająca
+  ADMIN_ROLE: "1475998527191519302",
   PANEL_IMAGE: "https://media.discordapp.net/attachments/1475992778554216448/1496214765406650489/ezgif.com-animated-gif-maker.gif"
 };
 
 // ====================== CREATE PANEL ======================
 async function createTicketPanel(client) {
   const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
-  if (!channel) return console.warn("[TICKETS] ⚠️ Nie znaleziono kanału panelu.");
+  if (!channel) return console.warn("[TICKETS] ⚠️ Panel channel not found.");
 
   const embed = new EmbedBuilder()
     .setColor("#0a0a0a")
-    .setTitle("🎫 Recruitment Center")
+    .setTitle("🎫 Recruitment Center • Centrum Rekrutacji")
     .setDescription(
-      `**Welcome to VYRN Clan Recruitment**\n\n` +
+      `**Welcome to VYRN Clan Recruitment / Witamy w rekrutacji VYRN**\n\n` +
       `> • **🔥 VYRN Main Clan**\n` +
-      `> Competitive / High-tier players application\n\n` +
+      `> Competitive / High-tier players application.\n` +
+      `> Aplikacja dla graczy turniejowych / high-tier.\n\n` +
       `> • **🛠️ Staff Support**\n` +
-      `> Join the moderation & administration team\n\n` +
+      `> Join the moderation team as a Junior Moderator.\n` +
+      `> Dołącz do administracji jako Junior Moderator.\n\n` +
       `━━━━━━━━━━━━━━━━━━\n\n` +
-      `Wybierz opcję poniżej, aby otworzyć formularz zgłoszeniowy.`
+      `Select an option / Wybierz opcję:`
     )
     .setImage(CONFIG.PANEL_IMAGE)
-    .setFooter({ text: "VYRN CLAN • System Rekrutacji" })
+    .setFooter({ text: "VYRN CLAN • Recruitment Panel" })
     .setTimestamp();
 
   const menu = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId("clan_ticket_select")
-      .setPlaceholder("🎫 Wybierz typ zgłoszenia...")
+      .setPlaceholder("🎫 Select application type / Wybierz typ...")
       .addOptions([
-        { label: "VYRN Main Clan", description: "Aplikuj do głównego składu", value: "vyrn", emoji: "🔥" },
-        { label: "Staff Support", description: "Aplikuj do administracji", value: "staff", emoji: "🛠️" }
+        { label: "VYRN Main Clan", description: "Recruitment for players", value: "vyrn", emoji: "🔥" },
+        { label: "Staff Support", description: "Apply for Junior Moderator", value: "staff", emoji: "🛠️" }
       ])
   );
 
   const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-  const existing = messages?.find(m => m.embeds?.[0]?.title === "🎫 Recruitment Center");
+  const existing = messages?.find(m => m.embeds?.[0]?.title?.includes("Recruitment Center"));
 
   if (existing) {
     await existing.edit({ embeds: [embed], components: [menu] });
   } else {
     await channel.send({ embeds: [embed], components: [menu] });
   }
-
-  console.log("[TICKETS] ✅ Panel został zsynchronizowany.");
 }
 
 // ====================== MAIN HANDLER ======================
@@ -70,85 +69,102 @@ async function handle(interaction, client) {
   const { customId } = interaction;
 
   try {
-    // 1. Wybór z Menu (Otwieranie Modala)
     if (interaction.isStringSelectMenu() && customId === "clan_ticket_select") {
       return await openModal(interaction);
     }
 
-    // 2. Przycisk: Zamknij Ticket
     if (interaction.isButton() && customId === "close_ticket") {
       return await closeTicket(interaction);
     }
 
-    // 3. Przycisk: Przejmij (Claim) Ticket
     if (interaction.isButton() && customId === "claim_ticket") {
       return await claimTicket(interaction);
     }
 
-    // 4. Przycisk: Zmień nazwę (Rename Tool)
     if (interaction.isButton() && customId === "rename_ticket") {
-        return await openRenameModal(interaction);
+      return await openRenameModal(interaction);
     }
 
-    // 5. Submit Modala (Tworzenie ticketu)
     if (interaction.isModalSubmit() && customId.startsWith("ticket_modal_")) {
       const type = customId.split("_")[2];
       return await createTicket(interaction, type, client);
     }
 
-    // 6. Submit Modala (Zmiana nazwy kanału)
     if (interaction.isModalSubmit() && customId.startsWith("ticket_rename_modal_")) {
-        return await handleRename(interaction);
+      return await handleRename(interaction);
     }
-
   } catch (error) {
-    console.error("🔥 [TICKETS HANDLER ERROR]:", error);
+    console.error("🔥 [TICKETS ERROR]:", error);
   }
 }
 
-// ====================== STEPS ======================
-
+// ====================== MODALS ======================
 async function openModal(interaction) {
   const type = interaction.values[0];
-  const titles = { vyrn: "VYRN Main Clan Application", staff: "Staff Support Application" };
-
   const modal = new ModalBuilder()
     .setCustomId(`ticket_modal_${type}`)
-    .setTitle(titles[type]);
+    .setTitle(type === "vyrn" ? "VYRN Clan Application" : "Staff Application");
 
-  const nick = new TextInputBuilder()
-    .setCustomId("nick")
-    .setLabel("Nick w grze (Roblox)")
-    .setStyle(TextInputStyle.Short)
-    .setRequired(true);
+  if (type === "vyrn") {
+    const nick = new TextInputBuilder()
+      .setCustomId("nick")
+      .setLabel("Nickname (Roblox)")
+      .setPlaceholder("Twój nick w grze...")
+      .setStyle(TextInputStyle.Short).setRequired(true);
 
-  const why = new TextInputBuilder()
-    .setCustomId("why")
-    .setLabel("Dlaczego Ty? (Krótkie uzasadnienie)")
-    .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true);
+    const language = new TextInputBuilder()
+      .setCustomId("lang")
+      .setLabel("Language / Język (Polish / English)")
+      .setPlaceholder("PL / EN / Both")
+      .setStyle(TextInputStyle.Short).setRequired(true);
 
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(nick),
-    new ActionRowBuilder().addComponents(why)
-  );
+    const rebirths = new TextInputBuilder()
+      .setCustomId("rebirths")
+      .setLabel("How much Rebirth? / Ile masz Rebirth?")
+      .setPlaceholder("np. 500 Rebirths")
+      .setStyle(TextInputStyle.Short).setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(nick),
+      new ActionRowBuilder().addComponents(language),
+      new ActionRowBuilder().addComponents(rebirths)
+    );
+  } else {
+    const nick = new TextInputBuilder()
+      .setCustomId("nick")
+      .setLabel("Nickname (Roblox)")
+      .setStyle(TextInputStyle.Short).setRequired(true);
+
+    const age = new TextInputBuilder()
+      .setCustomId("age")
+      .setLabel("How old are you? / Ile masz lat?")
+      .setStyle(TextInputStyle.Short).setRequired(true);
+
+    const why = new TextInputBuilder()
+      .setCustomId("why")
+      .setLabel("Why Jr. Moderator? / Dlaczego Ty?")
+      .setPlaceholder("Dlaczego chcesz zostać Junior Moderatorem?")
+      .setStyle(TextInputStyle.Paragraph).setRequired(true);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(nick),
+      new ActionRowBuilder().addComponents(age),
+      new ActionRowBuilder().addComponents(why)
+    );
+  }
 
   await interaction.showModal(modal);
 }
 
+// ====================== CREATE TICKET ======================
 async function createTicket(interaction, type, client) {
-  const nick = interaction.fields.getTextInputValue("nick");
-  const why = interaction.fields.getTextInputValue("why");
-  const names = { vyrn: "VYRN Clan", staff: "Staff" };
-
-  // Sprawdź czy użytkownik ma już otwarty kanał (po topicu)
   const existing = interaction.guild.channels.cache.find(c => c.topic === interaction.user.id && c.parentId === CONFIG.CATEGORY_ID);
-  if (existing) {
-    return interaction.reply({ content: `❌ Masz już otwarte zgłoszenie: ${existing}`, ephemeral: true });
-  }
+  if (existing) return interaction.reply({ content: `❌ You already have a ticket / Masz już ticket: ${existing}`, ephemeral: true });
 
   await interaction.deferReply({ ephemeral: true });
 
+  const nick = interaction.fields.getTextInputValue("nick");
+  
   const channel = await interaction.guild.channels.create({
     name: `🎫-${type}-${interaction.user.username}`,
     type: ChannelType.GuildText,
@@ -163,142 +179,100 @@ async function createTicket(interaction, type, client) {
 
   const embed = new EmbedBuilder()
     .setColor("#0a0a0a")
-    .setTitle(`🎫 Nowa Aplikacja: ${names[type]}`)
-    .setDescription(
-      `**Użytkownik:** ${interaction.user}\n` +
-      `**Nick w grze:** \`${nick}\`\n\n` +
-      `**Uzasadnienie:**\n\`\`\`${why}\`\`\`\n` +
-      `📌 Prosimy oczekiwać na decyzję Staffu. Możesz wysłać dodatkowe screeny/statystyki poniżej.`
-    )
-    .setFooter({ text: "VYRN Black Edition • Ticket Management" })
+    .setTitle(`🎫 New Application: ${type === "vyrn" ? "Main Clan" : "Staff Support"}`)
     .setTimestamp();
 
+  if (type === "vyrn") {
+    embed.addFields(
+      { name: "👤 User", value: `${interaction.user}`, inline: true },
+      { name: "🎮 Nickname", value: `\`${nick}\``, inline: true },
+      { name: "🌐 Language", value: `\`${interaction.fields.getTextInputValue("lang")}\``, inline: true },
+      { name: "🔄 Rebirths", value: `\`${interaction.fields.getTextInputValue("rebirths")}\``, inline: false }
+    );
+  } else {
+    embed.addFields(
+      { name: "👤 User", value: `${interaction.user}`, inline: true },
+      { name: "🎮 Nickname", value: `\`${nick}\``, inline: true },
+      { name: "🎂 Age / Wiek", value: `\`${interaction.fields.getTextInputValue("age")}\``, inline: true },
+      { name: "🛠️ Why Junior Moderator?", value: `\`\`\`${interaction.fields.getTextInputValue("why")}\`\`\``, inline: false }
+    );
+  }
+
   const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("claim_ticket").setLabel("Przejmij (Claim)").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("rename_ticket").setLabel("Zmień nazwę").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("close_ticket").setLabel("Zamknij").setStyle(ButtonStyle.Danger)
+    new ButtonBuilder().setCustomId("claim_ticket").setLabel("Claim / Przejmij").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId("rename_ticket").setLabel("Rename / Nazwa").setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId("close_ticket").setLabel("Close / Zamknij").setStyle(ButtonStyle.Danger)
   );
 
-  await channel.send({
-    content: `${interaction.user} | <@&${CONFIG.ADMIN_ROLE}>`,
-    embeds: [embed],
-    components: [row]
-  });
-
-  await interaction.editReply({ content: `✅ Zgłoszenie zostało utworzone: ${channel}` });
+  await channel.send({ content: `${interaction.user} | <@&${CONFIG.ADMIN_ROLE}>`, embeds: [embed], components: [row] });
+  await interaction.editReply({ content: `✅ Ticket created / Utworzono: ${channel}` });
   await sendLog(client, interaction, type, channel, nick);
 }
 
-// ====================== STAFF TOOLS ======================
-
+// ====================== STAFF ACTIONS ======================
 async function claimTicket(interaction) {
-  if (!interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE)) {
-    return interaction.reply({ content: "❌ Tylko Staff może przejąć ten ticket.", ephemeral: true });
-  }
+  if (!interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE)) return interaction.reply({ content: "❌ No permission / Brak uprawnień.", ephemeral: true });
 
   const embed = EmbedBuilder.from(interaction.message.embeds[0])
     .setColor("#2ecc71")
-    .addFields({ name: "🛡️ Obsługiwany przez:", value: `${interaction.user}`, inline: false });
+    .addFields({ name: "🛡️ Handled by / Obsługiwany przez:", value: `${interaction.user}`, inline: false });
 
-  // Wyłącz przycisk Claim
   const rows = interaction.message.components.map(row => {
     const newRow = ActionRowBuilder.from(row);
-    newRow.components.forEach(btn => {
-      if (btn.data.custom_id === "claim_ticket") btn.setDisabled(true);
-    });
+    newRow.components.forEach(btn => { if (btn.data.custom_id === "claim_ticket") btn.setDisabled(true); });
     return newRow;
   });
 
   await interaction.update({ embeds: [embed], components: rows });
-  await interaction.followUp({ content: `✅ **${interaction.user.username}** przejął to zgłoszenie i będzie je prowadził.` });
+  await interaction.followUp({ content: `✅ **${interaction.user.username}** claimed this ticket.` });
 }
 
 async function openRenameModal(interaction) {
-    if (!interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE)) {
-        return interaction.reply({ content: "❌ Brak uprawnień.", ephemeral: true });
-    }
-
-    const modal = new ModalBuilder()
-        .setCustomId(`ticket_rename_modal_${interaction.channel.id}`)
-        .setTitle("Zmień nazwę kanału");
-
-    const input = new TextInputBuilder()
-        .setCustomId("new_name")
-        .setLabel("Nowa nazwa (np. zaakceptowany-nick)")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-    modal.addComponents(new ActionRowBuilder().addComponents(input));
-    await interaction.showModal(modal);
+  if (!interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE)) return interaction.reply({ content: "❌ No permission.", ephemeral: true });
+  const modal = new ModalBuilder().setCustomId(`ticket_rename_modal_${interaction.channel.id}`).setTitle("Rename Ticket");
+  const input = new TextInputBuilder().setCustomId("new_name").setLabel("New name / Nowa nazwa").setStyle(TextInputStyle.Short).setRequired(true);
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+  await interaction.showModal(modal);
 }
 
 async function handleRename(interaction) {
-    const newName = interaction.fields.getTextInputValue("new_name").toLowerCase().replace(/\s+/g, '-');
-    await interaction.channel.setName(newName);
-    await interaction.reply({ content: `✅ Zmieniono nazwę kanału na: \`${newName}\``, ephemeral: true });
+  const newName = interaction.fields.getTextInputValue("new_name").toLowerCase().replace(/\s+/g, '-');
+  await interaction.channel.setName(newName);
+  await interaction.reply({ content: `✅ Name updated to / Nazwa: \`${newName}\``, ephemeral: true });
 }
 
-// ====================== CLOSE & LOGS ======================
-
 async function closeTicket(interaction) {
-  await interaction.reply({ content: "🔒 **Zamykanie zgłoszenia...** Kanał zostanie usunięty za 5 sekund.", ephemeral: true });
-
+  await interaction.reply({ content: "🔒 Closing... / Zamykanie...", ephemeral: true });
   const messages = await interaction.channel.messages.fetch({ limit: 100 });
-  const transcript = messages
-    .filter(m => !m.author.bot)
-    .map(m => `[${m.createdAt.toLocaleString()}] ${m.author.tag}: ${m.content}`)
-    .reverse()
-    .join("\n");
+  const transcript = messages.filter(m => !m.author.bot).map(m => `[${m.createdAt.toLocaleString()}] ${m.author.tag}: ${m.content}`).reverse().join("\n");
 
   const logChannel = await interaction.client.channels.fetch(CONFIG.LOG_CHANNEL_ID).catch(() => null);
   if (logChannel) {
     const logEmbed = new EmbedBuilder()
-      .setColor("#ff4757")
-      .setTitle("📁 Ticket Closed & Archived")
+      .setColor("#ff4757").setTitle("📁 Ticket Archived")
       .addFields(
-        { name: "Właściciel", value: `<@${interaction.channel.topic}>`, inline: true },
-        { name: "Zamknięty przez", value: `${interaction.user}`, inline: true },
-        { name: "Nazwa kanału", value: `\`${interaction.channel.name}\``, inline: true }
-      )
-      .setTimestamp();
+        { name: "Owner", value: `<@${interaction.channel.topic}>`, inline: true },
+        { name: "Closed by", value: `${interaction.user}`, inline: true }
+      ).setTimestamp();
 
-    await logChannel.send({
-      embeds: [logEmbed],
-      files: [{ attachment: Buffer.from(transcript || "Brak wiadomości.", "utf-8"), name: `transcript-${interaction.channel.name}.txt` }]
-    });
+    await logChannel.send({ embeds: [logEmbed], files: [{ attachment: Buffer.from(transcript || "No messages."), name: `transcript-${interaction.channel.name}.txt` }] });
   }
-
-  setTimeout(() => interaction.channel.delete().catch(() => {}), 5000);
+  setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
 }
 
 async function sendLog(client, interaction, type, channel, nick) {
   const logChannel = await client.channels.fetch(CONFIG.LOG_CHANNEL_ID).catch(() => null);
   if (!logChannel) return;
-
-  const names = { vyrn: "VYRN Clan", staff: "Staff Support" };
-
   const embed = new EmbedBuilder()
-    .setColor("#0a0a0a")
-    .setTitle("📩 New Ticket Opened")
+    .setColor("#0a0a0a").setTitle("📩 Ticket Log")
     .addFields(
-      { name: "Użytkownik", value: `${interaction.user.tag} (${interaction.user.id})`, inline: true },
-      { name: "Typ", value: names[type], inline: true },
-      { name: "Kanał", value: `${channel}`, inline: true },
-      { name: "Nick Roblox", value: `\`${nick}\``, inline: false }
-    )
-    .setTimestamp();
-
+      { name: "User", value: `${interaction.user.tag}`, inline: true },
+      { name: "Type", value: type.toUpperCase(), inline: true },
+      { name: "Nick Roblox", value: nick }
+    ).setTimestamp();
   await logChannel.send({ embeds: [embed] }).catch(() => {});
 }
 
-// ====================== INIT ======================
-function init(client) {
-  console.log("🎟 Ticket System [BLACK EDITION] → załadowany");
-  // Wywołaj createTicketPanel(client) w event/ready.js, aby zsynchronizować panel
-}
+function init(client) { console.log("🎟 Ticket System [Bilingual] → załadowany"); }
 
-module.exports = {
-  init,
-  createTicketPanel,
-  handle
-};
+module.exports = { init, createTicketPanel, handle };
