@@ -1,6 +1,4 @@
-// =====================================================
-// EVENT SYSTEM - HYBRID MODULAR
-// =====================================================
+// src/systems/event/index.js
 const {
   EmbedBuilder,
   ActionRowBuilder,
@@ -11,278 +9,227 @@ const {
 const fs = require("fs");
 const path = require("path");
 
-// ====================== CONFIG ======================
+// ====================== CONFIG (Unified & Scalable) ======================
 const CONFIG = {
   CHANNEL_ID: "1484937784283369502",
-  ROLES: {
-    MERCHANT: "1476000993660502139",
-  },
-  IMAGES: {
-    PANEL: "https://imgur.com/l405BQN.png",
-    MERCHANT: "https://imgur.com/sasz9j4.png",
-  },
+  LOG_CHANNEL: "1494072832827850953",
   EVENTS: {
-    merchant: { hours: [2, 5, 8, 11, 14, 17, 20, 23], role: "MERCHANT" },
+    merchant: { 
+      name: "Merchant",
+      hours: [2, 5, 8, 11, 14, 17, 20, 23], 
+      roleId: "1476000993660502139",
+      emoji: "🍯",
+      image: "https://imgur.com/sasz9j4.png"
+    },
+    // Tutaj możesz dopisać kolejne eventy, a menu same się zaktualizują!
   },
-  REFRESH_INTERVAL: 10_000, // 10 sekund
-  DELETE_AFTER: 15 * 60 * 1000, // 15 minut
+  PANEL_IMAGE: "https://imgur.com/l405BQN.png",
+  DELETE_EVENT_AFTER: 15 * 60 * 1000, // 15 minut
 };
 
-// ====================== DB ======================
 const DB_PATH = path.join(process.env.DATA_DIR || "/data", "eventDB.json");
 
+// ====================== DATABASE & UTILS ======================
 const loadDB = () => {
   if (!fs.existsSync(DB_PATH)) return { dm: {} };
-  try {
-    return JSON.parse(fs.readFileSync(DB_PATH, "utf8"));
-  } catch {
-    return { dm: {} };
-  }
+  try { return JSON.parse(fs.readFileSync(DB_PATH, "utf8")); } catch { return { dm: {} }; }
 };
 
-const saveDB = (db) => {
-  fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+const saveDB = (db) => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
+
+const getNextOccurrence = (hours) => {
+  const now = new Date();
+  const warsawNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+  
+  const target = new Date(warsawNow);
+  const nextHour = hours.find(h => h > warsawNow.getHours()) ?? hours[0];
+  
+  if (nextHour <= warsawNow.getHours()) target.setDate(target.getDate() + 1);
+  target.setHours(nextHour, 0, 0, 0);
+  
+  return Math.floor(target.getTime() / 1000);
 };
 
-// ====================== TIME HELPERS ======================
-const getNow = () =>
-  new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
-
-const getNextHour = (hours) => {
-  const now = getNow().getHours();
-  return hours.find((h) => h > now) ?? hours[0];
-};
-
-const getCountdown = (hour) => {
-  const now = getNow();
-  const target = new Date(now);
-  if (hour <= now.getHours()) target.setDate(target.getDate() + 1);
-  target.setHours(hour, 0, 0, 0);
-  const diff = target - now;
-  const s = Math.floor(diff / 1000);
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ${s % 60}s`;
-};
-
-// ====================== CACHE ======================
-const processed = new Map();
-
-// ====================== EMBEDS ======================
-const panelEmbed = () =>
-  new EmbedBuilder()
+// ====================== COMPONENTS ======================
+const buildPanelEmbed = () => {
+  const embed = new EmbedBuilder()
     .setColor("#0a0a0a")
     .setTitle("🎫 EVENT CENTER")
-    .setDescription(
-      Object.entries(CONFIG.EVENTS)
-        .map(([name, e]) => {
-          const next = getNextHour(e.hours);
-          return [
-            `**${name.toUpperCase()} EVENT**`,
-            `Next: \`${next}:00\``,
-            `Starts in: **${getCountdown(next)}**`,
-          ].join("\n");
-        })
-        .join("\n\n━━━━━━━━━━━━━━\n\n")
-    )
-    .setImage(CONFIG.IMAGES.PANEL)
-    .setFooter({ text: "VYRN • Event Tracker" })
+    .setImage(CONFIG.PANEL_IMAGE)
+    .setFooter({ text: "VYRN • Auto-updating Tracker" })
     .setTimestamp();
 
-const eventEmbed = (name, image) =>
-  new EmbedBuilder()
-    .setColor("#0a0a0a")
-    .setTitle(`🎉 ${name.toUpperCase()} EVENT STARTED`)
-    .setDescription("📢 Event is now **ACTIVE**\n\n👉 Join now and participate!")
-    .setImage(image || null)
-    .setFooter({ text: "VYRN • Event System" })
-    .setTimestamp();
+  const description = Object.values(CONFIG.EVENTS).map(e => {
+    const timestamp = getNextOccurrence(e.hours);
+    return `${e.emoji} **${e.name.toUpperCase()}**\nNext: <t:${timestamp}:t> | Starts: <t:${timestamp}:R>`;
+  }).join("\n\n━━━━━━━━━━━━━━\n\n");
 
-// ====================== BUTTONS & MENUS ======================
-const buttons = () =>
-  new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("refresh").setLabel("Refresh").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("roles").setLabel("Roles").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("dm").setLabel("Notifications").setStyle(ButtonStyle.Primary)
-  );
-
-const roleMenu = () =>
-  new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("role_menu")
-      .setPlaceholder("Select event roles")
-      .setMinValues(0)
-      .setMaxValues(1)
-      .addOptions([{ label: "Merchant", value: "merchant", emoji: "🍯" }])
-  );
-
-const dmMenu = () =>
-  new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId("dm_menu")
-      .setPlaceholder("Event notifications DM")
-      .setMinValues(0)
-      .setMaxValues(1)
-      .addOptions([{ label: "Merchant", value: "merchant", emoji: "🍯" }])
-  );
-
-// ====================== CORE EVENT ENGINE ======================
-function registerEvent(client, key, event, hour, roleId, image) {
-  const now = getNow();
-  const h = now.getHours();
-  const m = now.getMinutes();
-  const baseKey = `${key}-${hour}`;
-  const preKey = baseKey + "-pre";
-  const startKey = baseKey + "-start";
-
-  const fetchChannel = () => client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-
-  // 5 minut przed
-  if (h === (hour - 1 + 24) % 24 && m === 55 && !processed.has(preKey)) {
-    fetchChannel().then((ch) => {
-      if (!ch) return;
-      ch.send(`<@&${roleId}> ${key.toUpperCase()} starts in 5 minutes!`)
-        .then((msg) => processed.set(preKey, msg.id));
-    });
-  }
-
-  // Start eventu
-  if (h === hour && m === 0 && !processed.has(startKey)) {
-    fetchChannel().then(async (ch) => {
-      if (!ch) return;
-
-      const preId = processed.get(preKey);
-      if (preId) {
-        const msg = await ch.messages.fetch(preId).catch(() => null);
-        msg?.delete().catch(() => {});
-        processed.delete(preKey);
-      }
-
-      const msg = await ch.send({
-        content: `<@&${roleId}>`,
-        embeds: [eventEmbed(key, image)],
-      });
-
-      setTimeout(() => msg.delete().catch(() => {}), CONFIG.DELETE_AFTER);
-      processed.set(startKey, true);
-    });
-  }
-}
-
-// ====================== START SYSTEM ======================
-function startEventSystem(client) {
-  console.log("🎟 Event System uruchomiony.");
-
-  setInterval(() => {
-    for (const [name, data] of Object.entries(CONFIG.EVENTS)) {
-      for (const hour of data.hours) {
-        registerEvent(
-          client,
-          name,
-          data,
-          hour,
-          CONFIG.ROLES[data.role],
-          CONFIG.IMAGES[name.toUpperCase()] || null
-        );
-      }
-    }
-
-    // Czyszczenie cache co godzinę
-    if (getNow().getMinutes() === 5) processed.clear();
-  }, CONFIG.REFRESH_INTERVAL);
-}
-
-// ====================== PANEL ======================
-async function startPanel(client) {
-  try {
-    const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
-    if (!channel?.isTextBased()) return;
-
-    const messages = await channel.messages.fetch({ limit: 20 });
-    let panelMsg = messages.find(m =>
-      m.author.id === client.user.id &&
-      m.embeds.length > 0 &&
-      m.embeds[0].title?.includes("EVENT CENTER")
-    );
-
-    const embed = panelEmbed();
-    const components = [buttons()];
-
-    if (panelMsg) {
-      await panelMsg.edit({ embeds: [embed], components }).catch(() => {});
-    } else {
-      panelMsg = await channel.send({ embeds: [embed], components });
-    }
-
-    // Odświeżanie co 10 sekund
-    setInterval(() => {
-      panelMsg.edit({ embeds: [panelEmbed()], components: [buttons()] }).catch(() => {});
-    }, CONFIG.REFRESH_INTERVAL);
-
-  } catch (err) {
-    console.error("❌ Błąd startPanel:", err.message);
-  }
-}
-
-// ====================== INTERACTION HANDLER ======================
-async function handleEventInteraction(interaction) {
-  const id = interaction.customId;
-
-  if (id === "refresh") {
-    return interaction.update({
-      embeds: [panelEmbed()],
-      components: [buttons()],
-    });
-  }
-
-  if (id === "roles") {
-    return interaction.reply({
-      content: "🎭 Wybierz role eventowe:",
-      components: [roleMenu()],
-      ephemeral: true,
-    });
-  }
-
-  if (id === "dm") {
-    return interaction.reply({
-      content: "📩 Powiadomienia DM:",
-      components: [dmMenu()],
-      ephemeral: true,
-    });
-  }
-
-  if (id === "role_menu") {
-    const member = await interaction.guild.members.fetch(interaction.user.id);
-    const map = { merchant: CONFIG.ROLES.MERCHANT };
-
-    for (const r of Object.values(map)) {
-      if (member.roles.cache.has(r)) await member.roles.remove(r).catch(() => {});
-    }
-
-    for (const val of interaction.values) {
-      const role = map[val];
-      if (role) await member.roles.add(role).catch(() => {});
-    }
-
-    return interaction.reply({ content: "✅ Role zaktualizowane!", ephemeral: true });
-  }
-
-  if (id === "dm_menu") {
-    const db = loadDB();
-    db.dm[interaction.user.id] = interaction.values;
-    saveDB(db);
-    return interaction.reply({ content: "📩 Powiadomienia zapisane!", ephemeral: true });
-  }
-}
-
-// ====================== INIT ======================
-function init(client) {
-  console.log("🎫 Event System → załadowany");
-  startEventSystem(client);
-  startPanel(client);
-}
-
-module.exports = {
-  init,
-  startPanel,
-  startEventSystem,
-  handleEventInteraction
+  embed.setDescription(description);
+  return embed;
 };
+
+const buildMenus = (customId, placeholder) => {
+  const options = Object.entries(CONFIG.EVENTS).map(([key, e]) => ({
+    label: e.name,
+    value: key,
+    emoji: e.emoji,
+    description: `Notify for ${e.name} event`
+  }));
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(customId)
+      .setPlaceholder(placeholder)
+      .setMinValues(0)
+      .setMaxValues(options.length)
+      .addOptions(options)
+  );
+};
+
+const buildButtons = () => new ActionRowBuilder().addComponents(
+  new ButtonBuilder().setCustomId("refresh_events").setLabel("Refresh").setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId("get_event_roles").setLabel("Roles").setStyle(ButtonStyle.Secondary),
+  new ButtonBuilder().setCustomId("get_event_dm").setLabel("DM Alerts").setStyle(ButtonStyle.Primary)
+);
+
+// ====================== CORE ENGINE ======================
+const processed = new Set();
+
+async function checkEvents(client) {
+  const now = new Date();
+  const warsawNow = new Date(now.toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
+  const h = warsawNow.getHours();
+  const m = warsawNow.getMinutes();
+
+  for (const [key, e] of Object.entries(CONFIG.EVENTS)) {
+    if (!e.hours.includes(h)) continue;
+
+    const startKey = `${key}-${h}-${warsawNow.getDate()}`;
+    if (m === 0 && !processed.has(startKey)) {
+      processed.add(startKey);
+      await triggerEvent(client, key, e);
+    }
+  }
+
+  // Czyść cache starego dnia
+  if (h === 0 && m === 5) processed.clear();
+}
+
+async function triggerEvent(client, key, eventData) {
+  const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+  if (!channel) return;
+
+  const embed = new EmbedBuilder()
+    .setColor("#22c55e") // Zielony VYRN
+    .setTitle(`🎉 ${eventData.name.toUpperCase()} STARTED`)
+    .setDescription(`${eventData.emoji} The event is now **ACTIVE**!\n\n👉 Join the game and participate now.`)
+    .setImage(eventData.image)
+    .setTimestamp();
+
+  const msg = await channel.send({ 
+    content: `<@&${eventData.roleId}>`, 
+    embeds: [embed] 
+  });
+
+  // Wysyłanie DM do zapisanych osób
+  const db = loadDB();
+  const usersToNotify = Object.entries(db.dm)
+    .filter(([_, subs]) => subs.includes(key))
+    .map(([userId]) => userId);
+
+  for (const userId of usersToNotify) {
+    const user = await client.users.fetch(userId).catch(() => null);
+    if (user) {
+      user.send({ 
+        content: `🔔 **VYRN Alert:** The **${eventData.name}** event has just started!`,
+        embeds: [embed] 
+      }).catch(() => console.log(`[EVENT] Could not DM ${userId}`));
+    }
+  }
+
+  setTimeout(() => msg.delete().catch(() => {}), CONFIG.DELETE_EVENT_AFTER);
+}
+
+// ====================== HANDLERS ======================
+async function handleEventInteraction(interaction) {
+  const { customId, member, values, user } = interaction;
+
+  try {
+    if (customId === "refresh_events") {
+      return await interaction.update({ embeds: [buildPanelEmbed()] });
+    }
+
+    if (customId === "get_event_roles") {
+      return await interaction.reply({ 
+        content: "🎭 Wybierz role, które chcesz otrzymać:", 
+        components: [buildMenus("role_menu", "Select Roles")], 
+        ephemeral: true 
+      });
+    }
+
+    if (customId === "get_event_dm") {
+      return await interaction.reply({ 
+        content: "📩 Wybierz eventy, o których chcesz dostawać powiadomienie w DM:", 
+        components: [buildMenus("dm_menu", "Select DM Alerts")], 
+        ephemeral: true 
+      });
+    }
+
+    if (customId === "role_menu") {
+      const rolesToSet = values.map(v => CONFIG.EVENTS[v].roleId);
+      const allEventRoles = Object.values(CONFIG.EVENTS).map(e => e.roleId);
+
+      // Usuń wszystkie i dodaj wybrane
+      for (const roleId of allEventRoles) {
+        if (member.roles.cache.has(roleId)) await member.roles.remove(roleId).catch(() => {});
+      }
+      for (const roleId of rolesToSet) {
+        await member.roles.add(roleId).catch(() => {});
+      }
+
+      return await interaction.reply({ content: "✅ Twoje role eventowe zostały zaktualizowane!", ephemeral: true });
+    }
+
+    if (customId === "dm_menu") {
+      const db = loadDB();
+      db.dm[user.id] = values;
+      saveDB(db);
+      return await interaction.reply({ content: "✅ Twoje preferencje powiadomień DM zostały zapisane!", ephemeral: true });
+    }
+  } catch (err) {
+    console.error("🔥 Interaction Error:", err);
+  }
+}
+
+// ====================== INITIALIZATION ======================
+let panelMessage = null;
+
+async function syncPanel(client) {
+  const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
+  if (!channel) return;
+
+  const messages = await channel.messages.fetch({ limit: 10 });
+  panelMessage = messages.find(m => m.embeds[0]?.title === "🎫 EVENT CENTER");
+
+  if (panelMessage) {
+    await panelMessage.edit({ embeds: [buildPanelEmbed()], components: [buildButtons()] });
+  } else {
+    panelMessage = await channel.send({ embeds: [buildPanelEmbed()], components: [buildButtons()] });
+  }
+}
+
+function init(client) {
+  console.log("🎫 Event System [Black Edition v2] → załadowany");
+  
+  syncPanel(client);
+  
+  // Sprawdzanie eventów co minutę (wystarczy, bo używamy timestamps)
+  setInterval(() => checkEvents(client), 60000);
+  
+  // Odświeżanie panelu raz na godzinę (timestamps same odliczają, więc rzadka edycja wystarczy)
+  setInterval(() => {
+    if (panelMessage) panelMessage.edit({ embeds: [buildPanelEmbed()] }).catch(() => syncPanel(client));
+  }, 3600000);
+}
+
+module.exports = { init, handleEventInteraction };
