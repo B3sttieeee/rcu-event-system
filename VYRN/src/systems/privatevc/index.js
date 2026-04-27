@@ -29,7 +29,8 @@ const channelBans = new Map();    // channelId → Set<userId>
 
 // ====================== CREATE CHANNEL ======================
 async function handlePrivateChannelCreation(member) {
-  if (!member.voice?.channel || member.voice.channel.id !== CREATE_CHANNEL_ID) return;
+  // POPRAWKA: Bezpieczne sprawdzanie channelId
+  if (!member.voice || member.voice.channelId !== CREATE_CHANNEL_ID) return;
   if (creatingUsers.has(member.id)) return;
 
   creatingUsers.add(member.id);
@@ -68,8 +69,10 @@ async function handlePrivateChannelCreation(member) {
 
     // Przenieś użytkownika
     setTimeout(() => {
-      if (member.voice?.channel?.id === CREATE_CHANNEL_ID) {
-        member.voice.setChannel(channel).catch(() => {});
+      // Pobieramy aktualny stan z cache, żeby mieć pewność, że nadal tam czeka
+      const freshMember = member.guild.members.cache.get(member.id);
+      if (freshMember && freshMember.voice?.channelId === CREATE_CHANNEL_ID) {
+        freshMember.voice.setChannel(channel).catch(() => {});
       }
     }, MOVE_DELAY);
 
