@@ -1,5 +1,5 @@
 // =====================================================
-// VYRN BOT - MAIN FILE (CLEAN & STABLE)
+// VYRN BOT - MAIN FILE (CLEAN, STABLE & OPTIMIZED)
 // =====================================================
 const { Client, GatewayIntentBits, Collection } = require("discord.js");
 const fs = require("fs");
@@ -19,57 +19,48 @@ const client = new Client({
 
 client.commands = new Collection();
 
-// ====================== RATE LIMIT ======================
+// ====================== RATE LIMIT HANDLING ======================
 client.rest.on("rateLimited", (info) => {
-  console.warn(`[RATE LIMIT] ${info.method} ${info.url} — ${info.timeToReset}ms`);
+  console.warn(`[RATE LIMIT] ⚠️ ${info.method} ${info.url} — Reset za: ${info.timeToReset}ms`);
 });
 
-// ====================== LOAD COMMANDS ======================
+// ====================== COMMAND LOADER ======================
 function loadCommands() {
   const commandsPath = path.join(__dirname, "commands");
-  if (!fs.existsSync(commandsPath)) {
-    console.warn("⚠️ Folder 'commands' nie istnieje!");
-    return;
-  }
+  if (!fs.existsSync(commandsPath)) return console.warn("⚠️ Folder 'commands' nie istnieje!");
 
   let count = 0;
-  const loadFile = (filePath) => {
-    try {
-      delete require.cache[require.resolve(filePath)];
-      const cmd = require(filePath);
-      if (cmd?.data?.name && typeof cmd.execute === "function") {
-        client.commands.set(cmd.data.name, cmd);
-        console.log(`✅ Command: /${cmd.data.name}`);
-        count++;
-      }
-    } catch (e) {
-      console.error(`❌ CMD ERROR ${filePath}:`, e.message);
-    }
-  };
-
   const items = fs.readdirSync(commandsPath);
+
   for (const item of items) {
     const itemPath = path.join(commandsPath, item);
+    
+    // Obsługa podfolderów w komendach
     if (fs.statSync(itemPath).isDirectory()) {
-      fs.readdirSync(itemPath)
-        .filter(f => f.endsWith(".js"))
-        .forEach(f => loadFile(path.join(itemPath, f)));
+      const subFiles = fs.readdirSync(itemPath).filter(f => f.endsWith(".js"));
+      for (const file of subFiles) {
+        const filePath = path.join(itemPath, file);
+        const cmd = require(filePath);
+        if (cmd?.data?.name) {
+          client.commands.set(cmd.data.name, cmd);
+          count++;
+        }
+      }
     } else if (item.endsWith(".js")) {
-      loadFile(itemPath);
+      const cmd = require(itemPath);
+      if (cmd?.data?.name) {
+        client.commands.set(cmd.data.name, cmd);
+        count++;
+      }
     }
   }
-  console.log(`📊 Commands loaded: ${count}`);
+  console.log(`✅ Załadowano komendy: ${count}`);
 }
 
-// ====================== LOAD EVENTS ======================
+// ====================== EVENT LOADER ======================
 function loadEvents() {
   const eventsPath = path.join(__dirname, "events");
-  if (!fs.existsSync(eventsPath)) {
-    console.warn("⚠️ Folder 'events' nie istnieje!");
-    return;
-  }
-
-  client.removeAllListeners(); // czyszczenie starych listenerów
+  if (!fs.existsSync(eventsPath)) return console.warn("⚠️ Folder 'events' nie istnieje!");
 
   const files = fs.readdirSync(eventsPath).filter(f => f.endsWith(".js"));
   let count = 0;
@@ -77,52 +68,50 @@ function loadEvents() {
   for (const file of files) {
     try {
       const fullPath = path.join(eventsPath, file);
-      delete require.cache[require.resolve(fullPath)];
       const event = require(fullPath);
 
-      if (!event?.name || typeof event.execute !== "function") {
-        console.warn(`⚠️ Invalid event: ${file}`);
-        continue;
-      }
-
-      const runner = (...args) => event.execute(...args, client);
+      if (!event?.name || typeof event.execute !== "function") continue;
 
       if (event.once) {
-        client.once(event.name, runner);
+        client.once(event.name, (...args) => event.execute(...args, client));
       } else {
-        client.on(event.name, runner);
+        client.on(event.name, (...args) => event.execute(...args, client));
       }
-
-      console.log(`✅ Event: ${event.name}`);
       count++;
     } catch (e) {
-      console.error(`❌ EVENT ERROR ${file}:`, e.message);
+      console.error(`❌ BŁĄD EVENTU [${file}]:`, e.message);
     }
   }
-  console.log(`📊 Events loaded: ${count}`);
+  console.log(`✅ Załadowano eventy: ${count}`);
 }
 
-// ====================== LOAD SYSTEMS ======================
+// ====================== SYSTEMS LOADER ======================
 async function loadSystems() {
-  console.log("\n🚀 Loading systems...");
+  console.log("\n🚀 Inicjalizacja systemów...");
 
   const systems = [
     "log",
-    "economy",
+    "economy",      // Economy musi być przed Activity
     "boost",
-    "activity",      // ← Główny system (voice + xp + coins + level)
+    "activity",     // Activity potrzebuje Economy
     "clan",
     "rules",
     "event",
     "giveaway",
     "tickets",
-    "privatevc"
+    "privatevc",
+    "voiceRewards"  // Nagrody za voice
   ];
 
   for (const sysName of systems) {
     try {
-      const sysPath = `./systems/${sysName}`;
-      delete require.cache[require.resolve(sysPath)]; // odświeżenie cache
+      const sysPath = path.join(__dirname, "systems", sysName);
+      
+      // Sprawdź czy folder istnieje
+      if (!fs.existsSync(sysPath)) {
+        console.log(`⚠️ ${sysName.padEnd(12)} → folder nie istnieje`);
+        continue;
+      }
 
       const sys = require(sysPath);
 
@@ -131,42 +120,42 @@ async function loadSystems() {
         if (result instanceof Promise) await result;
         console.log(`✅ ${sysName.padEnd(12)} → OK`);
       } else {
-        console.log(`⚠️ ${sysName.padEnd(12)} → brak init()`);
+        console.log(`ℹ️ ${sysName.padEnd(12)} → załadowany (brak init)`);
       }
     } catch (e) {
-      console.error(`❌ ${sysName.padEnd(12)} → ERROR: ${e.message}`);
+      console.error(`❌ ${sysName.padEnd(12)} → BŁĄD: ${e.message}`);
     }
   }
-  console.log("🎉 All systems loaded!\n");
+  console.log("🎉 Wszystkie systemy gotowe!\n");
 }
 
-// ====================== READY ======================
+// ====================== READY EVENT ======================
 client.once("ready", async () => {
   console.log("================================");
-  console.log(`🔥 Logged in as ${client.user.tag}`);
-  console.log(`📊 Guilds: ${client.guilds.cache.size}`);
+  console.log(`🔥 Zalogowano jako: ${client.user.tag}`);
+  console.log(`📊 Serwery: ${client.guilds.cache.size}`);
   console.log("================================");
 
   loadCommands();
   loadEvents();
   await loadSystems();
 
-  console.log("✅ BOT READY & STABLE");
+  console.log("✅ VYRN BOT READY & STABLE");
 });
 
 // ====================== GLOBAL ERROR HANDLING ======================
 process.on("unhandledRejection", (err) => {
-  console.error("❌ Unhandled Rejection:", err);
+  console.error("❌ Krytyczny błąd (Unhandled Rejection):", err);
 });
 
 process.on("uncaughtException", (err) => {
-  console.error("❌ Uncaught Exception:", err);
+  console.error("❌ Krytyczny błąd (Uncaught Exception):", err);
 });
 
 // ====================== LOGIN ======================
 client.login(process.env.TOKEN)
-  .then(() => console.log("🔑 Login successful"))
+  .then(() => console.log("🔑 Połączenie z Discordem nawiązane"))
   .catch(err => {
-    console.error("❌ LOGIN ERROR:", err.message);
+    console.error("❌ BŁĄD LOGOWANIA:", err.message);
     process.exit(1);
   });
