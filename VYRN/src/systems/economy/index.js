@@ -1,5 +1,5 @@
 // =====================================================
-// ECONOMY SYSTEM - FINAL STABLE VERSION
+// ECONOMY SYSTEM - OPTIMIZED & STABLE
 // =====================================================
 const fs = require("fs");
 const path = require("path");
@@ -49,7 +49,8 @@ function saveCoins() {
     fs.writeFileSync(COINS_TMP_PATH, snapshot, "utf8");
     fs.renameSync(COINS_TMP_PATH, COINS_PATH);
     
-    console.log(`[ECONOMY] ✅ Zapisano userCoins.json`);
+    // Opcjonalnie możesz to wyciszyć, żeby nie spamowało konsoli co 20 sekund:
+    // console.log(`[ECONOMY] ✅ Zapisano userCoins.json w tle`);
   } catch (err) {
     console.error("[ECONOMY] SAVE ERROR:", err.message);
   }
@@ -71,7 +72,7 @@ function addCoins(userId, amount) {
   const newVal = current + val;
 
   userCoins.set(userId, newVal);
-  saveCoins();
+  // USUNIĘTO saveCoins() - zapobiega lagom i wyścigom danych!
 
   console.log(`[ECONOMY] +${val} monet | ${userId} | ${current} → ${newVal}`);
   return newVal;
@@ -86,7 +87,7 @@ function spendCoins(userId, amount) {
   if (current < val) return false;
 
   userCoins.set(userId, current - val);
-  saveCoins();
+  // USUNIĘTO saveCoins()
   return true;
 }
 
@@ -94,7 +95,7 @@ function setCoins(userId, amount) {
   if (!userId) return 0;
   const val = Math.floor(Math.max(0, Number(amount) || 0));
   userCoins.set(userId, val);
-  saveCoins();
+  // USUNIĘTO saveCoins()
   return val;
 }
 
@@ -114,7 +115,7 @@ function init() {
   loadCoins();
   console.log("💰 Economy System → załadowany");
 
-  // Backup co 20 sekund
+  // System zapisu co 20 sekund - to najlepsze rozwiązanie!
   setInterval(saveCoins, 20000);
 
   process.on("SIGINT", saveCoins);
