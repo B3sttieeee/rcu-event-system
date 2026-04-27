@@ -40,7 +40,6 @@ function buildEmbedModal(channelId, existingEmbed = null) {
     colorValue = `#${existingEmbed.hexColor.toString(16).padStart(6, "0")}`;
   }
 
-  // Autor: nazwa | iconURL | url
   let authorValue = "";
   if (existingEmbed?.author) {
     const parts = [];
@@ -48,15 +47,6 @@ function buildEmbedModal(channelId, existingEmbed = null) {
     if (existingEmbed.author.iconURL) parts.push(existingEmbed.author.iconURL);
     if (existingEmbed.author.url) parts.push(existingEmbed.author.url);
     authorValue = parts.join(" | ");
-  }
-
-  // Footer: tekst | iconURL
-  let footerValue = "";
-  if (existingEmbed?.footer) {
-    const parts = [];
-    if (existingEmbed.footer.text) parts.push(existingEmbed.footer.text);
-    if (existingEmbed.footer.iconURL) parts.push(existingEmbed.footer.iconURL);
-    footerValue = parts.join(" | ");
   }
 
   modal.addComponents(
@@ -74,17 +64,6 @@ function buildEmbedModal(channelId, existingEmbed = null) {
     // 2
     new ActionRowBuilder().addComponents(
       createInput({
-        id: "url",
-        label: "URL tytułu (klikalny link)",
-        style: TextInputStyle.Short,
-        value: existingEmbed?.url || "",
-        placeholder: "https://...",
-        maxLength: 2048
-      })
-    ),
-    // 3
-    new ActionRowBuilder().addComponents(
-      createInput({
         id: "description",
         label: "Opis embeda",
         style: TextInputStyle.Paragraph,
@@ -93,7 +72,7 @@ function buildEmbedModal(channelId, existingEmbed = null) {
         maxLength: 4000
       })
     ),
-    // 4
+    // 3
     new ActionRowBuilder().addComponents(
       createInput({
         id: "color",
@@ -104,7 +83,7 @@ function buildEmbedModal(channelId, existingEmbed = null) {
         maxLength: 7
       })
     ),
-    // 5
+    // 4
     new ActionRowBuilder().addComponents(
       createInput({
         id: "author",
@@ -114,15 +93,19 @@ function buildEmbedModal(channelId, existingEmbed = null) {
         placeholder: "Nazwa | https://ikona.png | https://link.pl",
         maxLength: 1024
       })
+    ),
+    // 5 ← NOWE POLE NA OBRAZ (najważniejsze dla Ciebie)
+    new ActionRowBuilder().addComponents(
+      createInput({
+        id: "image",
+        label: "URL Obrazu / GIF",
+        style: TextInputStyle.Short,
+        value: existingEmbed?.image?.url || "",
+        placeholder: "https://... (GIF lepiej po ponownym uploadzie)",
+        maxLength: 2048
+      })
     )
   );
-
-  // Dodatkowe pola (image, thumbnail, footer) dodajemy tylko jeśli edytujemy istniejący embed
-  // lub można je dodać w drugiej wersji modala w przyszłości
-  if (existingEmbed) {
-    // Dla edycji dodajemy dodatkowe informacje w konsoli lub osobny modal (ale na razie zostawiamy w 5 polach)
-    // Można później rozbudować o drugi modal
-  }
 
   return modal;
 }
@@ -143,30 +126,14 @@ function isValidUrl(url) {
 
 function parseAuthor(raw) {
   if (!raw?.trim()) return null;
-
   const parts = raw.split("|").map(s => s.trim()).filter(Boolean);
   if (parts.length === 0) return null;
 
   const [name, iconURL, url] = parts;
-
   return {
-    name: name || undefined,
+    name,
     iconURL: isValidUrl(iconURL) ? iconURL : undefined,
     url: isValidUrl(url) ? url : undefined
-  };
-}
-
-function parseFooter(raw) {
-  if (!raw?.trim()) return null;
-
-  const parts = raw.split("|").map(s => s.trim()).filter(Boolean);
-  if (parts.length === 0) return null;
-
-  const [text, iconURL] = parts;
-
-  return {
-    text: text || undefined,
-    iconURL: isValidUrl(iconURL) ? iconURL : undefined
   };
 }
 
@@ -174,7 +141,7 @@ function parseFooter(raw) {
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("embed")
-    .setDescription("Zaawansowany builder embedów z linkami")
+    .setDescription("Zaawansowany builder embedów (z polem na GIF/obraz)")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(option =>
       option
@@ -186,10 +153,7 @@ module.exports = {
 
   async execute(interaction) {
     if (!interaction.guild) {
-      return interaction.reply({ 
-        content: "❌ Tej komendy można użyć tylko na serwerze.", 
-        ephemeral: true 
-      });
+      return interaction.reply({ content: "❌ Tej komendy można użyć tylko na serwerze.", ephemeral: true });
     }
 
     const targetChannel = interaction.options.getChannel("channel") || interaction.channel;
@@ -212,31 +176,26 @@ module.exports = {
 
     try {
       const title       = interaction.fields.getTextInputValue("title").trim();
-      const url         = interaction.fields.getTextInputValue("url").trim();
       let description   = interaction.fields.getTextInputValue("description").trim();
       let colorInput    = interaction.fields.getTextInputValue("color").trim();
       const authorRaw   = interaction.fields.getTextInputValue("author").trim();
+      const imageUrl    = interaction.fields.getTextInputValue("image").trim();
 
       if (description === ".") description = "";
 
-      // Kolor
-      if (colorInput) {
-        if (!colorInput.startsWith("#")) colorInput = "#" + colorInput;
-        colorInput = colorInput.slice(0, 7);
-      }
-      const color = isValidHex(colorInput) ? colorInput : DEFAULT_COLOR;
+      const color = isValidHex(colorInput) ? (colorInput.startsWith("#") ? colorInput : "#" + colorInput) : DEFAULT_COLOR;
 
       const embed = new EmbedBuilder().setColor(color);
 
       if (title) embed.setTitle(title);
-      if (url && isValidUrl(url)) embed.setURL(url);
       if (description) embed.setDescription(description);
 
       const author = parseAuthor(authorRaw);
       if (author) embed.setAuthor(author);
 
-      // Na razie image, thumbnail i footer nie są w modalu (limit 5 pól)
-      // Można je dodać w przyszłości przez drugi modal lub inne rozwiązanie
+      if (imageUrl && isValidUrl(imageUrl)) {
+        embed.setImage(imageUrl);
+      }
 
       const sentMessage = await channel.send({ embeds: [embed] });
 
@@ -252,15 +211,13 @@ module.exports = {
       );
 
       await interaction.editReply({
-        content: `✅ Embed został pomyślnie wysłany na kanał **#${channel.name}**`,
+        content: `✅ Embed wysłany na kanał **#${channel.name}**`,
         components: [row]
       });
 
     } catch (err) {
       console.error("[EMBED] Modal Error:", err);
-      await interaction.editReply({ 
-        content: "❌ Wystąpił błąd podczas tworzenia embeda." 
-      });
+      await interaction.editReply({ content: "❌ Wystąpił błąd podczas tworzenia embeda." });
     }
   },
 
@@ -270,13 +227,8 @@ module.exports = {
 
     if (cid.startsWith("embed_edit_")) {
       const [, , messageId, channelId] = cid.split("_");
-
-      const channel = interaction.guild.channels.cache.get(channelId) ||
-                      await interaction.guild.channels.fetch(channelId).catch(() => null);
-
-      if (!channel) {
-        return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
-      }
+      const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
+      if (!channel) return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
 
       const message = await channel.messages.fetch(messageId).catch(() => null);
       if (!message?.embeds[0]) {
@@ -289,16 +241,10 @@ module.exports = {
 
     if (cid.startsWith("embed_delete_")) {
       const [, , messageId, channelId] = cid.split("_");
-
-      const channel = interaction.guild.channels.cache.get(channelId) ||
-                      await interaction.guild.channels.fetch(channelId).catch(() => null);
-
-      if (!channel) {
-        return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
-      }
+      const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
+      if (!channel) return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
 
       const message = await channel.messages.fetch(messageId).catch(() => null);
-
       if (message) {
         await message.delete().catch(() => {});
         await interaction.reply({ content: "🗑 Embed został usunięty.", ephemeral: true });
