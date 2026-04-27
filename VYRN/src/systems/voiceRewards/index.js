@@ -1,12 +1,9 @@
-// =====================================================
-// VOICE REWARDS SYSTEM - OPTIMIZED
-// =====================================================
-const activity = require("../activity");
+// src/systems/voiceRewards.js
+const activity = require("./activity"); // Zakładam że są w tym samym folderze
 
-const sessions = new Map(); // userId => { interval }
+const sessions = new Map(); 
 const MINUTE = 60000;
 
-// ====================== SESSION CONTROL ======================
 function stopSession(userId) {
   const data = sessions.get(userId);
   if (data?.interval) {
@@ -17,12 +14,11 @@ function stopSession(userId) {
 
 function startSession(member) {
   const userId = member.id;
-  stopSession(userId); // reset starej sesji
+  stopSession(userId); // Zabezpieczenie: usuwamy starą sesję jeśli istnieje
 
   const interval = setInterval(() => {
     try {
-      // Optymalizacja: Używamy tylko cache. Event voiceStateUpdate i tak
-      // zdejmie sesję gdy użytkownik wyjdzie, więc fetch() jest zbędny.
+      // Pobieramy z cache - oszczędza zapytania API
       const freshMember = member.guild.members.cache.get(userId);
 
       if (!freshMember || !freshMember.voice.channelId) {
@@ -30,24 +26,22 @@ function startSession(member) {
         return;
       }
 
-      // ====================== REWARDS ======================
-      activity.addVoiceTime(userId, 60);           // Dodaje czas 
-      
-      // Dodaje 10 XP i od razu przez wewnętrzny system dodaje 8 monet
+      // 1. Dodaje 60 sekund do statystyk
+      activity.addVoiceTime(userId, 60);           
+      // 2. Dodaje 10 XP i od razu przez system 8 monet
       activity.addActivityXP(freshMember, 10, 8);  
 
-      console.log(`[VOICE REWARD] ${freshMember.user.tag} | +60s voice | +8 coins | +10 XP`);
+      // Możesz to wyciszyć dodając // z przodu, jeśli nie chcesz spamu w konsoli co minutę
+      // console.log(`[VOICE] ${freshMember.user.tag} | +60s | +10 XP | +8 Coins`);
 
     } catch (err) {
-      console.error(`[VOICE REWARD ERROR] ${member?.user?.tag || userId}`, err.message);
+      console.error(`[VOICE REWARD ERROR] ${userId}`, err.message);
     }
   }, MINUTE);
 
   sessions.set(userId, { interval });
-  console.log(`[VOICE REWARD] Sesja rozpoczęta dla ${member.user.tag}`);
 }
 
-// ====================== EXPORT ======================
 module.exports = {
   startSession,
   stopSession
