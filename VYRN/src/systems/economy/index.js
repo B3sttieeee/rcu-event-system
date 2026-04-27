@@ -1,6 +1,4 @@
-// =====================================================
-// ECONOMY SYSTEM - OPTIMIZED & STABLE
-// =====================================================
+// src/systems/economy.js
 const fs = require("fs");
 const path = require("path");
 
@@ -13,44 +11,34 @@ let userCoins = new Map();
 // ====================== INIT ======================
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
-  console.log(`[ECONOMY] Data directory ready: ${DATA_DIR}`);
 }
 
-// ====================== LOAD ======================
+// ====================== LOAD & SAVE ======================
 function loadCoins() {
   try {
     if (!fs.existsSync(COINS_PATH)) {
       fs.writeFileSync(COINS_PATH, JSON.stringify({}, null, 2));
-      console.log("[ECONOMY] Utworzono nowy plik userCoins.json");
       userCoins = new Map();
       return;
     }
-
     const raw = fs.readFileSync(COINS_PATH, "utf8");
     const parsed = raw.trim() ? JSON.parse(raw) : {};
-
     userCoins = new Map();
     for (const [userId, value] of Object.entries(parsed)) {
       userCoins.set(userId, Math.floor(Number(value) || 0));
     }
-
-    console.log(`[ECONOMY] Załadowano monety dla ${userCoins.size} użytkowników`);
+    console.log(`[ECONOMY] 💰 Załadowano monety (${userCoins.size} użytkowników)`);
   } catch (err) {
     console.error("[ECONOMY] LOAD ERROR:", err.message);
     userCoins = new Map();
   }
 }
 
-// ====================== SAVE (ATOMIC) ======================
 function saveCoins() {
   try {
     const snapshot = JSON.stringify(Object.fromEntries(userCoins), null, 2);
-    
     fs.writeFileSync(COINS_TMP_PATH, snapshot, "utf8");
     fs.renameSync(COINS_TMP_PATH, COINS_PATH);
-    
-    // Opcjonalnie możesz to wyciszyć, żeby nie spamowało konsoli co 20 sekund:
-    // console.log(`[ECONOMY] ✅ Zapisano userCoins.json w tle`);
   } catch (err) {
     console.error("[ECONOMY] SAVE ERROR:", err.message);
   }
@@ -64,17 +52,12 @@ function getCoins(userId) {
 
 function addCoins(userId, amount) {
   if (!userId) return 0;
-
   const val = Math.floor(Math.max(0, Number(amount) || 0));
   if (val <= 0) return getCoins(userId);
 
   const current = getCoins(userId);
   const newVal = current + val;
-
   userCoins.set(userId, newVal);
-  // USUNIĘTO saveCoins() - zapobiega lagom i wyścigom danych!
-
-  console.log(`[ECONOMY] +${val} monet | ${userId} | ${current} → ${newVal}`);
   return newVal;
 }
 
@@ -87,7 +70,6 @@ function spendCoins(userId, amount) {
   if (current < val) return false;
 
   userCoins.set(userId, current - val);
-  // USUNIĘTO saveCoins()
   return true;
 }
 
@@ -95,29 +77,13 @@ function setCoins(userId, amount) {
   if (!userId) return 0;
   const val = Math.floor(Math.max(0, Number(amount) || 0));
   userCoins.set(userId, val);
-  // USUNIĘTO saveCoins()
   return val;
 }
 
-function hasEnoughCoins(userId, amount) {
-  return getCoins(userId) >= Math.floor(Number(amount) || 0);
-}
-
-function getTopUsers(limit = 10) {
-  return Array.from(userCoins.entries())
-    .map(([userId, coins]) => ({ userId, coins }))
-    .sort((a, b) => b.coins - a.coins)
-    .slice(0, limit);
-}
-
-// ====================== INIT ======================
+// ====================== INIT EXPORT ======================
 function init() {
   loadCoins();
-  console.log("💰 Economy System → załadowany");
-
-  // System zapisu co 20 sekund - to najlepsze rozwiązanie!
-  setInterval(saveCoins, 20000);
-
+  setInterval(saveCoins, 20000); // Automatyczny zapis co 20 sekund
   process.on("SIGINT", saveCoins);
   process.on("SIGTERM", saveCoins);
 }
@@ -127,7 +93,5 @@ module.exports = {
   getCoins,
   addCoins,
   spendCoins,
-  setCoins,
-  hasEnoughCoins,
-  getTopUsers
+  setCoins
 };
