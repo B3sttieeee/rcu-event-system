@@ -1,7 +1,7 @@
 // src/commands/profile.js
 const { SlashCommandBuilder, EmbedBuilder } = require("discord.js");
 
-// Import z Activity System
+// Popraw ścieżki jeśli systemy masz w innym folderze
 const activity = require("../systems/activity");
 const { getCoins } = require("../systems/economy");
 const { getCurrentBoost } = require("../systems/boost");
@@ -23,25 +23,18 @@ module.exports = {
     try {
       const userId = interaction.user.id;
 
-      // Zawsze świeże dane z Activity System
+      // VOICE
       const voiceMin = typeof activity.getVoiceMinutes === "function" 
         ? activity.getVoiceMinutes(userId) 
         : 0;
 
-      let levelData = { xp: 0, level: 0 };
+      // LEVEL & XP
+      let levelData = { xp: 0, level: 0, nextXP: 100 };
       if (typeof activity.getLevelData === "function") {
         levelData = activity.getLevelData(userId);
       }
-
-      const coins = getCoins(userId);
-      const boost = getCurrentBoost(userId) || 1;
-
-      // Bezpieczne obliczenie nextXP
-      let nextXP = 100;
-      if (typeof activity.neededXP === "function") {
-        nextXP = activity.neededXP(levelData.level);
-      }
-
+      
+      const nextXP = levelData.nextXP || 100;
       const progress = nextXP > 0 
         ? Math.min(100, Math.floor((levelData.xp / nextXP) * 100)) 
         : 0;
@@ -50,8 +43,13 @@ module.exports = {
         ? activity.getRank(levelData.level) 
         : { name: "Iron", emoji: "⚔️" };
 
+      // ECONOMY & BOOSTS
+      const coins = getCoins(userId);
+      const boost = getCurrentBoost(userId) || 1;
+
+      // EMBED BUILDER
       const embed = new EmbedBuilder()
-        .setColor("#0b0b0f")
+        .setColor("#0a0a0a") // Styl VYRN Black Edition
         .setAuthor({
           name: `${interaction.user.username} • VYRN Profile`,
           iconURL: interaction.user.displayAvatarURL({ dynamic: true })
@@ -78,9 +76,9 @@ module.exports = {
       await interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
-      console.error("[PROFILE COMMAND ERROR]", err);
+      console.error("🔥 [PROFILE COMMAND ERROR]:", err);
       await interaction.editReply({
-        content: "❌ Wystąpił błąd podczas ładowania profilu.",
+        content: "❌ Wystąpił błąd podczas ładowania profilu. Spróbuj ponownie.",
         ephemeral: true
       });
     }
