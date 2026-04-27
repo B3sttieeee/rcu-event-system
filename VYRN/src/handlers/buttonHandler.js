@@ -6,7 +6,7 @@ const eventSystem = require("../systems/event");
 
 /**
  * Główny handler wszystkich przycisków (ButtonInteraction)
- * Spójny styl z resztą handlerów
+ * Spójny styl z resztą handlerów + obsługa embed builder
  */
 module.exports = async function buttonHandler(interaction) {
   const customId = interaction.customId;
@@ -37,9 +37,10 @@ module.exports = async function buttonHandler(interaction) {
       return await eventSystem.handleEventInteraction(interaction);
     }
 
-    // ==================== EMBED COMMAND ====================
+    // ==================== EMBED BUILDER ====================
     if (customId.startsWith("embed_edit_") || customId.startsWith("embed_delete_")) {
       const embedCommand = require("../commands/embed");
+      
       if (typeof embedCommand.handleButton === "function") {
         return await embedCommand.handleButton(interaction);
       }
@@ -56,7 +57,7 @@ module.exports = async function buttonHandler(interaction) {
   } catch (error) {
     console.error("[BUTTON HANDLER ERROR]", error);
 
-    // Bezpieczna odpowiedź dla użytkownika
+    // Bezpieczna odpowiedź dla użytkownika (jeśli jeszcze nie odpowiedziano)
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
@@ -64,7 +65,7 @@ module.exports = async function buttonHandler(interaction) {
           ephemeral: true
         });
       } catch (e) {
-        console.error("[BUTTON] Nie udało się wysłać odpowiedzi o błędzie.");
+        console.error("[BUTTON] Nie udało się wysłać odpowiedzi o błędzie:", e.message);
       }
     }
   }
