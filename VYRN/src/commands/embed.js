@@ -16,7 +16,10 @@ const DEFAULT_COLOR = "#0a0a0a";
 
 // ====================== POMOCNICZE FUNKCJE ======================
 
-function createInput({ id, label, style, value = "", placeholder = "", maxLength }) {
+/**
+ * Bezpieczne tworzenie pola tekstowego
+ */
+function createInput({ id, label, style, value = "", placeholder = "", maxLength = 0 }) {
   const input = new TextInputBuilder()
     .setCustomId(id)
     .setLabel(label)
@@ -24,22 +27,32 @@ function createInput({ id, label, style, value = "", placeholder = "", maxLength
     .setRequired(false);
 
   if (placeholder) input.setPlaceholder(placeholder);
-  if (maxLength) input.setMaxLength(maxLength);
-  if (value) input.setValue(value);
+  if (maxLength > 0) input.setMaxLength(maxLength);
+
+  // Najważniejsza poprawka – bezpieczne przycinanie wartości (zapobiega błędom 50035)
+  if (value !== undefined && value !== null) {
+    const stringValue = String(value);
+    input.setValue(stringValue.slice(0, maxLength > 0 ? maxLength : 4000));
+  }
 
   return input;
 }
 
+/**
+ * Buduje modal tworzenia/edycji embeda (maks. 5 pól)
+ */
 function buildEmbedModal(channelId, existingEmbed = null) {
   const modal = new ModalBuilder()
     .setCustomId(`embedModal_${channelId}`)
     .setTitle(existingEmbed ? "✏️ Edytuj Embed" : "📝 Tworzenie Embeda");
 
+  // Kolor
   let colorValue = DEFAULT_COLOR;
-  if (existingEmbed?.hexColor) {
+  if (existingEmbed?.hexColor != null) {
     colorValue = `#${existingEmbed.hexColor.toString(16).padStart(6, "0")}`;
   }
 
+  // Autor (nazwa | ikona | url)
   let authorValue = "";
   if (existingEmbed?.author) {
     const parts = [];
@@ -50,7 +63,6 @@ function buildEmbedModal(channelId, existingEmbed = null) {
   }
 
   modal.addComponents(
-    // 1
     new ActionRowBuilder().addComponents(
       createInput({
         id: "title",
@@ -61,7 +73,7 @@ function buildEmbedModal(channelId, existingEmbed = null) {
         maxLength: 256
       })
     ),
-    // 2
+
     new ActionRowBuilder().addComponents(
       createInput({
         id: "description",
@@ -72,7 +84,7 @@ function buildEmbedModal(channelId, existingEmbed = null) {
         maxLength: 4000
       })
     ),
-    // 3
+
     new ActionRowBuilder().addComponents(
       createInput({
         id: "color",
@@ -83,7 +95,7 @@ function buildEmbedModal(channelId, existingEmbed = null) {
         maxLength: 7
       })
     ),
-    // 4
+
     new ActionRowBuilder().addComponents(
       createInput({
         id: "author",
@@ -94,14 +106,14 @@ function buildEmbedModal(channelId, existingEmbed = null) {
         maxLength: 1024
       })
     ),
-    // 5 ← NOWE POLE NA OBRAZ (najważniejsze dla Ciebie)
+
     new ActionRowBuilder().addComponents(
       createInput({
         id: "image",
         label: "URL Obrazu / GIF",
         style: TextInputStyle.Short,
         value: existingEmbed?.image?.url || "",
-        placeholder: "https://... (GIF lepiej po ponownym uploadzie)",
+        placeholder: "https://... (GIF lepiej po ponownym wrzuceniu)",
         maxLength: 2048
       })
     )
@@ -109,6 +121,8 @@ function buildEmbedModal(channelId, existingEmbed = null) {
 
   return modal;
 }
+
+// ====================== WALIDACJA ======================
 
 function isValidHex(color) {
   return /^#?[0-9A-Fa-f]{6}$/.test(color.replace("#", ""));
@@ -137,11 +151,11 @@ function parseAuthor(raw) {
   };
 }
 
-// ====================== KOMENDA ======================
+// ====================== GŁÓWNY EKSPORT ======================
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("embed")
-    .setDescription("Zaawansowany builder embedów (z polem na GIF/obraz)")
+    .setDescription("Zaawansowany builder embedów (z wsparciem dla GIFów)")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(option =>
       option
@@ -153,7 +167,10 @@ module.exports = {
 
   async execute(interaction) {
     if (!interaction.guild) {
-      return interaction.reply({ content: "❌ Tej komendy można użyć tylko na serwerze.", ephemeral: true });
+      return interaction.reply({
+        content: "❌ Tej komendy można użyć tylko na serwerze.",
+        ephemeral: true
+      });
     }
 
     const targetChannel = interaction.options.getChannel("channel") || interaction.channel;
@@ -183,7 +200,9 @@ module.exports = {
 
       if (description === ".") description = "";
 
-      const color = isValidHex(colorInput) ? (colorInput.startsWith("#") ? colorInput : "#" + colorInput) : DEFAULT_COLOR;
+      const color = isValidHex(colorInput)
+        ? (colorInput.startsWith("#") ? colorInput : `#${colorInput}`)
+        : DEFAULT_COLOR;
 
       const embed = new EmbedBuilder().setColor(color);
 
@@ -211,13 +230,15 @@ module.exports = {
       );
 
       await interaction.editReply({
-        content: `✅ Embed wysłany na kanał **#${channel.name}**`,
+        content: `✅ Embed został pomyślnie wysłany na kanał **#${channel.name}**`,
         components: [row]
       });
 
     } catch (err) {
-      console.error("[EMBED] Modal Error:", err);
-      await interaction.editReply({ content: "❌ Wystąpił błąd podczas tworzenia embeda." });
+      console.error("[EMBED Modal Error]:", err);
+      await interaction.editReply({
+        content: "❌ Wystąpił błąd podczas tworzenia embeda."
+      });
     }
   },
 
@@ -225,24 +246,36 @@ module.exports = {
   async handleButton(interaction) {
     const cid = interaction.customId;
 
+    // Edycja embeda
     if (cid.startsWith("embed_edit_")) {
       const [, , messageId, channelId] = cid.split("_");
-      const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
-      if (!channel) return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+
+      const channel = interaction.guild.channels.cache.get(channelId) ||
+                      await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+      if (!channel) {
+        return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+      }
 
       const message = await channel.messages.fetch(messageId).catch(() => null);
-      if (!message?.embeds[0]) {
-        return interaction.reply({ content: "❌ Nie znaleziono embeda.", ephemeral: true });
+      if (!message?.embeds?.[0]) {
+        return interaction.reply({ content: "❌ Nie znaleziono embeda do edycji.", ephemeral: true });
       }
 
       await interaction.showModal(buildEmbedModal(channelId, message.embeds[0]));
       return;
     }
 
+    // Usuwanie embeda
     if (cid.startsWith("embed_delete_")) {
       const [, , messageId, channelId] = cid.split("_");
-      const channel = interaction.guild.channels.cache.get(channelId) || await interaction.guild.channels.fetch(channelId).catch(() => null);
-      if (!channel) return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+
+      const channel = interaction.guild.channels.cache.get(channelId) ||
+                      await interaction.guild.channels.fetch(channelId).catch(() => null);
+
+      if (!channel) {
+        return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
+      }
 
       const message = await channel.messages.fetch(messageId).catch(() => null);
       if (message) {
