@@ -17,8 +17,11 @@ const CONFIG = {
   PANEL_CHANNEL_ID: "1475558248487583805",
   LOG_CHANNEL_ID: "1494072832827850953",
   CATEGORY_ID: "1475985874385899530",
-  // TWOJA NOWA ROLA STAFFU [VYRN CLAN]:
-  ADMIN_ROLE: "1475572271446884535", 
+  
+  // ROLE KONFIGURACJA:
+  ADMIN_ROLE: "1475572271446884535", // Staff [VYRN CLAN]
+  KING_ROLE: "1475570484585168957",  // TWOJA ROLA (KRÓL)
+  
   PANEL_IMAGE: "https://media.discordapp.net/attachments/1475992778554216448/1496214765406650489/ezgif.com-animated-gif-maker.gif"
 };
 
@@ -115,14 +118,13 @@ async function openModal(interaction) {
   await interaction.showModal(modal);
 }
 
-// ====================== CREATE TICKET (FIXED PERMISSIONS) ======================
+// ====================== CREATE TICKET (KING EDITION) ======================
 async function createTicket(interaction, type, client) {
   const existing = interaction.guild.channels.cache.find(c => c.topic === interaction.user.id && c.parentId === CONFIG.CATEGORY_ID);
   if (existing) return interaction.reply({ content: `❌ You already have a ticket: ${existing}`, ephemeral: true });
 
   await interaction.deferReply({ ephemeral: true });
 
-  // TWORZENIE KANAŁU Z RYGORYSTYCZNYMI PERMISJAMI
   const channel = await interaction.guild.channels.create({
     name: `🎫-${type}-${interaction.user.username}`,
     type: ChannelType.GuildText,
@@ -130,19 +132,20 @@ async function createTicket(interaction, type, client) {
     parent: CONFIG.CATEGORY_ID,
     permissionOverwrites: [
       {
-        // BLOKADA DLA WSZYSTKICH (@everyone)
-        id: interaction.guild.id,
-        deny: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory],
+        id: interaction.guild.id, // @everyone
+        deny: [PermissionFlagsBits.ViewChannel],
       },
       {
-        // DOSTĘP DLA OSOBY OTWIERAJĄCEJ
-        id: interaction.user.id,
+        id: interaction.user.id, // Użytkownik
         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles],
       },
       {
-        // DOSTĘP DLA TWOJEJ ROLI STAFF [VYRN CLAN]
-        id: CONFIG.ADMIN_ROLE,
+        id: CONFIG.ADMIN_ROLE, // Staff
         allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages],
+      },
+      {
+        id: CONFIG.KING_ROLE, // KRÓL (TWOJA ROLA)
+        allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels],
       },
     ],
   });
@@ -173,13 +176,14 @@ async function createTicket(interaction, type, client) {
     new ButtonBuilder().setCustomId("close_ticket").setLabel("Close / Zamknij").setStyle(ButtonStyle.Danger)
   );
 
-  await channel.send({ content: `${interaction.user} | <@&${CONFIG.ADMIN_ROLE}>`, embeds: [embed], components: [row] });
+  await channel.send({ content: `${interaction.user} | <@&${CONFIG.ADMIN_ROLE}> | <@&${CONFIG.KING_ROLE}>`, embeds: [embed], components: [row] });
   await interaction.editReply({ content: `✅ Ticket created: ${channel}` });
 }
 
 // ====================== STAFF ACTIONS ======================
 async function claimTicket(interaction) {
-  if (!interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE)) return interaction.reply({ content: "❌ No permission.", ephemeral: true });
+  const hasAccess = interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE) || interaction.member.roles.cache.has(CONFIG.KING_ROLE);
+  if (!hasAccess) return interaction.reply({ content: "❌ No permission.", ephemeral: true });
 
   const embed = EmbedBuilder.from(interaction.message.embeds[0])
     .setColor("#2ecc71")
@@ -196,7 +200,9 @@ async function claimTicket(interaction) {
 }
 
 async function openRenameModal(interaction) {
-  if (!interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE)) return interaction.reply({ content: "❌ No permission.", ephemeral: true });
+  const hasAccess = interaction.member.roles.cache.has(CONFIG.ADMIN_ROLE) || interaction.member.roles.cache.has(CONFIG.KING_ROLE);
+  if (!hasAccess) return interaction.reply({ content: "❌ No permission.", ephemeral: true });
+  
   const modal = new ModalBuilder().setCustomId(`ticket_rename_modal_${interaction.channel.id}`).setTitle("Rename Ticket");
   const input = new TextInputBuilder().setCustomId("new_name").setLabel("New name").setStyle(TextInputStyle.Short).setRequired(true);
   modal.addComponents(new ActionRowBuilder().addComponents(input));
@@ -222,6 +228,6 @@ async function closeTicket(interaction) {
   setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
 }
 
-function init(client) { console.log("🎟 Ticket System [PERMISSIONS FIXED] → załadowany"); }
+function init(client) { console.log("🎟 Ticket System [KING EDITION] → załadowany"); }
 
 module.exports = { init, createTicketPanel, handle };
