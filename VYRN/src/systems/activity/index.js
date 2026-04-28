@@ -1,11 +1,23 @@
+// src/systems/activity/index.js
 const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
-const economy = require("../economy"); // POPRAWKA ŚCIEŻKI DO FOLDERU OBOK
+const economy = require("../economy");
 
 const DATA_DIR = process.env.DATA_DIR || "/data";
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
 const LEVELS_PATH = path.join(DATA_DIR, "levels.json");
+
+// ====================== KONFIGURACJA NAGRÓD (ID ROLEK) ======================
+// Wklej tutaj ID rolek ze swojego serwera, aby bot faktycznie je nadawał!
+const RANK_ROLES = {
+  75: "1476000992351879229",
+  60: "1476000991823532032",
+  45: "1476000991206707221",
+  30: "1476000459595448442",
+  15: "1476000995501670534",
+  5:  "1476000458987278397",
+};
 
 let profileDB = { users: {} };
 let levelsDB = { users: {} };
@@ -34,7 +46,8 @@ function ensureUser(userId) {
 
 function neededXP(level) { return Math.floor(100 * Math.pow(level + 1, 1.5)); }
 
-function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
+// ====================== SYSTEM AWANSU ======================
+async function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
   const user = ensureUser(member.id);
   user.level.xp += xpAmount;
   user.level.totalXP += xpAmount;
@@ -47,7 +60,21 @@ function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
   }
 
   if (coinsAmount > 0) economy.addCoins(member.id, coinsAmount);
-  if (leveledUp) sendLevelUpMessage(member, user.level.level);
+
+  if (leveledUp) {
+    // 1. Nadawanie roli na Discordzie (jeśli poziom odpowiada randze)
+    await checkAndGiveRankRole(member, user.level.level);
+    // 2. Wysyłanie estetycznej wiadomości
+    await sendLevelUpMessage(member, user.level.level);
+  }
+}
+
+async function checkAndGiveRankRole(member, level) {
+  const roleId = RANK_ROLES[level];
+  if (roleId) {
+    const role = member.guild.roles.cache.get(roleId);
+    if (role) await member.roles.add(role).catch(() => {});
+  }
 }
 
 function getRank(level) {
@@ -60,18 +87,32 @@ function getRank(level) {
   return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
 }
 
+// ====================== ESTETYCZNE POWIADOMIENIE ======================
 async function sendLevelUpMessage(member, newLevel) {
   const channel = member.guild.channels.cache.get("1475999590716018719");
   if (!channel) return;
+
   const rank = getRank(newLevel);
+  
   const embed = new EmbedBuilder()
-    .setColor("#0a0a0a")
-    .setAuthor({ name: `${member.user.username} just leveled up!` })
-    .setTitle(`Level ${newLevel}`)
-    .setDescription(`${rank.emoji} **${rank.name}**`)
+    .setColor("#0a0a0a") // Black Edition
+    .setAuthor({ 
+        name: `VYRN ACTIVITY SYSTEM`, 
+        iconURL: member.guild.iconURL({ dynamic: true }) 
+    })
+    .setTitle(`✨ AWANS NA NOWY POZIOM!`)
+    .setDescription(
+      `> **Gratulacje** ${member}!\n` +
+      `> Wbiłeś właśnie **${newLevel} poziom** aktywności!\n` +
+      `> \n` +
+      `> **Ranga:** ${rank.emoji} \`${rank.name}\`\n` +
+      `> **Nagroda:** \`+8\` <:CASHH:1491180511308157041>`
+    )
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setFooter({ text: "VYRN CLAN" }).setTimestamp();
-  channel.send({ embeds: [embed] }).catch(() => {});
+    .setFooter({ text: `Keep grinding harder • VYRN CLAN` })
+    .setTimestamp();
+
+  channel.send({ content: `🎊 Brawo ${member}!`, embeds: [embed] }).catch(() => {});
 }
 
 function init() {
