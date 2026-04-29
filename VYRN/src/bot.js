@@ -33,6 +33,7 @@ async function loadSystems() {
     "activity",     // Activity (Needs Economy/Boost)
     "clan",
     "rules",
+    "recruitment",  // <--- DODANY SYSTEM REKRUTACJI
     "event",
     "giveaway",
     "tickets",
