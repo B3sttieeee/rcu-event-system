@@ -2,23 +2,31 @@
 const fs = require("fs");
 const path = require("path");
 const { EmbedBuilder } = require("discord.js");
-const economy = require("../economy");
 
-const DATA_DIR = process.env.DATA_DIR || "/data";
+// ====================== CONFIG ======================
+const DATA_DIR = process.env.DATA_DIR || "./";
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
 const LEVELS_PATH = path.join(DATA_DIR, "levels.json");
 
-// ====================== KONFIGURACJA NAGRÓD (ID ROLEK) ======================
-// Wklej tutaj ID rolek ze swojego serwera, aby bot faktycznie je nadawał!
-const RANK_ROLES = {
-  75: "1476000992351879229",
-  60: "1476000991823532032",
-  45: "1476000991206707221",
-  30: "1476000459595448442",
-  15: "1476000995501670534",
-  5:  "1476000458987278397",
+const CONFIG = {
+  CHANNEL_ID: "1475999590716018719", // Channel for level-up notifications
+  THEME: {
+    GOLD: "#FFD700",
+    BLACK: "#0a0a0a"
+  },
+  // Ranks Configuration: Required Level -> Role ID, Name, and Emoji
+  RANKS: [
+    { level: 75, roleId: "1476000992351879229", name: "Legend", emoji: "<:LegeRank:1488756343190847538>" },
+    { level: 60, roleId: "1476000991823532032", name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" },
+    { level: 45, roleId: "1476000991206707221", name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" },
+    { level: 30, roleId: "1476000459595448442", name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" },
+    { level: 15, roleId: "1476000995501670534", name: "Gold", emoji: "<:GoldRank:1488756524854808686>" },
+    { level: 5,  roleId: "1476000458987278397", name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" },
+    { level: 0,  roleId: null,                  name: "Iron", emoji: "<:Ironrank:1488756604277887039>" }
+  ]
 };
 
+// ====================== DATABASE ======================
 let profileDB = { users: {} };
 let levelsDB = { users: {} };
 
@@ -28,14 +36,14 @@ function loadAll() {
     if (fs.existsSync(LEVELS_PATH)) levelsDB = JSON.parse(fs.readFileSync(LEVELS_PATH, "utf8"));
     if (!profileDB.users) profileDB.users = {};
     if (!levelsDB.users) levelsDB.users = {};
-  } catch (e) { console.error("[ACTIVITY] LOAD ERROR", e.message); }
+  } catch (e) { console.error("🔥 [ACTIVITY] LOAD ERROR", e.message); }
 }
 
 function saveAll() {
   try {
     fs.writeFileSync(PROFILE_PATH, JSON.stringify(profileDB, null, 2));
     fs.writeFileSync(LEVELS_PATH, JSON.stringify(levelsDB, null, 2));
-  } catch (e) { console.error("[ACTIVITY] SAVE ERROR", e.message); }
+  } catch (e) { console.error("🔥 [ACTIVITY] SAVE ERROR", e.message); }
 }
 
 function ensureUser(userId) {
@@ -44,14 +52,46 @@ function ensureUser(userId) {
   return { voice: profileDB.users[userId], level: levelsDB.users[userId] };
 }
 
-function neededXP(level) { return Math.floor(100 * Math.pow(level + 1, 1.5)); }
+function neededXP(level) { 
+  return Math.floor(100 * Math.pow(level + 1, 1.5)); 
+}
 
-// ====================== SYSTEM AWANSU ======================
-async function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
+// ====================== CORE LOGIC ======================
+function getRank(level) {
+  return CONFIG.RANKS.find(r => level >= r.level) || CONFIG.RANKS[CONFIG.RANKS.length - 1];
+}
+
+// System that automatically gives the new role AND removes the old ones
+async function syncRankRoles(member, currentLevel) {
+  const currentRank = getRank(currentLevel);
+  if (!currentRank.roleId) return; 
+  
+  try {
+    for (const rank of CONFIG.RANKS) {
+      if (!rank.roleId) continue;
+      
+      const role = member.guild.roles.cache.get(rank.roleId);
+      if (!role) continue;
+
+      if (rank.roleId === currentRank.roleId) {
+        if (!member.roles.cache.has(role.id)) await member.roles.add(role).catch(() => {});
+      } else {
+        if (member.roles.cache.has(role.id)) await member.roles.remove(role).catch(() => {});
+      }
+    }
+  } catch (error) {
+    console.error("🔥 [ACTIVITY] Role Sync Error:", error.message);
+  }
+}
+
+async function addActivityXP(member, xpAmount = 10) {
   const user = ensureUser(member.id);
+
+  // Add XP
   user.level.xp += xpAmount;
   user.level.totalXP += xpAmount;
 
+  // Level up loop
   let leveledUp = false;
   while (user.level.xp >= neededXP(user.level.level)) {
     user.level.xp -= neededXP(user.level.level);
@@ -59,65 +99,46 @@ async function addActivityXP(member, xpAmount = 10, coinsAmount = 8) {
     leveledUp = true;
   }
 
-  if (coinsAmount > 0) economy.addCoins(member.id, coinsAmount);
-
+  // Trigger rewards and notifications if leveled up
   if (leveledUp) {
-    // 1. Nadawanie roli na Discordzie (jeśli poziom odpowiada randze)
-    await checkAndGiveRankRole(member, user.level.level);
-    // 2. Wysyłanie estetycznej wiadomości
+    await syncRankRoles(member, user.level.level);
     await sendLevelUpMessage(member, user.level.level);
   }
 }
 
-async function checkAndGiveRankRole(member, level) {
-  const roleId = RANK_ROLES[level];
-  if (roleId) {
-    const role = member.guild.roles.cache.get(roleId);
-    if (role) await member.roles.add(role).catch(() => {});
-  }
-}
-
-function getRank(level) {
-  if (level >= 75) return { name: "Legend", emoji: "<:LegeRank:1488756343190847538>" };
-  if (level >= 60) return { name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" };
-  if (level >= 45) return { name: "Diamond", emoji: "<:DiaxRank:1488756482924089404>" };
-  if (level >= 30) return { name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" };
-  if (level >= 15) return { name: "Gold", emoji: "<:GoldRank:1488756524854808686>" };
-  if (level >= 5) return { name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" };
-  return { name: "Iron", emoji: "<:Ironrank:1488756604277887039>" };
-}
-
-// ====================== ESTETYCZNE POWIADOMIENIE ======================
+// ====================== LEVEL UP NOTIFICATION ======================
 async function sendLevelUpMessage(member, newLevel) {
-  const channel = member.guild.channels.cache.get("1475999590716018719");
+  const channel = member.guild.channels.cache.get(CONFIG.CHANNEL_ID);
   if (!channel) return;
 
   const rank = getRank(newLevel);
+  const nextRank = CONFIG.RANKS.slice().reverse().find(r => r.level > newLevel);
+  const nextRankText = nextRank ? `Next Rank: ${nextRank.name} (Level ${nextRank.level})` : `MAX RANK REACHED 👑`;
   
   const embed = new EmbedBuilder()
-    .setColor("#0a0a0a") // Black Edition
+    .setColor(CONFIG.THEME.GOLD)
     .setAuthor({ 
-        name: `VYRN ACTIVITY SYSTEM`, 
+        name: `🏆 VYRN ACTIVITY SYSTEM`, 
         iconURL: member.guild.iconURL({ dynamic: true }) 
     })
-    .setTitle(`✨ AWANS NA NOWY POZIOM!`)
+    .setTitle(`✨ LEVEL UP!`)
     .setDescription(
-      `> **Gratulacje** ${member}!\n` +
-      `> Wbiłeś właśnie **${newLevel} poziom** aktywności!\n` +
-      `> \n` +
-      `> **Ranga:** ${rank.emoji} \`${rank.name}\`\n` +
-      `> **Nagroda:** \`+8\` <:CASHH:1491180511308157041>`
+      `**Congratulations** ${member}!\n` +
+      `You just advanced to **Level ${newLevel}**!\n\n` +
+      `**Current Clan Rank:** ${rank.emoji} \`${rank.name}\``
     )
     .setThumbnail(member.user.displayAvatarURL({ dynamic: true }))
-    .setFooter({ text: `Keep grinding harder • VYRN CLAN` })
+    .setFooter({ text: `Keep grinding harder • ${nextRankText}` })
     .setTimestamp();
 
-  channel.send({ content: `🎊 Brawo ${member}!`, embeds: [embed] }).catch(() => {});
+  channel.send({ content: `🎊 **GG** ${member}!`, embeds: [embed] }).catch(() => {});
 }
 
+// ====================== INIT & EXPORTS ======================
 function init() {
   loadAll();
-  setInterval(saveAll, 30000);
+  setInterval(saveAll, 30000); // Auto-save every 30 seconds
+  console.log("👑 [VYRN] Clan Activity & Leveling System Loaded!");
 }
 
 module.exports = {
@@ -129,6 +150,11 @@ module.exports = {
   getLevelData: (userId) => {
     const user = ensureUser(userId);
     const lvl = user.level.level || 0;
-    return { xp: user.level.xp || 0, level: lvl, nextXP: neededXP(lvl) };
+    return { 
+      xp: user.level.xp || 0, 
+      level: lvl, 
+      nextXP: neededXP(lvl),
+      rank: getRank(lvl)
+    };
   }
 };
