@@ -47,24 +47,46 @@ const loadDB = () => {
 };
 const saveDB = (db) => fs.writeFileSync(DB_PATH, JSON.stringify(db, null, 2));
 
-// ====================== TIME CALCULATOR (UNIX) ======================
+// ====================== TIME SYSTEM (BULLETPROOF) ======================
+// Pobiera aktualny czas w Polsce (niezależnie od strefy czasowej hosta)
+const getWarsawTime = () => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Europe/Warsaw',
+    hour12: false,
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', second: 'numeric'
+  }).formatToParts(new Date());
+
+  const getVal = (type) => parseInt(parts.find(p => p.type === type).value, 10);
+  let h = getVal('hour');
+  if (h === 24) h = 0; // Fix dla 24:00
+
+  return { d: getVal('day'), h, m: getVal('minute'), s: getVal('second') };
+};
+
+// Zwraca idealny UNIX timestamp (na potrzebe <t:12345:R>)
 const getNextEventTimestamp = (hours) => {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
-  const currentH = now.getHours();
+  const w = getWarsawTime();
   
-  let nextH = hours.find(h => h > currentH);
-  let isNextDay = false;
+  let nextH = hours.find(h => h > w.h);
+  let addDays = 0;
 
   if (nextH === undefined) {
     nextH = hours[0];
-    isNextDay = true;
+    addDays = 1;
   }
 
-  const target = new Date(now);
-  if (isNextDay) target.setDate(target.getDate() + 1);
-  target.setHours(nextH, 0, 0, 0);
+  let diffSeconds = 0;
+  if (addDays === 1) {
+    // Czas do północy + czas od północy do następnej godziny
+    diffSeconds = (23 - w.h) * 3600 + (59 - w.m) * 60 + (60 - w.s) + (nextH * 3600);
+  } else {
+    // Czas do godziny tego samego dnia
+    diffSeconds = (nextH - w.h) * 3600 - (w.m * 60) - w.s;
+  }
 
-  return Math.floor(target.getTime() / 1000);
+  // Obecny unix w sekundach + różnica sekund
+  return Math.floor(Date.now() / 1000) + diffSeconds;
 };
 
 // ====================== EMBEDS ======================
@@ -116,10 +138,10 @@ const processed = new Set();
 let panelMessage = null;
 
 async function checkEvents(client) {
-  const now = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Warsaw" }));
-  const h = now.getHours();
-  const m = now.getMinutes();
-  const day = now.getDate();
+  const w = getWarsawTime();
+  const h = w.h;
+  const m = w.m;
+  const day = w.d;
 
   for (const [key, e] of Object.entries(CONFIG.EVENTS)) {
     const roleId = CONFIG.ROLES[e.roleKey];
