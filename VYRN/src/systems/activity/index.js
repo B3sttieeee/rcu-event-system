@@ -4,13 +4,17 @@ const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
 // ====================== CONFIG ======================
-// 🔴 POPRAWKA: Usunięto ukośnik przed "data"
-const DATA_DIR = path.join(process.cwd(), "data");
+// KLUCZOWE DLA RAILWAY VOLUME:
+// Zmienna środowiskowa process.env.DATA_DIR pozwala Ci określić punkt montowania.
+// Jeśli Volume masz zamontowany w Railway jako "/data", ta ścieżka w to celuje.
+const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
-// 🔴 POPRAWKA: Zmieniono level.json na levels.json
 const LEVELS_PATH = path.join(DATA_DIR, "levels.json");
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+// Zabezpieczenie folderu Volume
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
 const CONFIG = {
   CHANNEL_ID: "1475999590716018719", 
@@ -35,24 +39,43 @@ let levelsDB = { users: {} };
 
 function loadAll() {
   try {
-    // 🔴 POPRAWKA: AUTO-MIGRATOR STARYCH DANYCH
+    console.log(`[ACTIVITY] Szukam bazy danych na dysku Railway (Ścieżka: ${DATA_DIR})`);
+    
+    // 1. ŁADOWANIE PROFILE.JSON
     if (fs.existsSync(PROFILE_PATH)) {
       const pData = fs.readFileSync(PROFILE_PATH, "utf8");
       const parsed = pData ? JSON.parse(pData) : {};
-      profileDB = parsed.users ? parsed : { users: parsed };
+      
+      // Auto-Migracja struktury
+      if (parsed.users) {
+        profileDB = parsed;
+      } else {
+        profileDB = { users: parsed };
+      }
+      console.log(`✅ [ACTIVITY] Wczytano profile.json (Rozmiar: ${Object.keys(profileDB.users).length} profili)`);
     } else {
       profileDB = { users: {} };
+      console.log("🟡 [ACTIVITY] Brak pliku profile.json. Utworzono nową, czystą bazę.");
     }
 
+    // 2. ŁADOWANIE LEVELS.JSON
     if (fs.existsSync(LEVELS_PATH)) {
       const lData = fs.readFileSync(LEVELS_PATH, "utf8");
       const parsed = lData ? JSON.parse(lData) : {};
-      levelsDB = parsed.users ? parsed : { users: parsed };
+      
+      // Auto-Migracja struktury
+      if (parsed.users) {
+        levelsDB = parsed;
+      } else {
+        levelsDB = { users: parsed };
+      }
+      console.log(`✅ [ACTIVITY] Wczytano levels.json (Rozmiar: ${Object.keys(levelsDB.users).length} profili)`);
     } else {
       levelsDB = { users: {} };
+      console.log("🟡 [ACTIVITY] Brak pliku levels.json. Utworzono nową, czystą bazę.");
     }
   } catch (e) { 
-    console.error("🔥 [ACTIVITY] LOAD ERROR", e.message); 
+    console.error("🔥 [ACTIVITY] KRYTYCZNY BŁĄD ODCZYTU:", e.message); 
     profileDB = { users: {} };
     levelsDB = { users: {} };
   }
@@ -60,14 +83,21 @@ function loadAll() {
 
 function saveAll() {
   try {
-    fs.writeFileSync(PROFILE_PATH, JSON.stringify(profileDB, null, 2));
-    fs.writeFileSync(LEVELS_PATH, JSON.stringify(levelsDB, null, 2));
-  } catch (e) { console.error("🔥 [ACTIVITY] SAVE ERROR", e.message); }
+    fs.writeFileSync(PROFILE_PATH, JSON.stringify(profileDB, null, 2), "utf8");
+    fs.writeFileSync(LEVELS_PATH, JSON.stringify(levelsDB, null, 2), "utf8");
+  } catch (e) { 
+    console.error("🔥 [ACTIVITY] BŁĄD ZAPISU DO VOLUME RAILWAY:", e.message); 
+  }
 }
 
 function ensureUser(userId) {
-  if (!profileDB.users[userId]) profileDB.users[userId] = { voice: 0 };
-  if (!levelsDB.users[userId]) levelsDB.users[userId] = { xp: 0, level: 0, totalXP: 0 };
+  if (!profileDB.users[userId]) {
+    profileDB.users[userId] = { voice: 0 };
+  }
+  if (!levelsDB.users[userId]) {
+    levelsDB.users[userId] = { xp: 0, level: 0, totalXP: 0 };
+  }
+  
   return { 
     voiceData: profileDB.users[userId], 
     levelData: levelsDB.users[userId] 
@@ -85,6 +115,7 @@ function getRank(level) {
 
 async function syncRankRoles(member, currentLevel) {
   const currentRank = getRank(currentLevel);
+  if (!member.guild || !member.guild.members.me) return;
   const me = member.guild.members.me;
   
   try {
@@ -94,12 +125,17 @@ async function syncRankRoles(member, currentLevel) {
       const role = member.guild.roles.cache.get(rank.roleId);
       if (!role) continue;
 
+      // Sprawdzamy czy bot może zarządzać tą rolą
       if (me.roles.highest.comparePositionTo(role) <= 0) continue;
 
       if (rank.roleId === currentRank.roleId) {
-        if (!member.roles.cache.has(role.id)) await member.roles.add(role).catch(() => {});
+        if (!member.roles.cache.has(role.id)) {
+            await member.roles.add(role).catch(() => {});
+        }
       } else {
-        if (member.roles.cache.has(role.id)) await member.roles.remove(role).catch(() => {});
+        if (member.roles.cache.has(role.id)) {
+            await member.roles.remove(role).catch(() => {});
+        }
       }
     }
   } catch (error) {
@@ -108,6 +144,7 @@ async function syncRankRoles(member, currentLevel) {
 }
 
 async function addActivityXP(member, xpAmount = 10) {
+  if (!member || !member.id) return;
   const user = ensureUser(member.id);
 
   user.levelData.xp += xpAmount;
@@ -128,6 +165,7 @@ async function addActivityXP(member, xpAmount = 10) {
 
 // ====================== LEVEL UP NOTIFICATION ======================
 async function sendLevelUpMessage(member, newLevel) {
+  if (!member.guild) return;
   const channel = member.guild.channels.cache.get(CONFIG.CHANNEL_ID);
   if (!channel) return;
 
@@ -155,8 +193,9 @@ async function sendLevelUpMessage(member, newLevel) {
 }
 
 // ====================== INIT & EXPORTS ======================
-function init() {
+function init(client) {
   loadAll();
+  // Zapis co 30 sekund na trwały dysk
   setInterval(saveAll, 30000); 
   console.log("👑 [VYRN] Clan Activity & Leveling System Loaded!");
 }
@@ -164,16 +203,19 @@ function init() {
 module.exports = {
   init,
   addVoiceTime: (userId, sec) => { 
+    if (!userId) return;
     const user = ensureUser(userId);
     user.voiceData.voice += sec; 
   },
   getVoiceMinutes: (userId) => {
+    if (!userId) return 0;
     const user = ensureUser(userId);
     return Math.floor((user.voiceData.voice || 0) / 60);
   },
   addActivityXP,
   getRank,
   getLevelData: (userId) => {
+    if (!userId) return { xp: 0, level: 0, nextXP: 100, rank: getRank(0) };
     const user = ensureUser(userId);
     const lvl = user.levelData.level || 0;
     return { 
