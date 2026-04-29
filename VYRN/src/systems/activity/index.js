@@ -6,7 +6,7 @@ const { EmbedBuilder } = require("discord.js");
 // ====================== CONFIG ======================
 const DATA_DIR = path.join(process.cwd(), "data");
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
-const LEVELS_PATH = path.join(DATA_DIR, "levels.json");
+const LEVELS_PATH = path.join(DATA_DIR, "level.json");
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
