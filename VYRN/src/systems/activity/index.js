@@ -4,9 +4,11 @@ const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
 // ====================== CONFIG ======================
-const DATA_DIR = path.join(process.cwd(), "/data");
+// 🔴 POPRAWKA: Usunięto ukośnik przed "data"
+const DATA_DIR = path.join(process.cwd(), "data");
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
-const LEVELS_PATH = path.join(DATA_DIR, "level.json");
+// 🔴 POPRAWKA: Zmieniono level.json na levels.json
+const LEVELS_PATH = path.join(DATA_DIR, "levels.json");
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -33,17 +35,27 @@ let levelsDB = { users: {} };
 
 function loadAll() {
   try {
+    // 🔴 POPRAWKA: AUTO-MIGRATOR STARYCH DANYCH
     if (fs.existsSync(PROFILE_PATH)) {
       const pData = fs.readFileSync(PROFILE_PATH, "utf8");
-      profileDB = pData ? JSON.parse(pData) : { users: {} };
+      const parsed = pData ? JSON.parse(pData) : {};
+      profileDB = parsed.users ? parsed : { users: parsed };
+    } else {
+      profileDB = { users: {} };
     }
+
     if (fs.existsSync(LEVELS_PATH)) {
       const lData = fs.readFileSync(LEVELS_PATH, "utf8");
-      levelsDB = lData ? JSON.parse(lData) : { users: {} };
+      const parsed = lData ? JSON.parse(lData) : {};
+      levelsDB = parsed.users ? parsed : { users: parsed };
+    } else {
+      levelsDB = { users: {} };
     }
-    if (!profileDB.users) profileDB.users = {};
-    if (!levelsDB.users) levelsDB.users = {};
-  } catch (e) { console.error("🔥 [ACTIVITY] LOAD ERROR", e.message); }
+  } catch (e) { 
+    console.error("🔥 [ACTIVITY] LOAD ERROR", e.message); 
+    profileDB = { users: {} };
+    levelsDB = { users: {} };
+  }
 }
 
 function saveAll() {
@@ -82,7 +94,6 @@ async function syncRankRoles(member, currentLevel) {
       const role = member.guild.roles.cache.get(rank.roleId);
       if (!role) continue;
 
-      // Sprawdzamy czy bot może zarządzać tą rolą
       if (me.roles.highest.comparePositionTo(role) <= 0) continue;
 
       if (rank.roleId === currentRank.roleId) {
@@ -154,7 +165,7 @@ module.exports = {
   init,
   addVoiceTime: (userId, sec) => { 
     const user = ensureUser(userId);
-    user.voiceData.voice += sec; // Poprawione przypisanie
+    user.voiceData.voice += sec; 
   },
   getVoiceMinutes: (userId) => {
     const user = ensureUser(userId);
