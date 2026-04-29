@@ -4,22 +4,20 @@ const activity = require("../systems/activity");
 const economy = require("../systems/economy");
 const boostSystem = require("../systems/boost");
 
-// Funkcja paska postępu w stylu VYRN
 function createProgressBar(percent) {
   const size = 10;
   const filledCount = Math.round((percent / 100) * size);
-  // Wykorzystujemy znaki o stałej szerokości dla lepszego wyglądu
+  // Używamy prestiżowych kwadratów VYRN
   const filled = "🟧".repeat(Math.max(0, filledCount));
   const empty = "⬛".repeat(Math.max(0, size - filledCount));
   return `${filled}${empty}`;
 }
 
-// Pomocnicza funkcja do formatowania czasu głosowego
 function formatVoiceTime(totalMinutes) {
+  if (!totalMinutes || totalMinutes < 1) return "**0**m";
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
-  if (hours > 0) return `**${hours}**h **${mins}**m`;
-  return `**${mins}**m`;
+  return hours > 0 ? `**${hours}**h **${mins}**m` : `**${mins}**m`;
 }
 
 module.exports = {
@@ -28,19 +26,19 @@ module.exports = {
     .setDescription("📊 View your official VYRN Clan profile and statistics"),
 
   async execute(interaction) {
+    // Używamy deferReply, bo systemy plików mogą potrzebować milisekund na odpowiedź
     await interaction.deferReply();
     const userId = interaction.user.id;
 
     try {
-      // Pobieranie danych z systemów
-      const voiceMin = activity.getVoiceMinutes(userId);
-      const levelData = activity.getLevelData(userId);
-      const coins = economy.getCoins(userId);
-      const boost = boostSystem?.getCurrentBoost ? boostSystem.getCurrentBoost(userId) : 1;
+      // Pobieranie danych - DODANE FALLBACKI (jeśli system zwróci undefined)
+      const voiceMin = activity.getVoiceMinutes(userId) || 0;
+      const levelData = activity.getLevelData(userId) || { level: 0, xp: 0, nextXP: 100 };
+      const coins = economy.getCoins(userId) || 0;
+      const currentBoost = boostSystem?.getCurrentBoost ? boostSystem.getCurrentBoost(userId) : 1;
       
-      // Obliczanie rangi i postępu
-      const rank = activity.getRank(levelData.level);
-      const progress = Math.min(100, Math.floor((levelData.xp / levelData.nextXP) * 100));
+      const rank = activity.getRank(levelData.level) || { name: "Iron", emoji: "⚪", multiplier: 1 };
+      const progress = Math.min(100, Math.floor((levelData.xp / (levelData.nextXP || 100)) * 100));
 
       const embed = new EmbedBuilder()
         .setColor("#FFD700") // VYRN Gold
@@ -52,7 +50,7 @@ module.exports = {
         .setTitle(`${rank.emoji} ${interaction.user.username}`)
         .setDescription(
           `Current Rank: **${rank.name}**\n` +
-          `Member Status: **Active**\n\n` +
+          `Member Status: **Active Member**\n\n` +
           `━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n` +
           
           `🏆 **CLAN PROGRESSION**\n` +
@@ -67,21 +65,21 @@ module.exports = {
           `> **${economy.formatCoins(coins)}** <:CASHH:1491180511308157041>\n\n` +
           
           `🚀 **ACTIVE MULTIPLIERS**\n` +
-          `> XP Boost: ${boost > 1 ? `**${boost}x** ACTIVE` : "**1.0x (Standard)**"}\n` +
-          `> Rank Multiplier: **${rank.multiplier || 1}x**`
+          `> XP Boost: ${currentBoost > 1 ? `**${currentBoost}x** ACTIVE` : "**1.0x (None)**"}\n` +
+          `> Rank Bonus: **${rank.multiplier || 1}x**`
         )
         .setFooter({ 
-          text: `VYRN CLAN • ID: ${interaction.user.id}`, 
-          iconURL: interaction.user.displayAvatarURL() 
+          text: `VYRN HQ • Official Profile Data`, 
+          iconURL: interaction.guild.iconURL() 
         })
         .setTimestamp();
 
-      await interaction.editReply({ embeds: [embed] });
+      return await interaction.editReply({ embeds: [embed] });
 
     } catch (err) {
-      console.error("🔥 [PROFILE ERROR]", err);
-      await interaction.editReply({ 
-        content: "❌ **Error:** Failed to load profile data. Please try again later.", 
+      console.error("🔥 [PROFILE COMMAND ERROR]:", err);
+      return await interaction.editReply({ 
+        content: "❌ **Critical Error:** System failed to fetch your profile. Contact administration.", 
         ephemeral: true 
       });
     }
