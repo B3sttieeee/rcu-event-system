@@ -1,73 +1,57 @@
+// src/systems/activity/boost.js
 const fs = require("fs");
 const path = require("path");
 
-// ====================== PATH ======================
-const DATA_DIR = process.env.DATA_DIR || "/data";
+// =====================================================
+// VYRN • PRESTIGE BOOST SYSTEM 🚀
+// =====================================================
+const DATA_DIR = path.join(process.cwd(), "data");
 const BOOST_PATH = path.join(DATA_DIR, "activeBoosts.json");
+const BOOST_TMP_PATH = path.join(DATA_DIR, "activeBoosts.json.tmp");
 
-// ====================== CACHE ======================
 let activeBoosts = new Map();
 
-// ====================== INIT FOLDER ======================
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-}
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// ====================== SAFE PARSE ======================
-function safeParse(json, fallback = {}) {
-  try {
-    return JSON.parse(json);
-  } catch {
-    return fallback;
-  }
-}
-
-// ====================== LOAD ======================
+// ====================== DATABASE ======================
 function loadBoosts() {
   try {
     if (!fs.existsSync(BOOST_PATH)) {
-      fs.writeFileSync(BOOST_PATH, JSON.stringify({}, null, 2));
+      fs.writeFileSync(BOOST_PATH, JSON.stringify({}, null, 2), "utf8");
       activeBoosts = new Map();
       return;
     }
-
     const raw = fs.readFileSync(BOOST_PATH, "utf8");
-    const data = safeParse(raw, {});
+    const data = raw.trim() ? JSON.parse(raw) : {};
 
     activeBoosts = new Map();
-
     for (const [id, boost] of Object.entries(data)) {
       activeBoosts.set(id, {
         multiplier: Number(boost?.multiplier || 1),
         endTime: Number(boost?.endTime || 0),
-        name: boost?.name || "unknown",
+        name: boost?.name || "Unknown Multiplier",
         type: boost?.type || "shop"
       });
     }
-
+    console.log(`🚀 [BOOSTS] Loaded active multipliers for ${activeBoosts.size} users.`);
   } catch (err) {
-    console.error("[BOOST LOAD ERROR]", err.message);
+    console.error("🔥 [BOOST LOAD ERROR]", err.message);
     activeBoosts = new Map();
   }
 }
 
-// ====================== SAVE ======================
 function saveBoosts() {
   try {
-    const obj = {};
-
-    for (const [id, boost] of activeBoosts.entries()) {
-      obj[id] = boost;
-    }
-
-    fs.writeFileSync(BOOST_PATH, JSON.stringify(obj, null, 2));
-
+    const obj = Object.fromEntries(activeBoosts);
+    fs.writeFileSync(BOOST_TMP_PATH, JSON.stringify(obj, null, 2), "utf8");
+    fs.renameSync(BOOST_TMP_PATH, BOOST_PATH);
   } catch (err) {
-    console.error("[BOOST SAVE ERROR]", err.message);
+    console.error("🔥 [BOOST SAVE ERROR]", err.message);
   }
 }
 
-// ====================== CLEAN ======================
+// ====================== CORE LOGIC ======================
+
 function cleanExpired() {
   const now = Date.now();
   let changed = false;
@@ -76,83 +60,83 @@ function cleanExpired() {
     if (!boost?.endTime || boost.endTime <= now) {
       activeBoosts.delete(id);
       changed = true;
+      // Tutaj można dodać logikę wysyłania DM do gracza "Twoje XP wygasło"
     }
   }
-
-  // 🔥 FIX: zapis po cleanupie
   if (changed) saveBoosts();
 }
 
-// ====================== GET BOOST ======================
 function getCurrentBoost(userId) {
-  cleanExpired();
-
+  cleanExpired(); // Zawsze czyścimy przed sprawdzeniem
   const boost = activeBoosts.get(userId);
-
-  if (!boost) return 1;
-  if (boost.endTime <= Date.now()) return 1;
-
-  return boost.multiplier || 1;
+  return boost ? boost.multiplier : 1;
 }
 
-// ====================== SHOP ======================
+function getRemainingTime(userId) {
+  const boost = activeBoosts.get(userId);
+  if (!boost) return 0;
+  const remaining = boost.endTime - Date.now();
+  return Math.max(0, remaining);
+}
+
+// ====================== SHOP CONFIG ======================
+// Ceny i czasy dostosowane pod klan (1h, 3h, 6h)
 const SHOP_BOOSTS = [
-  { id: "1", name: "1.5x XP", multiplier: 1.5, duration: 25 * 60 * 1000, price: 180 },
-  { id: "2", name: "2.0x XP", multiplier: 2.0, duration: 18 * 60 * 1000, price: 350 },
-  { id: "3", name: "2.5x XP", multiplier: 2.5, duration: 12 * 60 * 1000, price: 550 },
-  { id: "4", name: "3.0x XP", multiplier: 3.0, duration: 8 * 60 * 1000, price: 950 }
+  { id: "boost_1", name: "Basic Surge", multiplier: 1.5, durationHours: 1, price: 5000 },
+  { id: "boost_2", name: "Power Grind", multiplier: 2.0, durationHours: 3, price: 15000 },
+  { id: "boost_3", name: "Elite Overload", multiplier: 3.0, durationHours: 6, price: 45000 }
 ];
 
-// ====================== BUY ======================
-async function buyBoost(member, boostId) {
+// ====================== BUY SYSTEM ======================
+async function buyBoost(userId, boostId) {
   try {
-    const economy = require("../economy/index.js");
-    const spendCoins = economy.spendCoins;
+    const economy = require("../economy"); // Integracja z Twoim systemem monet
+    const boost = SHOP_BOOSTS.find(b => b.id === boostId);
 
-    const boost = SHOP_BOOSTS.find(b => b.id === String(boostId));
-    if (!boost) {
-      return { success: false, message: "❌ Boost not found" };
+    if (!boost) return { success: false, reason: "INVALID_BOOST" };
+
+    // Próba pobrania monet
+    const success = economy.removeCoins(userId, boost.price);
+    if (!success) return { success: false, reason: "INSUFFICIENT_FUNDS" };
+
+    const durationMs = boost.durationHours * 60 * 60 * 1000;
+    const current = activeBoosts.get(userId);
+
+    // STACKING LOGIC: Jeśli gracz ma już aktywny boost tego samego typu, przedłużamy czas
+    let newEndTime;
+    if (current && current.multiplier === boost.multiplier) {
+        newEndTime = current.endTime + durationMs;
+    } else {
+        newEndTime = Date.now() + durationMs;
     }
 
-    if (!spendCoins || !spendCoins(member.id, boost.price)) {
-      return {
-        success: false,
-        message: `❌ Not enough coins (${boost.price})`
-      };
-    }
-
-    activeBoosts.set(member.id, {
+    activeBoosts.set(userId, {
       multiplier: boost.multiplier,
-      endTime: Date.now() + boost.duration,
+      endTime: newEndTime,
       name: boost.name,
       type: "shop"
     });
 
     saveBoosts();
-
-    return { success: true, boost };
+    return { success: true, boost, endTime: newEndTime };
 
   } catch (err) {
-    console.error("[BOOST BUY ERROR]", err);
-    return { success: false, message: "❌ Internal error" };
+    console.error("🔥 [BOOST BUY ERROR]", err);
+    return { success: false, reason: "INTERNAL_ERROR" };
   }
 }
-
-// ====================== AUTO CLEAN ======================
-setInterval(cleanExpired, 60 * 1000);
 
 // ====================== INIT ======================
 function init() {
   loadBoosts();
-  console.log("🖤 Boost System ready (CLEAN FIX)");
+  // Czyść wygasłe co minutę
+  setInterval(cleanExpired, 60000);
 }
 
-// ====================== EXPORT ======================
 module.exports = {
   init,
-  loadBoosts,
-  saveBoosts,
   getCurrentBoost,
+  getRemainingTime,
   buyBoost,
   SHOP_BOOSTS,
   activeBoosts
