@@ -1,4 +1,5 @@
 // src/handlers/modalHandler.js
+const { MessageFlags } = require("discord.js"); // Dodany import flag
 const privateVC = require("../systems/privatevc");
 const ticketSystem = require("../systems/tickets");
 const embedCommand = require("../commands/embed");
@@ -45,7 +46,7 @@ module.exports = async function modalHandler(interaction) {
     if (!interaction.replied && !interaction.deferred) {
       return await interaction.reply({
         content: "❌ **System Alert:** This form layout is not currently registered in the HQ database.",
-        ephemeral: true
+        flags: [MessageFlags.Ephemeral] // POPRAWKA: Usunięto ephemeral: true
       });
     }
 
@@ -58,7 +59,7 @@ module.exports = async function modalHandler(interaction) {
       try {
         await interaction.reply({
           content: "❌ **Critical Error:** Failed to transmit form data to HQ servers. Contact Administration.",
-          ephemeral: true
+          flags: [MessageFlags.Ephemeral] // POPRAWKA: Usunięto ephemeral: true
         });
       } catch (e) {
         console.error("[MODAL] Failed to send emergency error response.");
