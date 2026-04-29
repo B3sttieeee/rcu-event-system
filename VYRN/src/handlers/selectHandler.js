@@ -1,28 +1,30 @@
 // src/handlers/selectHandler.js
+const { EmbedBuilder } = require("discord.js");
 const privateVC = require("../systems/privatevc");
 const ticketSystem = require("../systems/tickets");
 const eventSystem = require("../systems/event");
-const { SHOP_BOOSTS, buyBoost } = require("../systems/boost");
+const boostSystem = require("../systems/boost");
 
 /**
  * ========================================================
- * VYRN • Select Menu Router (Black Edition v2)
- * Clean, modular, and highly scalable interaction handler
+ * VYRN • SELECT MENU ROUTER (PRESTIGE EDITION)
+ * Central processing for all dropdown interactions
  * ========================================================
  */
 module.exports = async function selectHandler(interaction) {
-  const customId = interaction.customId;
+  const { customId, user, values } = interaction;
   if (!customId) return;
 
-  console.log(`[SELECT] ⬇️ ${interaction.user.tag} użył menu: ${customId}`);
+  console.log(`[INTERACTION] ⬇️ ${user.tag} used menu: ${customId}`);
 
   try {
-    // 1. DYNAMICZNE ID (sprawdzanie po prefixie)
-    if (customId.startsWith("vc_kickselect_") || customId.startsWith("vc_banselect_")) {
+    // 1. DYNAMIC PREFIXES (Pattern matching)
+    if (customId.startsWith("vc_")) {
+      // Handles private voice channel selections (permit, kick, ban)
       return await privateVC.handlePrivateSelect(interaction);
     }
 
-    // 2. STATYCZNE ID (szybki Switch zamiast ściany IFów)
+    // 2. STATIC IDs (Fast Switch)
     switch (customId) {
       case "clan_ticket_select":
         return await ticketSystem.handle(interaction, interaction.client);
@@ -35,11 +37,11 @@ module.exports = async function selectHandler(interaction) {
         return await handleShopBoost(interaction);
 
       default:
-        // ==================== NIEOBSŁUŻONE MENU ====================
-        console.warn(`[SELECT] ⚠️ Nieobsłużone menu: ${customId}`);
+        // ==================== UNHANDLED SELECT ====================
+        console.warn(`[SELECT] ⚠️ Unhandled select menu: ${customId}`);
         if (!interaction.replied && !interaction.deferred) {
           return await interaction.reply({
-            content: "❌ To menu nie jest jeszcze podłączone do systemu.",
+            content: "❌ **System Alert:** This menu interaction is not registered in the HQ database.",
             ephemeral: true
           });
         }
@@ -48,15 +50,15 @@ module.exports = async function selectHandler(interaction) {
   } catch (error) {
     console.error("🔥 [SELECT HANDLER ERROR]:", error);
 
-    // 3. BEZPIECZNY FALLBACK BŁĘDÓW
+    // EMERGENCY FALLBACK
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
-          content: "❌ Wystąpił błąd serwera podczas przetwarzania tego menu.",
+          content: "❌ **Critical Error:** Failed to process menu selection. Contact HQ Staff.",
           ephemeral: true
         });
       } catch (e) {
-        console.error("[SELECT] ❌ Nie udało się wysłać wiadomości o błędzie (Discord API).");
+        console.error("[SELECT] Critical failure in Discord API response.");
       }
     }
   }
@@ -64,41 +66,69 @@ module.exports = async function selectHandler(interaction) {
 
 /**
  * ========================================================
- * MODUŁY WEWNĘTRZNE (Separacja logiki)
+ * INTERNAL MODULES (Logic Separation)
  * ========================================================
  */
 
-// Obsługa zakupu boostów w sklepie
+// Handles the purchase of boosters from the /shop
 async function handleShopBoost(interaction) {
   const boostId = interaction.values?.[0];
 
   if (!boostId) {
     return interaction.reply({
-      content: "❌ Nie wybrano żadnego boosta z listy.",
+      content: "❌ No item selected. Operation cancelled.",
       ephemeral: true
     });
   }
 
-  const boost = (SHOP_BOOSTS || []).find(b => b?.id === boostId);
+  // Find boost in the configuration
+  const boost = (boostSystem.SHOP_BOOSTS || []).find(b => b.id === boostId);
 
   if (!boost) {
     return interaction.reply({
-      content: "❌ Wybrany boost nie istnieje w bazie danych.",
+      content: "❌ **Error:** Selected booster no longer exists in the store rotation.",
       ephemeral: true
     });
   }
 
-  const result = buyBoost?.(interaction.user.id, boostId);
+  // Attempt to execute the purchase
+  // Using the logic from your newly expanded boost system
+  const result = await boostSystem.buyBoost(interaction.user.id, boostId);
 
-  if (!result?.success) {
+  if (!result.success) {
+    let errorMessage = "Transaction declined.";
+    
+    if (result.reason === "INSUFFICIENT_FUNDS") {
+      errorMessage = "You do not have enough coins in your vault for this booster.";
+    } else if (result.reason === "INTERNAL_ERROR") {
+      errorMessage = "Financial system is currently offline. Try again later.";
+    }
+
     return interaction.reply({
-      content: `❌ **Odmowa:** ${result?.message || "Zakup nie powiódł się."}`,
+      content: `❌ **Purchase Failed:** ${errorMessage}`,
       ephemeral: true
     });
   }
+
+  // SUCCESS EMBED (Prestige Gold)
+  const expiryTimestamp = Math.floor(result.endTime / 1000);
+  
+  const successEmbed = new EmbedBuilder()
+    .setColor("#FFD700") // VYRN Gold
+    .setAuthor({ name: "VYRN HQ • PURCHASE SUCCESSFUL", iconURL: interaction.guild.iconURL() })
+    .setTitle(`⚡ ${boost.name} Activated`)
+    .setDescription(
+      `Your XP multiplier has been successfully deployed to your account.\n\n` +
+      `**Active Multiplier:** \`${boost.multiplier}x XP\`\n` +
+      `**Expiration:** <t:${expiryTimestamp}:F> (<t:${expiryTimestamp}:R>)\n\n` +
+      `*Multipliers of the same value stack their duration.*`
+    )
+    .setThumbnail(interaction.user.displayAvatarURL())
+    .setFooter({ text: "VYRN Clan • Economy Management" })
+    .setTimestamp();
 
   return interaction.reply({
-    content: `⚡ Pomyślnie zakupiono: **${boost.name}**! Zostanie aktywowany natychmiast.`,
+    embeds: [successEmbed],
     ephemeral: true
   });
 }
