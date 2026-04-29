@@ -15,7 +15,7 @@ const ROLES = {
 };
 
 const THEME = {
-  COLOR: "#FFD700", // Świecące Złoto
+  COLOR: "#FFD700", // Bright Gold
   EMOJIS: {
     LEADER: "👑",
     OFFICER: "🛡️",
@@ -28,20 +28,20 @@ const THEME = {
 
 // ====================== CACHE ======================
 let lastUpdate = 0;
-const UPDATE_COOLDOWN = 15000; // 15 sekund cooldownu
+const UPDATE_COOLDOWN = 15000; // 15 seconds cooldown
 
 // ====================== FORMAT USER ======================
 function formatUser(member, roleName, emoji) {
   const isVerified = member.roles.cache.has(ROLES.VERIFIED);
   const statusEmoji = isVerified ? "" : THEME.EMOJIS.UNVERIFIED;
-  const statusText = isVerified ? "" : " `[Brak Weryfikacji]`";
+  const statusText = isVerified ? "" : " `[Unverified]`";
 
   return `> ${emoji} **${roleName}** ┃ ${member} ${statusEmoji}${statusText}`;
 }
 
 // ====================== GET MEMBERS ======================
 async function getClanMembers(guild) {
-  // Pobieranie wszystkich członków serwera, aby lista była zawsze aktualna
+  // Fetching all members to ensure the cache is fully up to date
   await guild.members.fetch({ force: true }).catch(() => {});
 
   const data = {
@@ -70,33 +70,33 @@ async function buildEmbed(guild) {
   const { leaders, officers, members } = await getClanMembers(guild);
   const totalMembers = leaders.length + officers.length + members.length;
 
-  // Długie linie oddzielające dla lepszego efektu wizualnego
+  // Long separator line for better visual layout
   const separator = THEME.EMOJIS.LINE.repeat(25); 
 
   return new EmbedBuilder()
     .setColor(THEME.COLOR)
     .setAuthor({
-      name: `🏆 ${guild.name.toUpperCase()} • OFICJALNY SKŁAD KLANU`,
+      name: `🏆 ${guild.name.toUpperCase()} • OFFICIAL CLAN ROSTER`,
       iconURL: guild.iconURL({ dynamic: true, size: 64 })
     })
-    .setThumbnail(guild.iconURL({ dynamic: true, size: 256 })) // Powiększona miniatura dla prestiżu
+    .setThumbnail(guild.iconURL({ dynamic: true, size: 256 })) // Larger thumbnail for prestige
     .setDescription(
-      `Witamy w oficjalnym zestawieniu klanu **VYRN**. Poniżej znajduje się aktualna lista naszych członków.\n\n` +
+      `Welcome to the official **VYRN** clan roster. Below is the current list of our members.\n\n` +
 
-      `**${THEME.EMOJIS.LEADER} ZARZĄD KLANU (LEADERS)**\n` +
-      `${leaders.length ? leaders.join("\n") : "> _Brak liderów_"}\n\n` +
+      `**${THEME.EMOJIS.LEADER} CLAN LEADERS**\n` +
+      `${leaders.length ? leaders.join("\n") : "> _None_"}\n\n` +
 
-      `**${THEME.EMOJIS.OFFICER} OFICEROWIE (OFFICERS)**\n` +
-      `${officers.length ? officers.join("\n") : "> _Brak oficerów_"}\n\n` +
+      `**${THEME.EMOJIS.OFFICER} OFFICERS**\n` +
+      `${officers.length ? officers.join("\n") : "> _None_"}\n\n` +
 
-      `**${THEME.EMOJIS.MEMBER} CZŁONKOWIE (MEMBERS)**\n` +
-      `${members.length ? members.join("\n") : "> _Brak członków_"}\n` +
+      `**${THEME.EMOJIS.MEMBER} MEMBERS**\n` +
+      `${members.length ? members.join("\n") : "> _None_"}\n` +
       `\n${separator}\n` +
-      `**📌 INFORMACJE**\n` +
-      `> Osoby z oznaczeniem ${THEME.EMOJIS.UNVERIFIED} \`[Brak Weryfikacji]\` muszą zweryfikować swoje konto Roblox, aby w pełni uczestniczyć w eventach klanowych.`
+      `**📌 INFORMATION**\n` +
+      `> Users marked with ${THEME.EMOJIS.UNVERIFIED} \`[Unverified]\` must verify their Roblox account to fully participate in clan events.`
     )
     .setFooter({
-      text: `👑 VYRN Clan System • Łącznie w klanie: ${totalMembers}`,
+      text: `👑 VYRN Clan System • Total members: ${totalMembers}`,
       iconURL: guild.iconURL({ dynamic: true })
     })
     .setTimestamp();
@@ -115,19 +115,19 @@ async function updateClanEmbed(client) {
     const guild = channel.guild;
     const messages = await channel.messages.fetch({ limit: 10 });
     
-    // Szukanie wiadomości bota, aby ją zaktualizować (zamiast wysyłać nową)
+    // Find the bot's existing message to edit (instead of spamming new ones)
     const existing = messages.find(m => m.author.id === client.user.id);
     const embed = await buildEmbed(guild);
 
     if (existing) {
-      await existing.edit({ embeds: [embed] }).catch(err => console.error("Nie udało się zaktualizować embeda:", err));
+      await existing.edit({ embeds: [embed] }).catch(err => console.error("Failed to update embed:", err));
     } else {
-      await channel.send({ embeds: [embed] }).catch(err => console.error("Nie udało się wysłać embeda:", err));
+      await channel.send({ embeds: [embed] }).catch(err => console.error("Failed to send embed:", err));
     }
 
-    console.log(`✨ [VYRN System] Zaktualizowano listę klanu: ${guild.name}`);
+    console.log(`✨ [VYRN System] Clan roster updated: ${guild.name}`);
   } catch (err) {
-    console.error("❌ Błąd systemu klanowego:", err);
+    console.error("❌ Clan system error:", err);
   }
 }
 
@@ -135,12 +135,12 @@ async function updateClanEmbed(client) {
 function startClanSystem(client) {
   console.log("🟡 Clan System (VYRN Gold Edition) loaded");
 
-  // Aktualizacja chwilę po starcie bota
+  // Initial update slightly after bot start
   client.once(Events.ClientReady, () => {
     setTimeout(() => updateClanEmbed(client), 5000);
   });
 
-  // Nasłuchiwanie zmian ról (gdy ktoś dostanie awans/weryfikację)
+  // Listen for role updates (e.g., promotions, verifications)
   client.on(Events.GuildMemberUpdate, (oldM, newM) => {
     const rolesToCheck = [ROLES.LEADER, ROLES.OFFICER, ROLES.MEMBER, ROLES.VERIFIED];
     const roleChanged = rolesToCheck.some(role =>
@@ -150,18 +150,18 @@ function startClanSystem(client) {
     if (roleChanged) updateClanEmbed(client);
   });
 
-  // Nasłuchiwanie wejść/wyjść z serwera
+  // Listen for joins and leaves
   client.on(Events.GuildMemberAdd, () => updateClanEmbed(client));
   client.on(Events.GuildMemberRemove, () => updateClanEmbed(client));
 
-  // Automatyczne odświeżanie co 2 minuty jako zabezpieczenie
+  // Auto-refresh every 2 minutes as a fallback
   setInterval(() => updateClanEmbed(client), 120000);
 }
 
 // ====================== INIT ======================
 function init(client) {
   startClanSystem(client);
-  console.log("🏆 System Klanowy VYRN zainicjowany pomyślnie.");
+  console.log("🏆 VYRN Clan System initialized successfully.");
 }
 
 module.exports = {
