@@ -137,7 +137,7 @@ async function openModal(interaction) {
     modal.addComponents(
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("nick").setLabel("Roblox Username").setStyle(TextInputStyle.Short).setRequired(true)),
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("rebirths").setLabel("Total Rebirths").setStyle(TextInputStyle.Short).setRequired(true)),
-      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("best_pet").setLabel("Best Pet / Multiplier / Rank").setStyle(TextInputStyle.Short).setRequired(true)),
+      new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("best_pet").setLabel("Best Pet / Presitge").setStyle(TextInputStyle.Short).setRequired(true)),
       new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("why").setLabel("Why do you want to join VYRN?").setStyle(TextInputStyle.Paragraph).setRequired(true))
     );
   } else if (type === "staff") {
