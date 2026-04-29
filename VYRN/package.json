@@ -1,10 +1,10 @@
 {
-  "name": "vy rn-bot",
+  "name": "vyrn-bot",
   "version": "1.0.0",
   "description": "VYRN Clan - Hybrid Modular Discord Bot",
   "main": "src/bot.js",
   "scripts": {
-    "start": "npm run deploy && node src/bot.js",
+    "start": "node src/bot.js",
     "deploy": "node src/deploy-commands.js",
     "dev": "node src/bot.js"
   },
