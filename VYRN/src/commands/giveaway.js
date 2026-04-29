@@ -1,7 +1,8 @@
 // src/commands/giveaway.js
 const {
   SlashCommandBuilder,
-  MessageFlags
+  PermissionFlagsBits,
+  ChannelType
 } = require("discord.js");
 
 const { createGiveaway } = require("../systems/giveaway");
@@ -9,66 +10,96 @@ const { createGiveaway } = require("../systems/giveaway");
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("giveaway")
-    .setDescription("🎉 Tworzy nowy giveaway")
-    .setDefaultMemberPermissions(8) // Administrator
+    .setDescription("🎉 Create a high-prestige VYRN Clan giveaway")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+    // 1. Prize (Required)
     .addStringOption(option =>
       option
         .setName("prize")
-        .setDescription("Nagroda w giveawayu")
+        .setDescription("What is the prize? (e.g. 1,000,000 Coins / Rare Pet)")
         .setRequired(true)
     )
+    // 2. Duration (Required)
     .addStringOption(option =>
       option
         .setName("time")
-        .setDescription("Czas trwania (np. 1h, 30m, 2d)")
+        .setDescription("Duration (e.g. 1h, 30m, 1d, 7d)")
         .setRequired(true)
     )
+    // 3. Winners (Required)
     .addIntegerOption(option =>
       option
         .setName("winners")
-        .setDescription("Liczba zwycięzców")
+        .setDescription("Number of lucky winners")
         .setMinValue(1)
-        .setMaxValue(20)
+        .setMaxValue(50)
         .setRequired(true)
     )
+    // 4. Channel (Optional) - NEW
+    .addChannelOption(option =>
+      option
+        .setName("channel")
+        .setDescription("Where to start the giveaway? (Default: current channel)")
+        .addChannelTypes(ChannelType.GuildText)
+        .setRequired(false)
+    )
+    // 5. Requirements (Optional) - NEW
+    .addRoleOption(option =>
+      option
+        .setName("requirement")
+        .setDescription("Only members with this role can enter")
+        .setRequired(false)
+    )
+    // 6. Description (Optional)
     .addStringOption(option =>
       option
         .setName("description")
-        .setDescription("Dodatkowy opis giveawayu")
+        .setDescription("Additional info or rules for the giveaway")
         .setRequired(false)
     )
-    .addAttachmentOption(option =>           // <-- Zmienione na AttachmentOption
+    // 7. Image (Optional)
+    .addAttachmentOption(option =>
       option
         .setName("image")
-        .setDescription("Obrazek do embedu giveawayu")
+        .setDescription("Promotional image for the giveaway embed")
         .setRequired(false)
     ),
 
   async execute(interaction) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });   // <-- Poprawione
+    // Używamy ephemeral reply, żeby nie śmiecić kanału podczas ustawiania
+    await interaction.deferReply({ ephemeral: true });
 
     try {
       const prize = interaction.options.getString("prize");
       const time = interaction.options.getString("time");
       const winners = interaction.options.getInteger("winners");
+      const channel = interaction.options.getChannel("channel") || interaction.channel;
+      const requirement = interaction.options.getRole("requirement");
       const description = interaction.options.getString("description");
-      const imageAttachment = interaction.options.getAttachment("image"); // <-- Attachment
+      const imageAttachment = interaction.options.getAttachment("image");
 
       const options = {
         prize,
         time,
         winners,
-        description,
-        image: imageAttachment ? imageAttachment.url : null   // Pobieramy URL z attachment
+        channelId: channel.id,
+        requirementId: requirement ? requirement.id : null,
+        description: description || "No additional description provided.",
+        image: imageAttachment ? imageAttachment.url : null
       };
 
+      // Wywołanie systemu tworzenia giveawayu
       await createGiveaway(interaction, options);
 
-    } catch (error) {
-      console.error("[GIVEAWAY COMMAND ERROR]", error);
+      // Potwierdzenie dla administratora
       await interaction.editReply({
-        content: "❌ Wystąpił błąd podczas tworzenia giveawayu.",
-        flags: MessageFlags.Ephemeral
+        content: `✅ **Success!** The giveaway for **${prize}** has been started in ${channel}.`
+      });
+
+    } catch (error) {
+      console.error("🔥 [GIVEAWAY COMMAND ERROR]", error);
+      await interaction.editReply({
+        content: "❌ **Error:** Failed to initialize the giveaway system. Check console logs."
       });
     }
   }
