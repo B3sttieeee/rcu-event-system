@@ -4,74 +4,92 @@ const selectHandler = require("./selectHandler");
 const modalHandler = require("./modalHandler");
 
 /**
- * Główny Router Interakcji - HYBRID MODULAR BOT
- * Centralny punkt obsługi wszystkich interakcji Discord (Slash, Buttons, Select Menus, Modals)
+ * VYRN HQ • CENTRAL INTERACTION ROUTER
+ * The core engine handling Slash Commands, Buttons, Select Menus, and Modals.
  */
 module.exports = async function interactionRouter(interaction) {
-  // Ignorujemy interakcje spoza serwera (DM, Group DM itp.)
-  if (!interaction.guild) {
-    return;
-  }
+  // Global Guard: Only process interactions within the VYRN Server
+  if (!interaction.guild) return;
+
+  const { user, commandName, customId } = interaction;
 
   try {
-    // ==================== SLASH COMMANDS ====================
+    // ==================== 1. SLASH COMMANDS ====================
     if (interaction.isChatInputCommand()) {
-      const command = interaction.client.commands.get(interaction.commandName);
+      const command = interaction.client.commands.get(commandName);
 
       if (!command) {
+        console.warn(`[COMMAND] ⚠️ Unknown command executed: /${commandName}`);
         return interaction.reply({
-          content: "❌ Ta komenda nie istnieje lub jest aktualnie niedostępna.",
+          content: "❌ **System Error:** This command is unregistered or undergoing maintenance.",
           ephemeral: true
         });
       }
 
-      console.log(`[SLASH] ${interaction.user.tag} → /${interaction.commandName}`);
+      console.log(`[SLASH] ⚔️ ${user.tag} executed: /${commandName}`);
       return await command.execute(interaction);
     }
 
-    // ==================== BUTTONS ====================
+    // ==================== 2. AUTOCOMPLETE ====================
+    if (interaction.isAutocomplete()) {
+      const command = interaction.client.commands.get(commandName);
+      if (!command) return;
+
+      try {
+        await command.autocomplete(interaction);
+      } catch (err) {
+        console.error(`[AUTOCOMPLETE ERROR] /${commandName}:`, err);
+      }
+      return;
+    }
+
+    // ==================== 3. BUTTONS ====================
     if (interaction.isButton()) {
-      console.log(`[BUTTON] ${interaction.user.tag} → ${interaction.customId}`);
+      // Handled by the dedicated button handler
       return await buttonHandler(interaction);
     }
 
-    // ==================== SELECT MENUS ====================
-    if (interaction.isStringSelectMenu()) {
-      console.log(`[SELECT] ${interaction.user.tag} → ${interaction.customId}`);
+    // ==================== 4. SELECT MENUS ====================
+    if (interaction.isStringSelectMenu() || interaction.isEntitySelectMenu()) {
+      // Process both string and user/role/channel select menus
       return await selectHandler(interaction);
     }
 
-    // ==================== MODALS ====================
+    // ==================== 5. MODAL SUBMISSIONS ====================
     if (interaction.isModalSubmit()) {
-      console.log(`[MODAL] ${interaction.user.tag} → ${interaction.customId}`);
       return await modalHandler(interaction);
     }
 
-    // ==================== INNE INTERAKCJE (Context Menu, User Select, etc.) ====================
+    // ==================== 6. CONTEXT MENU COMMANDS ====================
     if (interaction.isContextMenuCommand()) {
-      const command = interaction.client.commands.get(interaction.commandName);
+      const command = interaction.client.commands.get(commandName);
       if (command && typeof command.execute === "function") {
-        console.log(`[CONTEXT] ${interaction.user.tag} → ${interaction.commandName}`);
+        console.log(`[CONTEXT] 📋 ${user.tag} triggered: ${commandName}`);
         return await command.execute(interaction);
       }
     }
 
-    // Logowanie nieobsłużonych typów interakcji (do debugowania)
-    console.warn(`[INTERACTION] Nieobsłużony typ interakcji: ${interaction.type} | CustomID: ${interaction.customId || "brak"}`);
+    // Unhandled Interaction Types
+    console.warn(`[ROUTER] ⚠️ Unhandled interaction type: ${interaction.type} | ID: ${customId || "N/A"}`);
 
   } catch (error) {
-    console.error("[INTERACTION ROUTER ERROR]", error);
+    console.error("🔥 [CORE ROUTER ERROR]:", error);
 
-    // Bezpieczna próba odpowiedzi użytkownikowi (zabezpieczenie przed "Interaction has already been acknowledged")
+    // Secure fallback response for the end-user
+    const errorPayload = {
+      content: "❌ **HQ System Alert:** An internal error occurred while processing your request. Please report this to an Administrator.",
+      ephemeral: true
+    };
+
     if (!interaction.replied && !interaction.deferred) {
       try {
-        await interaction.reply({
-          content: "❌ Wystąpił nieoczekiwany błąd podczas przetwarzania interakcji.",
-          ephemeral: true
-        });
+        await interaction.reply(errorPayload);
       } catch (replyError) {
-        console.error("[INTERACTION] Nie udało się wysłać odpowiedzi o błędzie:", replyError.message);
+        console.error("[ROUTER] Failed to send emergency error response:", replyError.message);
       }
+    } else {
+      // If the bot already acknowledged but crashed later, use followUp
+      await interaction.followUp(errorPayload).catch(() => {});
     }
   }
 };
