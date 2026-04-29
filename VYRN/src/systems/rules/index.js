@@ -6,13 +6,14 @@ const CONFIG = {
   RULES_CHANNEL_ID: "1475526080361140344",
   VERIFICATION_LINK_CHANNEL: "1475970436650237962",
   
-  // Prestiżowy motyw VYRN (Złoto/Czerń)
+  // Prestiżowy motyw VYRN
   THEME: {
     GOLD: "#FFD700",
-    BLACK: "#0a0a0a"
+    BLACK: "#0a0a0a",
+    BLUE: "#3a86ff" // Kolor weryfikacji
   },
   
-  // Twój nowy banner graficzny
+  // Twój banner graficzny
   PANEL_IMAGE: "https://imgur.com/BCuOFX2.png"
 };
 
@@ -21,7 +22,8 @@ async function createRulesPanel(client) {
   const channel = await client.channels.fetch(CONFIG.RULES_CHANNEL_ID).catch(() => null);
   if (!channel) return console.warn(`❌ [RULES] Channel not found: ${CONFIG.RULES_CHANNEL_ID}`);
 
-  const embed = new EmbedBuilder()
+  // --- EMBED 1: GŁÓWNY REGULAMIN ---
+  const rulesEmbed = new EmbedBuilder()
     .setColor(CONFIG.THEME.GOLD)
     .setTitle("🚨 VYRN CLAN • OFFICIAL SERVER RULES")
     .setDescription(
@@ -37,35 +39,49 @@ async function createRulesPanel(client) {
       `• **No Advertising.** Advertising YouTube channels, Discord servers, etc., will result in a permanent ban.\n` +
       `• Use channels for their intended purpose.\n\n` +
       
-      `**✅ HOW TO JOIN THE CLAN**\n` +
-      `• To join the clan, your Roblox account **must** be linked via Blox.link.\n` +
-      `• Connect your account here: <#${CONFIG.VERIFICATION_LINK_CHANNEL}>\n` +
-      `• Applications without a linked account will **not** be accepted.\n\n` +
-      
       `**🔒 STAFF AUTHORITY**\n` +
       `• The Staff team has the final say in any conflict. Do not argue with them.\n` +
       `• Submitting fake applications or creating false support tickets will result in permanent disqualification.`
     )
-    .setImage(CONFIG.PANEL_IMAGE)
-    .setFooter({ 
-      text: "VYRN CLAN • Official Rules", 
-      iconURL: channel.guild.iconURL({ dynamic: true }) 
-    })
+    .setImage(CONFIG.PANEL_IMAGE) // Banner idzie tutaj
     .setTimestamp();
 
+  // --- EMBED 2: OSOBNY KAFELEK DLA WERYFIKACJI ---
+  const verifyEmbed = new EmbedBuilder()
+    .setColor(CONFIG.THEME.BLUE)
+    .setTitle("🔗 ACCOUNT VERIFICATION (BLOXLINK)")
+    .setDescription(
+      `To ensure a safe community, your Roblox account **must** be linked.\n` +
+      `Applications without a linked account will not be accepted.\n\n` +
+      
+      `**HOW TO VERIFY:**\n` +
+      `> **1.** Go to the verification channel: <#${CONFIG.VERIFICATION_LINK_CHANNEL}>\n` +
+      `> **2.** Type the \`/verify\` command and press Enter.\n` +
+      `> **3.** The Bloxlink bot will give you a secure link. Click it to open the official Bloxlink site.\n` +
+      `> **4.** Log into your Roblox account on the site and follow the instructions.\n` +
+      `> **5.** Once done, return to Discord! Your account is now linked.`
+    )
+    .setFooter({ 
+      text: "VYRN CLAN • Secure Verification", 
+      iconURL: channel.guild.iconURL({ dynamic: true }) 
+    });
+
+  // WYSYŁANIE/AKTUALIZACJA
   try {
     const messages = await channel.messages.fetch({ limit: 10 });
+    // Szukamy wiadomości, która ma pierwszy embed z tytułem RULES
     const existing = messages.find(msg =>
       msg.embeds.length > 0 && msg.embeds[0].title?.includes("OFFICIAL SERVER RULES")
     );
 
     if (existing) {
-      // Zaktualizuj i wyczyść przyciski (components: []), jeśli były wcześniej
-      await existing.edit({ embeds: [embed], components: [] });
-      console.log("[RULES] Rules panel updated successfully");
+      // Aktualizujemy wiadomość wgrywając oba embedy
+      await existing.edit({ embeds: [rulesEmbed, verifyEmbed], components: [] });
+      console.log("[RULES] Rules & Verify panel updated successfully");
     } else {
-      await channel.send({ embeds: [embed] });
-      console.log("[RULES] Rules panel created successfully");
+      // Wysyłamy nową wiadomość z dwoma embedami naraz
+      await channel.send({ embeds: [rulesEmbed, verifyEmbed] });
+      console.log("[RULES] Rules & Verify panel created successfully");
     }
   } catch (err) {
     console.error("[RULES] Error posting rules panel:", err);
