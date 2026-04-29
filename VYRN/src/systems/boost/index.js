@@ -1,26 +1,38 @@
-// src/systems/activity/boost.js
+// src/systems/boost/index.js (lub activity/boost.js - w zależności gdzie to trzymasz)
 const fs = require("fs");
 const path = require("path");
 
 // =====================================================
 // VYRN • PRESTIGE BOOST SYSTEM 🚀
 // =====================================================
-const DATA_DIR = path.join(process.cwd(), "data");
+// KLUCZOWE DLA RAILWAY: Ścieżka celująca prosto w Mount Path: /data
+const DATA_DIR = process.env.DATA_DIR || "/data";
 const BOOST_PATH = path.join(DATA_DIR, "activeBoosts.json");
 const BOOST_TMP_PATH = path.join(DATA_DIR, "activeBoosts.json.tmp");
 
 let activeBoosts = new Map();
 
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+// Zabezpieczenie przed brakiem folderu Volume
+if (!fs.existsSync(DATA_DIR)) {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch (err) {
+    console.warn(`[BOOST] Nie można utworzyć folderu ${DATA_DIR} - prawdopodobnie już istnieje lub brak uprawnień root.`);
+  }
+}
 
 // ====================== DATABASE ======================
 function loadBoosts() {
   try {
+    console.log(`[BOOST] Szukam bazy mnożników na dysku Railway (Ścieżka: ${DATA_DIR})`);
+    
     if (!fs.existsSync(BOOST_PATH)) {
       fs.writeFileSync(BOOST_PATH, JSON.stringify({}, null, 2), "utf8");
       activeBoosts = new Map();
+      console.log("🟡 [BOOST] Brak pliku activeBoosts.json. Utworzono nową bazę mnożników.");
       return;
     }
+    
     const raw = fs.readFileSync(BOOST_PATH, "utf8");
     const data = raw.trim() ? JSON.parse(raw) : {};
 
@@ -33,20 +45,23 @@ function loadBoosts() {
         type: boost?.type || "shop"
       });
     }
-    console.log(`🚀 [BOOSTS] Loaded active multipliers for ${activeBoosts.size} users.`);
+    console.log(`✅ [BOOST] Wczytano aktywne mnożniki (Rozmiar: ${activeBoosts.size} graczy)`);
   } catch (err) {
-    console.error("🔥 [BOOST LOAD ERROR]", err.message);
+    console.error("🔥 [BOOST LOAD ERROR] KRYTYCZNY BŁĄD ODCZYTU:", err.message);
     activeBoosts = new Map();
   }
 }
 
 function saveBoosts() {
   try {
+    if (activeBoosts.size === 0 && !fs.existsSync(BOOST_PATH)) return;
+
     const obj = Object.fromEntries(activeBoosts);
+    // Bezpieczny zapis przez plik tymczasowy na dysk Volume
     fs.writeFileSync(BOOST_TMP_PATH, JSON.stringify(obj, null, 2), "utf8");
     fs.renameSync(BOOST_TMP_PATH, BOOST_PATH);
   } catch (err) {
-    console.error("🔥 [BOOST SAVE ERROR]", err.message);
+    console.error("🔥 [BOOST SAVE ERROR] BŁĄD ZAPISU DO VOLUME RAILWAY:", err.message);
   }
 }
 
@@ -60,7 +75,7 @@ function cleanExpired() {
     if (!boost?.endTime || boost.endTime <= now) {
       activeBoosts.delete(id);
       changed = true;
-      // Tutaj można dodać logikę wysyłania DM do gracza "Twoje XP wygasło"
+      // W przyszłości można tu podpiąć wysyłanie DM, że boost wygasł
     }
   }
   if (changed) saveBoosts();
@@ -83,14 +98,16 @@ function getRemainingTime(userId) {
 // Ceny i czasy dostosowane pod klan (1h, 3h, 6h)
 const SHOP_BOOSTS = [
   { id: "boost_1", name: "Basic Surge", multiplier: 1.5, durationHours: 1, price: 5000 },
-  { id: "boost_2", name: "Power Grind", multiplier: 2.0, durationHours: 3, price: 15000 },
-  { id: "boost_3", name: "Elite Overload", multiplier: 3.0, durationHours: 6, price: 45000 }
+  { id: "boost_2", name: "Power Grind", multiplier: 2.0, durationHours: 1, price: 15000 },
+  { id: "boost_3", name: "Elite Overload", multiplier: 3.0, durationHours: 1, price: 45000 }
+  { id: "boost_4", name: "Mega Overload", multiplier: 5.0, durationHours: 1, price: 85000 }
 ];
 
 // ====================== BUY SYSTEM ======================
 async function buyBoost(userId, boostId) {
   try {
-    const economy = require("../economy"); // Integracja z Twoim systemem monet
+    // Dynamiczny require, aby uniknąć problemów z tzw. circular dependency przy starcie bota
+    const economy = require("../economy"); 
     const boost = SHOP_BOOSTS.find(b => b.id === boostId);
 
     if (!boost) return { success: false, reason: "INVALID_BOOST" };
@@ -117,7 +134,7 @@ async function buyBoost(userId, boostId) {
       type: "shop"
     });
 
-    saveBoosts();
+    saveBoosts(); // Zapis od razu po zakupie
     return { success: true, boost, endTime: newEndTime };
 
   } catch (err) {
@@ -127,9 +144,9 @@ async function buyBoost(userId, boostId) {
 }
 
 // ====================== INIT ======================
-function init() {
+function init(client) {
   loadBoosts();
-  // Czyść wygasłe co minutę
+  // Czyść wygasłe mnożniki co minutę
   setInterval(cleanExpired, 60000);
 }
 
