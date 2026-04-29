@@ -36,7 +36,7 @@ const CONFIG = {
 // ====================== CREATE PANEL ======================
 async function createTicketPanel(client) {
   const channel = await client.channels.fetch(CONFIG.PANEL_CHANNEL_ID).catch(() => null);
-  if (!channel) return console.warn("❌ [TICKETS] Nie znaleziono kanału panelu.");
+  if (!channel) return console.warn("❌ [TICKETS] Nie znaleziono kanału panelu. Sprawdź ID kanału!");
 
   const embed = new EmbedBuilder()
     .setColor(CONFIG.THEME.GOLD)
@@ -70,9 +70,9 @@ async function createTicketPanel(client) {
   const existing = messages?.find(m => m.embeds?.[0]?.title?.includes("CENTRUM REKRUTACJI"));
 
   if (existing) {
-    await existing.edit({ embeds: [embed], components: [menu] });
+    await existing.edit({ embeds: [embed], components: [menu] }).catch(console.error);
   } else {
-    await channel.send({ embeds: [embed], components: [menu] });
+    await channel.send({ embeds: [embed], components: [menu] }).catch(console.error);
   }
 }
 
@@ -115,6 +115,9 @@ async function handle(interaction, client) {
     }
   } catch (error) {
     console.error("🔥 [TICKETS ERROR]:", error);
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: "❌ Wystąpił błąd systemu ticketów. Sprawdź konsolę.", ephemeral: true }).catch(() => {});
+    }
   }
 }
 
@@ -157,74 +160,85 @@ async function openModal(interaction) {
 
 // ====================== CREATE TICKET (KING EDITION) ======================
 async function createTicket(interaction, type, client) {
-  const existing = interaction.guild.channels.cache.find(c => c.topic === interaction.user.id && c.parentId === CONFIG.CATEGORY_ID);
-  if (existing) return interaction.reply({ content: `❌ Masz już otwarty ticket: ${existing}`, ephemeral: true });
+  try {
+    const existing = interaction.guild.channels.cache.find(c => c.topic === interaction.user.id && c.parentId === CONFIG.CATEGORY_ID);
+    if (existing) return interaction.reply({ content: `❌ Masz już otwarty ticket: ${existing}`, ephemeral: true });
 
-  await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ ephemeral: true });
 
-  // Tagi dla kanału
-  let channelPrefix = "📩-support";
-  if (type === "vyrn") channelPrefix = "🏆-vyrn";
-  if (type === "staff") channelPrefix = "🛡️-staff";
+    // Formatowanie nazwy (Discord nienawidzi spacji, znaków specjalnych i wielkich liter w nazwach kanałów)
+    const safeName = interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+    let channelPrefix = "📩-support";
+    if (type === "vyrn") channelPrefix = "🏆-vyrn";
+    if (type === "staff") channelPrefix = "🛡️-staff";
 
-  const channel = await interaction.guild.channels.create({
-    name: `${channelPrefix}-${interaction.user.username}`,
-    type: ChannelType.GuildText,
-    topic: interaction.user.id,
-    parent: CONFIG.CATEGORY_ID,
-    permissionOverwrites: [
-      { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
-      { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
-      { id: CONFIG.ROLES.ADMIN, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] },
-      { id: CONFIG.ROLES.KING, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
-    ],
-  });
+    const channelName = `${channelPrefix}-${safeName || "user"}`;
 
-  const embed = new EmbedBuilder()
-    .setColor(CONFIG.THEME.GOLD)
-    .setAuthor({ name: `🎫 Nowe Zgłoszenie: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
-    .setDescription("Administracja odpowie najszybciej jak to możliwe. W międzyczasie upewnij się, że podałeś wszystkie szczegóły.")
-    .setTimestamp();
+    const channel = await interaction.guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildText,
+      topic: interaction.user.id,
+      parent: CONFIG.CATEGORY_ID,
+      permissionOverwrites: [
+        { id: interaction.guild.id, deny: [PermissionFlagsBits.ViewChannel] },
+        { id: interaction.user.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
+        { id: CONFIG.ROLES.ADMIN, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages] },
+        { id: CONFIG.ROLES.KING, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageMessages, PermissionFlagsBits.ManageChannels] },
+      ],
+    });
 
-  // Budowanie treści na podstawie typu
-  if (type === "vyrn") {
-    embed.addFields(
-      { name: "🎮 Nick Roblox", value: `\`${interaction.fields.getTextInputValue("nick")}\``, inline: true },
-      { name: "🎂 Wiek", value: `\`${interaction.fields.getTextInputValue("age")}\``, inline: true },
-      { name: "🔄 Statystyki (Rebirths)", value: `\`${interaction.fields.getTextInputValue("rebirths")}\``, inline: false },
-      { name: "📝 Dlaczego VYRN?", value: `>>> ${interaction.fields.getTextInputValue("why")}`, inline: false }
+    const embed = new EmbedBuilder()
+      .setColor(CONFIG.THEME.GOLD)
+      .setAuthor({ name: `🎫 Nowe Zgłoszenie: ${interaction.user.tag}`, iconURL: interaction.user.displayAvatarURL() })
+      .setDescription("Administracja odpowie najszybciej jak to możliwe. W międzyczasie upewnij się, że podałeś wszystkie szczegóły.")
+      .setTimestamp();
+
+    // Budowanie treści na podstawie typu
+    if (type === "vyrn") {
+      embed.addFields(
+        { name: "🎮 Nick Roblox", value: `\`${interaction.fields.getTextInputValue("nick")}\``, inline: true },
+        { name: "🎂 Wiek", value: `\`${interaction.fields.getTextInputValue("age")}\``, inline: true },
+        { name: "🔄 Statystyki (Rebirths)", value: `\`${interaction.fields.getTextInputValue("rebirths")}\``, inline: false },
+        { name: "📝 Dlaczego VYRN?", value: `>>> ${interaction.fields.getTextInputValue("why")}`, inline: false }
+      );
+    } else if (type === "staff") {
+      embed.addFields(
+        { name: "🎮 Nick Roblox", value: `\`${interaction.fields.getTextInputValue("nick")}\``, inline: true },
+        { name: "🎂 Wiek", value: `\`${interaction.fields.getTextInputValue("age")}\``, inline: true },
+        { name: "📚 Doświadczenie", value: `>>> ${interaction.fields.getTextInputValue("exp")}`, inline: false },
+        { name: "📝 Dlaczego Ty?", value: `>>> ${interaction.fields.getTextInputValue("why")}`, inline: false }
+      );
+    } else {
+      embed.addFields(
+        { name: "📌 Temat", value: `\`${interaction.fields.getTextInputValue("topic")}\``, inline: false },
+        { name: "📄 Opis", value: `>>> ${interaction.fields.getTextInputValue("desc")}`, inline: false }
+      );
+    }
+
+    // Złoty Panel Kontrolny dla Administracji
+    const row1 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("claim_ticket").setLabel("Przejmij").setEmoji("✋").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId("rename_ticket").setLabel("Zmień Nazwę").setEmoji("✏️").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("close_ticket").setLabel("Zamknij Ticket").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
     );
-  } else if (type === "staff") {
-    embed.addFields(
-      { name: "🎮 Nick Roblox", value: `\`${interaction.fields.getTextInputValue("nick")}\``, inline: true },
-      { name: "🎂 Wiek", value: `\`${interaction.fields.getTextInputValue("age")}\``, inline: true },
-      { name: "📚 Doświadczenie", value: `>>> ${interaction.fields.getTextInputValue("exp")}`, inline: false },
-      { name: "📝 Dlaczego Ty?", value: `>>> ${interaction.fields.getTextInputValue("why")}`, inline: false }
+
+    const row2 = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId("lock_ticket").setLabel("Zablokuj (Lock)").setEmoji("🔒").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId("unlock_ticket").setLabel("Odblokuj (Unlock)").setEmoji("🔓").setStyle(ButtonStyle.Secondary)
     );
-  } else {
-    embed.addFields(
-      { name: "📌 Temat", value: `\`${interaction.fields.getTextInputValue("topic")}\``, inline: false },
-      { name: "📄 Opis", value: `>>> ${interaction.fields.getTextInputValue("desc")}`, inline: false }
-    );
+
+    await channel.send({ content: `${interaction.user} | <@&${CONFIG.ROLES.ADMIN}> | <@&${CONFIG.ROLES.KING}>`, embeds: [embed], components: [row1, row2] });
+    
+    // Zabezpieczony reset menu
+    if (interaction.message) {
+      await interaction.message.edit({ components: interaction.message.components }).catch(() => {}); 
+    }
+    await interaction.editReply({ content: `✅ Twój ticket został utworzony: ${channel}` });
+
+  } catch (error) {
+    console.error("🔥 [TICKET CREATION ERROR]:", error);
+    await interaction.editReply({ content: "❌ Wystąpił błąd przy tworzeniu kanału. Upewnij się, że bot ma uprawnienia do tworzenia kanałów w wybranej kategorii!" }).catch(() => {});
   }
-
-  // Złoty Panel Kontrolny dla Administracji
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("claim_ticket").setLabel("Przejmij").setEmoji("✋").setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId("rename_ticket").setLabel("Zmień Nazwę").setEmoji("✏️").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("close_ticket").setLabel("Zamknij Ticket").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
-  );
-
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId("lock_ticket").setLabel("Zablokuj (Lock)").setEmoji("🔒").setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId("unlock_ticket").setLabel("Odblokuj (Unlock)").setEmoji("🔓").setStyle(ButtonStyle.Secondary)
-  );
-
-  await channel.send({ content: `${interaction.user} | <@&${CONFIG.ROLES.ADMIN}> | <@&${CONFIG.ROLES.KING}>`, embeds: [embed], components: [row1, row2] });
-  
-  // Wyczyść menu z wyboru po kliknięciu
-  await interaction.message.edit({ components: interaction.message.components }); 
-  await interaction.editReply({ content: `✅ Twój ticket został utworzony: ${channel}` });
 }
 
 // ====================== STAFF ACTIONS ======================
@@ -251,7 +265,7 @@ async function openRenameModal(interaction) {
 }
 
 async function handleRename(interaction) {
-  const newName = interaction.fields.getTextInputValue("new_name").toLowerCase().replace(/\s+/g, '-');
+  const newName = interaction.fields.getTextInputValue("new_name").toLowerCase().replace(/[^a-z0-9-]/g, '-');
   await interaction.channel.setName(newName).catch(() => {});
   await interaction.reply({ content: `✅ Zmieniono nazwę na: \`${newName}\``, ephemeral: true });
 }
@@ -290,12 +304,21 @@ async function closeTicket(interaction) {
     await logChannel.send({ 
       embeds: [logEmbed], 
       files: [{ attachment: Buffer.from(transcript || "Brak wiadomości od użytkowników."), name: `transcript-${interaction.channel.name}.txt` }] 
-    });
+    }).catch(console.error);
   }
   
   setTimeout(() => interaction.channel.delete().catch(() => {}), 3000);
 }
 
-function init(client) { console.log("👑 System Ticketów VYRN [GOLD EDITION] → załadowany pomyślnie"); }
+function init(client) { 
+  console.log("👑 System Ticketów VYRN [GOLD EDITION] → załadowany pomyślnie"); 
+  
+  // Wymuś utworzenie panelu po odpaleniu bota
+  if (client.isReady()) {
+    createTicketPanel(client);
+  } else {
+    client.once("ready", () => createTicketPanel(client));
+  }
+}
 
 module.exports = { init, createTicketPanel, handle };
