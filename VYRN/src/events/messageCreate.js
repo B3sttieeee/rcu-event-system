@@ -1,9 +1,15 @@
-// =====================================================
-// MESSAGE CREATE - CLEAN & INTEGRATED WITH ACTIVITY
-// =====================================================
-const { Events } = require("discord.js");
+// src/events/messageCreate.js
+const { Events, EmbedBuilder } = require("discord.js");
 const activity = require("../systems/activity");
-const { addCoins } = require("../systems/economy");
+const economy = require("../systems/economy");
+
+// ====================== CONFIG & CACHE ======================
+const COOLDOWN_TIME = 5000; // 5 sekund cooldownu (zapobiega spamowaniu XP/Monet)
+const messageCooldowns = new Map(); // Przechowuje czas ostatniej wiadomości gracza
+
+const THEME = {
+  GOLD: "#FFD700"
+};
 
 module.exports = {
   name: Events.MessageCreate,
@@ -11,8 +17,7 @@ module.exports = {
   async execute(message) {
     try {
       // ====================== BASIC CHECKS ======================
-      if (!message.guild) return;
-      if (!message.author || message.author.bot) return;
+      if (!message.guild || !message.author || message.author.bot) return;
       if (message.webhookId || message.system) return;
 
       let member = message.member;
@@ -21,44 +26,71 @@ module.exports = {
       }
       if (!member) return;
 
-      const content = (message.content || "").trim();
+      const content = message.content.trim();
       const lower = content.toLowerCase();
 
-      // ====================== ACTIVITY REWARDS ======================
-      const xpAdded = 5;           // bazowe XP za wiadomość
-      const coinsAdded = 5;        // bazowe monety za wiadomość
+      // ====================== ANTI-SPAM & REWARDS ======================
+      const now = Date.now();
+      const lastMsgTime = messageCooldowns.get(message.author.id) || 0;
 
-      activity.addActivityXP(member, xpAdded, coinsAdded);
+      // Jeśli minęło wystarczająco dużo czasu od ostatniej wiadomości (Cooldown)
+      if (now - lastMsgTime > COOLDOWN_TIME) {
+        // Losowa ilość XP i Monet (wygląda to naturalniej niż stałe "5")
+        const xpAdded = Math.floor(Math.random() * 10) + 5;  // Od 5 do 14 XP
+        let coinsAdded = Math.floor(Math.random() * 5) + 3;  // Od 3 do 7 Monet
 
-      // Bonus za długie wiadomości
-      if (content.length > 40) addCoins(member.id, 2);
-      if (content.length > 100) addCoins(member.id, 3);
+        // Bonusy za jakość wiadomości
+        if (content.length > 50) coinsAdded += 2;
+        if (content.length > 150) coinsAdded += 4;
+        if (message.attachments.size > 0) coinsAdded += 3; // Bonus za wysłanie zdjęcia/filmu
+        if (message.mentions.users.size > 0) coinsAdded += 1; // Bonus za oznaczenie kogoś
 
-      // Bonus za mention
-      if (message.mentions.users.size > 0) addCoins(member.id, 2);
+        // Przydzielanie nagród
+        activity.addActivityXP(member, xpAdded);
+        economy.addCoins(member.id, coinsAdded);
 
-      console.log(`[MESSAGE] ${member.user.tag} | +${xpAdded} XP | +${coinsAdded} coins | length: ${content.length}`);
+        // Zapisz czas wiadomości, aby zresetować cooldown
+        messageCooldowns.set(message.author.id, now);
+      }
 
-      // ====================== REACTIONS ======================
+      // ====================== AUTO REACTIONS ======================
+      const exactWords = lower.split(/\s+/); // Rozbija tekst na słowa, żeby nie wyłapywać "xd" w środku innego słowa
+      
+      // Easter Egg: Korona dla klanu
+      if (exactWords.includes("vyrn")) {
+        message.react("👑").catch(() => {});
+      }
+      
       if (lower.includes("gg") || lower.includes("good game")) {
         message.react("👏").catch(() => {});
       }
-      if (lower.includes("brawo") || lower.includes("gratulacje") || lower.includes("gratz")) {
+      
+      if (exactWords.some(w => ["congrats", "gratz", "w", "brawo"].includes(w))) {
         message.react("🎉").catch(() => {});
       }
-      if (lower.includes("xd") || lower.includes("haha") || lower.includes("lol")) {
+      
+      if (exactWords.some(w => ["lmao", "lol", "xd", "haha"].includes(w))) {
         message.react("😂").catch(() => {});
       }
 
-      // ====================== QUICK STATS ======================
-      if (lower === "!stats" || lower === "staty" || lower === "moje staty") {
-        return message.reply({
-          content: `📊 **${member.user.username}**, użyj komendy \`/profile\` aby zobaczyć pełne statystyki!`,
-          allowedMentions: { repliedUser: false }
+      // ====================== QUICK COMMANDS (Legacy) ======================
+      // Szybkie przekierowanie, jeśli ktoś próbuje używać starych prefiksów (np. !stats)
+      const quickCmds = ["!stats", "!profile", "!level", "!rank", "staty"];
+      
+      if (quickCmds.includes(lower)) {
+        const embed = new EmbedBuilder()
+          .setColor(THEME.GOLD)
+          .setDescription(`📊 **${member.user.username}**, please use the **\`/profile\`** slash command to view your full VYRN Clan statistics!`)
+          .setFooter({ text: "VYRN Clan System" });
+
+        return message.reply({ 
+          embeds: [embed], 
+          allowedMentions: { repliedUser: false } 
         });
       }
+
     } catch (err) {
-      console.error("[MESSAGE CREATE ERROR]", err);
+      console.error("🔥 [MESSAGE CREATE ERROR]", err);
     }
   }
 };
