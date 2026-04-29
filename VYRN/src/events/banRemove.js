@@ -1,45 +1,51 @@
 // src/events/banRemove.js
-const { Events, AuditLogEvent } = require("discord.js");
+const { Events, AuditLogEvent, EmbedBuilder } = require("discord.js");
 const { 
   LOGS, 
-  LOG_COLORS, 
-  formatTime, 
-  sendLog, 
   findAuditEntry, 
   formatExecutor, 
   clampText, 
-  createLogEmbed 
+  sendLog 
 } = require("../systems/log");
 
 module.exports = {
   name: Events.GuildBanRemove,
   async execute(ban) {
+    // Zabezpieczenie przed brakującymi danymi
     if (!ban?.guild || !ban?.user) return;
 
+    // Przeszukiwanie Audit Logs, aby sprawdzić, kto zdjął bana
     const auditEntry = await findAuditEntry(ban.guild, {
       type: AuditLogEvent.MemberBanRemove,
       match: (entry) => entry.target?.id === ban.user.id
     });
 
     const executor = formatExecutor(auditEntry);
-    const reason = auditEntry?.reason || null;
+    const reason = auditEntry?.reason || "No reason provided.";
 
-    const embed = createLogEmbed(
-      "♻️ User Unbanned",
-      LOG_COLORS.JOIN_LEAVE,
-      `**Użytkownik został odbanowany**`,
-      [
-        { name: "👤 User", value: `<@${ban.user.id}> (${ban.user.tag})`, inline: true },
-        { name: "🆔 ID", value: `\`${ban.user.id}\``, inline: true },
-        { name: "🛠 Unbanned by", value: executor, inline: true },
-      ],
-      `Time: ${formatTime()}`
-    );
+    // Pobieranie czasu założenia konta (dla spójności z logiem banAdd)
+    const createdUnix = Math.floor(ban.user.createdTimestamp / 1000);
 
-    if (reason) {
-      embed.addFields({ name: "📝 Reason", value: clampText(reason, 1024, "No reason provided") });
-    }
+    // Budowanie eleganckiego loga w barwach VYRN
+    const embed = new EmbedBuilder()
+      .setColor("#00FF7F") // THEME.SUCCESS (Sygnalizuje pomyślną akcję / zdjęcie kary)
+      .setAuthor({ 
+        name: "♻️ VYRN MODERATION • USER UNBANNED", 
+        iconURL: ban.guild.iconURL({ dynamic: true }) 
+      })
+      .setThumbnail(ban.user.displayAvatarURL({ dynamic: true }))
+      .setDescription(`**A user's ban has been revoked. They can now rejoin the server.**`)
+      .addFields(
+        { name: "👤 User", value: `${ban.user} (\`${ban.user.tag}\`)`, inline: true },
+        { name: "🆔 User ID", value: `\`${ban.user.id}\``, inline: true },
+        { name: "👮 Unbanned By", value: executor, inline: true },
+        { name: "📝 Reason", value: `>>> ${clampText(reason, 1024)}`, inline: false },
+        { name: "📅 Account Created", value: `<t:${createdUnix}:R> (<t:${createdUnix}:f>)`, inline: false }
+      )
+      .setFooter({ text: "Official VYRN Log System" })
+      .setTimestamp();
 
+    // Wysyłanie na kanał z logami moderacyjnymi
     await sendLog(ban.guild, LOGS.MODERATION, embed);
   }
 };
