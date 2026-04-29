@@ -1,4 +1,5 @@
 // src/handlers/interactionRouter.js
+const { MessageFlags } = require("discord.js"); // POPRAWKA: Dodano import flag
 const buttonHandler = require("./buttonHandler");
 const selectHandler = require("./selectHandler");
 const modalHandler = require("./modalHandler");
@@ -22,7 +23,7 @@ module.exports = async function interactionRouter(interaction) {
         console.warn(`[COMMAND] ⚠️ Unknown command executed: /${commandName}`);
         return interaction.reply({
           content: "❌ **System Error:** This command is unregistered or undergoing maintenance.",
-          ephemeral: true
+          flags: [MessageFlags.Ephemeral] // POPRAWKA
         });
       }
 
@@ -78,7 +79,7 @@ module.exports = async function interactionRouter(interaction) {
     // Secure fallback response for the end-user
     const errorPayload = {
       content: "❌ **HQ System Alert:** An internal error occurred while processing your request. Please report this to an Administrator.",
-      ephemeral: true
+      flags: [MessageFlags.Ephemeral] // POPRAWKA
     };
 
     if (!interaction.replied && !interaction.deferred) {
