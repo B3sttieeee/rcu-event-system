@@ -4,16 +4,18 @@ const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
 // ====================== CONFIG ======================
-// KLUCZOWE DLA RAILWAY VOLUME:
-// Zmienna środowiskowa process.env.DATA_DIR pozwala Ci określić punkt montowania.
-// Jeśli Volume masz zamontowany w Railway jako "/data", ta ścieżka w to celuje.
-const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
+// KLUCZOWE DLA RAILWAY: Ścieżka celująca prosto w Mount Path: /data
+const DATA_DIR = process.env.DATA_DIR || "/data";
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
 const LEVELS_PATH = path.join(DATA_DIR, "levels.json");
 
 // Zabezpieczenie folderu Volume
 if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  } catch (err) {
+    console.warn(`[ACTIVITY] Nie można utworzyć folderu ${DATA_DIR} - prawdopodobnie już istnieje lub brak uprawnień root.`);
+  }
 }
 
 const CONFIG = {
