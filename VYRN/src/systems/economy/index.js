@@ -53,9 +53,21 @@ function addCoins(userId, amount) {
   return newVal;
 }
 
+// --- DODANA FUNKCJA RANKINGU ---
+function getTopUsers(limit = 10) {
+  // Konwertuje Mapę z graczami na tablicę obiektów
+  return Array.from(userCoins.entries())
+    .map(([userId, coins]) => ({ userId, coins }))
+    // Sortuje od największej ilości monet do najmniejszej
+    .sort((a, b) => b.coins - a.coins)
+    // Ucina listę do limitu zdefiniowanego w komendzie (np. 10)
+    .slice(0, limit);
+}
+
 function init() {
   loadCoins();
   setInterval(saveCoins, 20000);
 }
 
-module.exports = { init, getCoins, addCoins };
+// Dodano getTopUsers do eksportu
+module.exports = { init, getCoins, addCoins, getTopUsers };
