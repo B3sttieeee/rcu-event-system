@@ -1,6 +1,7 @@
 // src/systems/voiceRewards/index.js
 const { Events } = require("discord.js");
 const activity = require("../activity"); // Połączenie z zaawansowanym systemem Activity
+const economy = require("../economy");   // Połączenie z systemem Ekonomii 💰
 
 // =====================================================
 // VYRN • VOICE REWARDS ENGINE 🎙️
@@ -11,7 +12,8 @@ const MINUTE = 60000; // 1 minuta w milisekundach
 // Konfiguracja nagród
 const REWARDS = {
   XP_PER_MINUTE: 10,
-  VOICE_SECONDS: 60
+  VOICE_SECONDS: 60,
+  COINS_PER_MINUTE: 10 // Ilość monet dodawanych co minutę (możesz zmienić)
 };
 
 function stopSession(userId) {
@@ -35,20 +37,22 @@ function startSession(member) {
         return stopSession(userId);
       }
 
-      // 🛡️ ANTI-AFK SYSTEM: Nie dajemy XP i czasu, jeśli użytkownik ma wyciszone słuchawki (Deafened)
+      // 🛡️ ANTI-AFK SYSTEM: Nie dajemy XP, czasu ani KASY, jeśli użytkownik ma wyciszone słuchawki
       if (freshMember.voice.selfDeaf || freshMember.voice.serverDeaf) {
         return; 
       }
 
-      // Dodawanie statystyk
+      // 📊 1. Dodawanie czasu spędzonego na VC
       activity.addVoiceTime(userId, REWARDS.VOICE_SECONDS);
       
-      // Zauważyłem, że w Twoim kodzie było addActivityXP(..., 10, 8) 
-      // Funkcja z activity/index.js przyjmuje tylko member i xpAmount. 
+      // 🏆 2. Dodawanie Punktów Doświadczenia (XP)
       activity.addActivityXP(freshMember, REWARDS.XP_PER_MINUTE);
 
+      // 💰 3. Dodawanie Monet do portfela!
+      economy.addCoins(userId, REWARDS.COINS_PER_MINUTE);
+
     } catch (err) { 
-      console.error(`🔥 [VOICE ERR] Nie udało się przydzielić XP dla ${userId}:`, err.message); 
+      console.error(`🔥 [VOICE ERR] Nie udało się przydzielić nagród dla ${userId}:`, err.message); 
       stopSession(userId); // W razie błędu bezpiecznie zamykamy sesję
     }
   }, MINUTE);
@@ -58,7 +62,7 @@ function startSession(member) {
 
 // ====================== INIT ======================
 function init(client) {
-  console.log("🎙️ [VYRN] Inicjalizacja systemu Voice Rewards...");
+  console.log("🎙️ [VYRN] Inicjalizacja systemu Voice Rewards (XP & Coins)...");
 
   // 1. Nasłuchiwanie zmian na kanałach głosowych (Wejście / Wyjście)
   client.on(Events.VoiceStateUpdate, (oldState, newState) => {
