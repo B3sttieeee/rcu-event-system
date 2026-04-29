@@ -3,7 +3,8 @@ const {
   SlashCommandBuilder, 
   EmbedBuilder, 
   ActionRowBuilder, 
-  StringSelectMenuBuilder 
+  StringSelectMenuBuilder,
+  MessageFlags // Dodane flagi dla czystej konsoli
 } = require("discord.js");
 
 const economy = require("../systems/economy");
@@ -43,21 +44,21 @@ module.exports = {
       .filter(b => b?.id && b?.name && b?.price && b?.durationHours) // Wymuszamy istnienie durationHours
       .map(boost => {
         const boostValue = boost.multiplier || "2x";
-        // Wywalamy wzmiankę o permanent, tutaj liczy się tylko czas!
         const durationText = `${boost.durationHours} Hour${boost.durationHours > 1 ? 's' : ''}`;
         
         return {
           label: `${boost.name} (${boostValue} XP)`,
           description: `Price: ${economy.formatCoins(boost.price)} | Time: ${durationText}`,
           value: String(boost.id),
-          emoji: "⏳" // Zmienione na klepsydrę, żeby podkreślić czasowość
+          emoji: "⏳" // Podkreśla czasowość
         };
       });
 
+    // Zabezpieczenie na wypadek braku boostów (z użyciem flagi)
     if (!options.length) {
       return interaction.reply({
         content: "❌ **The store is currently out of stock.** Check back later!",
-        ephemeral: true
+        flags: [MessageFlags.Ephemeral]
       });
     }
 
