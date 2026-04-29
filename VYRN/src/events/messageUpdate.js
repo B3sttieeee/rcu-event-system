@@ -1,46 +1,57 @@
 // src/events/messageUpdate.js
-const { Events } = require("discord.js");
+const { Events, EmbedBuilder } = require("discord.js");
 const { 
   LOGS, 
-  LOG_COLORS, 
-  formatTime, 
   sendLog, 
-  clampText, 
-  createLogEmbed 
+  clampText 
 } = require("../systems/log");
 
 module.exports = {
   name: Events.MessageUpdate,
+  
   async execute(oldMsg, newMsg) {
-    if (!oldMsg.guild) return;
-    if (oldMsg.author?.bot || newMsg.author?.bot) return;
+    // Podstawowe sprawdzenia
+    if (!oldMsg.guild || !oldMsg.author) return;
+    if (oldMsg.author.bot) return;
 
+    // Pobieranie treści, jeśli nie było jej w cache
     if (oldMsg.partial) try { await oldMsg.fetch(); } catch { return; }
     if (newMsg.partial) try { await newMsg.fetch(); } catch { return; }
 
-    const before = clampText(oldMsg.content || "", 800, "[No content]");
-    const after = clampText(newMsg.content || "", 800, "[No content]");
-
+    // Ignorujemy edycje, które nie zmieniają treści (np. załadowanie się miniatury linku)
+    const before = oldMsg.content || "";
+    const after = newMsg.content || "";
     if (before === after) return;
 
-    const embed = createLogEmbed(
-      "✏️ Message Edited",
-      LOG_COLORS.CHAT,
-      `**Wiadomość została edytowana**`,
-      [
-        { name: "👤 User", value: `<@${oldMsg.author.id}> (${oldMsg.author.tag})`, inline: true },
-        { name: "🆔 Message ID", value: `\`${oldMsg.id}\``, inline: true },
-        { name: "📍 Channel", value: `<#${oldMsg.channel.id}>`, inline: true },
-        { name: "📜 Before", value: before, inline: false },
-        { name: "📝 After", value: after, inline: false },
-      ],
-      `Time: ${formatTime()}`
-    );
+    // Budowanie prestiżowego Embedu w barwach VYRN (Niebieski dla edycji)
+    const embed = new EmbedBuilder()
+      .setColor("#3b82f6") // THEME.BLUE
+      .setAuthor({ 
+        name: "✏️ VYRN LOG • MESSAGE EDITED", 
+        iconURL: oldMsg.guild.iconURL({ dynamic: true }) 
+      })
+      .setThumbnail(oldMsg.author.displayAvatarURL({ dynamic: true }))
+      .setDescription(
+        `**Author:** ${oldMsg.author} (\`${oldMsg.author.tag}\`)\n` +
+        `**Channel:** ${oldMsg.channel}\n` +
+        `**Link:** [Jump to Message](${newMsg.url})`
+      )
+      .addFields(
+        { 
+          name: "📜 Previous Content", 
+          value: `>>> ${clampText(before, 1000, "*Empty or Link Only*")}`, 
+          inline: false 
+        },
+        { 
+          name: "📝 Updated Content", 
+          value: `>>> ${clampText(after, 1000, "*Empty or Link Only*")}`, 
+          inline: false 
+        }
+      )
+      .setFooter({ text: `User ID: ${oldMsg.author.id} • Official VYRN System` })
+      .setTimestamp();
 
-    if (newMsg.url) {
-      embed.addFields({ name: "🔗 Jump to Message", value: `[Click here](${newMsg.url})` });
-    }
-
+    // Wysłanie loga na kanał z moderacją czatu
     await sendLog(oldMsg.guild, LOGS.CHAT, embed);
   }
 };
