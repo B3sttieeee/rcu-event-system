@@ -1,5 +1,5 @@
 // src/handlers/selectHandler.js
-const { EmbedBuilder } = require("discord.js");
+const { EmbedBuilder, MessageFlags } = require("discord.js"); // POPRAWKA: Dodano MessageFlags
 const privateVC = require("../systems/privatevc");
 const ticketSystem = require("../systems/tickets");
 const eventSystem = require("../systems/event");
@@ -42,7 +42,7 @@ module.exports = async function selectHandler(interaction) {
         if (!interaction.replied && !interaction.deferred) {
           return await interaction.reply({
             content: "❌ **System Alert:** This menu interaction is not registered in the HQ database.",
-            ephemeral: true
+            flags: [MessageFlags.Ephemeral] // POPRAWKA
           });
         }
     }
@@ -55,7 +55,7 @@ module.exports = async function selectHandler(interaction) {
       try {
         await interaction.reply({
           content: "❌ **Critical Error:** Failed to process menu selection. Contact HQ Staff.",
-          ephemeral: true
+          flags: [MessageFlags.Ephemeral] // POPRAWKA
         });
       } catch (e) {
         console.error("[SELECT] Critical failure in Discord API response.");
@@ -77,7 +77,7 @@ async function handleShopBoost(interaction) {
   if (!boostId) {
     return interaction.reply({
       content: "❌ No item selected. Operation cancelled.",
-      ephemeral: true
+      flags: [MessageFlags.Ephemeral] // POPRAWKA
     });
   }
 
@@ -87,7 +87,7 @@ async function handleShopBoost(interaction) {
   if (!boost) {
     return interaction.reply({
       content: "❌ **Error:** Selected booster no longer exists in the store rotation.",
-      ephemeral: true
+      flags: [MessageFlags.Ephemeral] // POPRAWKA
     });
   }
 
@@ -106,7 +106,7 @@ async function handleShopBoost(interaction) {
 
     return interaction.reply({
       content: `❌ **Purchase Failed:** ${errorMessage}`,
-      ephemeral: true
+      flags: [MessageFlags.Ephemeral] // POPRAWKA
     });
   }
 
@@ -129,6 +129,6 @@ async function handleShopBoost(interaction) {
 
   return interaction.reply({
     embeds: [successEmbed],
-    ephemeral: true
+    flags: [MessageFlags.Ephemeral] // POPRAWKA
   });
 }
