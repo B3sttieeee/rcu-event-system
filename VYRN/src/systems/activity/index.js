@@ -4,17 +4,18 @@ const path = require("path");
 const { EmbedBuilder } = require("discord.js");
 
 // ====================== CONFIG ======================
-const DATA_DIR = process.env.DATA_DIR || "./";
+const DATA_DIR = path.join(process.cwd(), "data");
 const PROFILE_PATH = path.join(DATA_DIR, "profile.json");
 const LEVELS_PATH = path.join(DATA_DIR, "levels.json");
 
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+
 const CONFIG = {
-  CHANNEL_ID: "1475999590716018719", // Channel for level-up notifications
+  CHANNEL_ID: "1475999590716018719", 
   THEME: {
     GOLD: "#FFD700",
     BLACK: "#0a0a0a"
   },
-  // Ranks Configuration: Required Level -> Role ID, Name, and Emoji
   RANKS: [
     { level: 75, roleId: "1476000992351879229", name: "Legend", emoji: "<:LegeRank:1488756343190847538>" },
     { level: 60, roleId: "1476000991823532032", name: "Ruby", emoji: "<:RubyRank:1488756400514404372>" },
@@ -22,7 +23,7 @@ const CONFIG = {
     { level: 30, roleId: "1476000459595448442", name: "Platinum", emoji: "<:PlatRank:1488756557863845958>" },
     { level: 15, roleId: "1476000995501670534", name: "Gold", emoji: "<:GoldRank:1488756524854808686>" },
     { level: 5,  roleId: "1476000458987278397", name: "Bronze", emoji: "<:BronzeRank:1488756638285565962>" },
-    { level: 0,  roleId: null,                  name: "Iron", emoji: "<:Ironrank:1488756604277887039>" }
+    { level: 0,  roleId: null,                   name: "Iron", emoji: "<:Ironrank:1488756604277887039>" }
   ]
 };
 
@@ -32,8 +33,14 @@ let levelsDB = { users: {} };
 
 function loadAll() {
   try {
-    if (fs.existsSync(PROFILE_PATH)) profileDB = JSON.parse(fs.readFileSync(PROFILE_PATH, "utf8"));
-    if (fs.existsSync(LEVELS_PATH)) levelsDB = JSON.parse(fs.readFileSync(LEVELS_PATH, "utf8"));
+    if (fs.existsSync(PROFILE_PATH)) {
+      const pData = fs.readFileSync(PROFILE_PATH, "utf8");
+      profileDB = pData ? JSON.parse(pData) : { users: {} };
+    }
+    if (fs.existsSync(LEVELS_PATH)) {
+      const lData = fs.readFileSync(LEVELS_PATH, "utf8");
+      levelsDB = lData ? JSON.parse(lData) : { users: {} };
+    }
     if (!profileDB.users) profileDB.users = {};
     if (!levelsDB.users) levelsDB.users = {};
   } catch (e) { console.error("🔥 [ACTIVITY] LOAD ERROR", e.message); }
@@ -49,7 +56,10 @@ function saveAll() {
 function ensureUser(userId) {
   if (!profileDB.users[userId]) profileDB.users[userId] = { voice: 0 };
   if (!levelsDB.users[userId]) levelsDB.users[userId] = { xp: 0, level: 0, totalXP: 0 };
-  return { voice: profileDB.users[userId], level: levelsDB.users[userId] };
+  return { 
+    voiceData: profileDB.users[userId], 
+    levelData: levelsDB.users[userId] 
+  };
 }
 
 function neededXP(level) { 
@@ -61,10 +71,9 @@ function getRank(level) {
   return CONFIG.RANKS.find(r => level >= r.level) || CONFIG.RANKS[CONFIG.RANKS.length - 1];
 }
 
-// System that automatically gives the new role AND removes the old ones
 async function syncRankRoles(member, currentLevel) {
   const currentRank = getRank(currentLevel);
-  if (!currentRank.roleId) return; 
+  const me = member.guild.members.me;
   
   try {
     for (const rank of CONFIG.RANKS) {
@@ -72,6 +81,9 @@ async function syncRankRoles(member, currentLevel) {
       
       const role = member.guild.roles.cache.get(rank.roleId);
       if (!role) continue;
+
+      // Sprawdzamy czy bot może zarządzać tą rolą
+      if (me.roles.highest.comparePositionTo(role) <= 0) continue;
 
       if (rank.roleId === currentRank.roleId) {
         if (!member.roles.cache.has(role.id)) await member.roles.add(role).catch(() => {});
@@ -87,22 +99,19 @@ async function syncRankRoles(member, currentLevel) {
 async function addActivityXP(member, xpAmount = 10) {
   const user = ensureUser(member.id);
 
-  // Add XP
-  user.level.xp += xpAmount;
-  user.level.totalXP += xpAmount;
+  user.levelData.xp += xpAmount;
+  user.levelData.totalXP += xpAmount;
 
-  // Level up loop
   let leveledUp = false;
-  while (user.level.xp >= neededXP(user.level.level)) {
-    user.level.xp -= neededXP(user.level.level);
-    user.level.level++;
+  while (user.levelData.xp >= neededXP(user.levelData.level)) {
+    user.levelData.xp -= neededXP(user.levelData.level);
+    user.levelData.level++;
     leveledUp = true;
   }
 
-  // Trigger rewards and notifications if leveled up
   if (leveledUp) {
-    await syncRankRoles(member, user.level.level);
-    await sendLevelUpMessage(member, user.level.level);
+    await syncRankRoles(member, user.levelData.level);
+    await sendLevelUpMessage(member, user.levelData.level);
   }
 }
 
@@ -112,7 +121,7 @@ async function sendLevelUpMessage(member, newLevel) {
   if (!channel) return;
 
   const rank = getRank(newLevel);
-  const nextRank = CONFIG.RANKS.slice().reverse().find(r => r.level > newLevel);
+  const nextRank = [...CONFIG.RANKS].reverse().find(r => r.level > newLevel);
   const nextRankText = nextRank ? `Next Rank: ${nextRank.name} (Level ${nextRank.level})` : `MAX RANK REACHED 👑`;
   
   const embed = new EmbedBuilder()
@@ -137,21 +146,27 @@ async function sendLevelUpMessage(member, newLevel) {
 // ====================== INIT & EXPORTS ======================
 function init() {
   loadAll();
-  setInterval(saveAll, 30000); // Auto-save every 30 seconds
+  setInterval(saveAll, 30000); 
   console.log("👑 [VYRN] Clan Activity & Leveling System Loaded!");
 }
 
 module.exports = {
   init,
-  addVoiceTime: (userId, sec) => { ensureUser(userId).voice.voice += sec; },
-  getVoiceMinutes: (userId) => Math.floor((ensureUser(userId).voice.voice || 0) / 60),
+  addVoiceTime: (userId, sec) => { 
+    const user = ensureUser(userId);
+    user.voiceData.voice += sec; // Poprawione przypisanie
+  },
+  getVoiceMinutes: (userId) => {
+    const user = ensureUser(userId);
+    return Math.floor((user.voiceData.voice || 0) / 60);
+  },
   addActivityXP,
   getRank,
   getLevelData: (userId) => {
     const user = ensureUser(userId);
-    const lvl = user.level.level || 0;
+    const lvl = user.levelData.level || 0;
     return { 
-      xp: user.level.xp || 0, 
+      xp: user.levelData.xp || 0, 
       level: lvl, 
       nextXP: neededXP(lvl),
       rank: getRank(lvl)
