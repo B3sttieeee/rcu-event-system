@@ -4,7 +4,7 @@
   "description": "VYRN Clan - Hybrid Modular Discord Bot",
   "main": "src/bot.js",
   "scripts": {
-    "start": "node src/bot.js",
+    "start": "npm run deploy && node src/bot.js",
     "deploy": "node src/deploy-commands.js",
     "dev": "node src/bot.js"
   },
