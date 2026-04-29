@@ -1,53 +1,67 @@
 // src/handlers/modalHandler.js
 const privateVC = require("../systems/privatevc");
 const ticketSystem = require("../systems/tickets");
-const embedCommand = require("../commands/embed"); // Ładowane raz przy starcie (optymalizacja)
+const embedCommand = require("../commands/embed");
 
 /**
  * ========================================================
- * VYRN • Modal Handler (Black Edition)
- * Clean, safe & optimized form interaction router
+ * VYRN HQ • MODAL ROUTER (PRESTIGE EDITION)
+ * Central processing for all Modal Submissions
  * ========================================================
  */
 module.exports = async function modalHandler(interaction) {
-  const customId = interaction.customId;
+  const { customId, user } = interaction;
   if (!customId) return;
 
-  console.log(`[MODAL] 📝 ${interaction.user.tag} wysłał formularz: ${customId}`);
+  // HQ Professional Logging
+  console.log(`[INTERACTION] 📝 ${user.tag} submitted modal: ${customId}`);
 
   try {
-    // ==================== PRIVATE VC ====================
-    if (customId.startsWith("vc_rename_")) return await privateVC.handleRename(interaction);
-    if (customId.startsWith("vc_limit_")) return await privateVC.handleLimit(interaction);
+    // ==================== 1. PRIVATE VC SYSTEM ====================
+    // Handles renaming and user limit adjustments for Voice Channels
+    if (customId.startsWith("vc_rename_")) {
+        return await privateVC.handleRename(interaction);
+    }
+    
+    if (customId.startsWith("vc_limit_")) {
+        return await privateVC.handleLimit(interaction);
+    }
 
-    // ==================== TICKET SYSTEM ====================
-    if (customId.startsWith("ticket_modal_")) return await ticketSystem.handle(interaction, interaction.client);
+    // ==================== 2. TICKET SYSTEM ====================
+    // Handles initial ticket creation and staff notes
+    if (customId.startsWith("ticket_modal_")) {
+        return await ticketSystem.handle(interaction, interaction.client);
+    }
 
-    // ==================== EMBED COMMAND ====================
-    if (customId.startsWith("embedModal_")) return await embedCommand.handleModal(interaction);
+    // ==================== 3. ADVANCED EMBED BUILDER ====================
+    // Handles the core logic for the Prestige Embed Command
+    if (customId.startsWith("embedModal_")) {
+        return await embedCommand.handleModal(interaction);
+    }
 
-    // ==================== NIEOBSŁUŻONY MODAL ====================
-    console.warn(`[MODAL] ⚠️ Nieobsłużony formularz: ${customId}`);
+    // ==================== 4. UNHANDLED MODAL ====================
+    console.warn(`[MODAL] ⚠️ Unregistered modal submission: ${customId}`);
 
     if (!interaction.replied && !interaction.deferred) {
       return await interaction.reply({
-        content: "❌ Ten formularz nie jest jeszcze podłączony do systemu.",
+        content: "❌ **System Alert:** This form layout is not currently registered in the HQ database.",
         ephemeral: true
       });
     }
 
   } catch (error) {
-    console.error("🔥 [MODAL HANDLER ERROR]:", error);
+    console.error("🔥 [MODAL ROUTER ERROR]:", error);
 
-    // ==================== BEZPIECZNY FALLBACK BŁĘDÓW ====================
+    // ==================== SAFE FALLBACK ====================
+    // Ensures the user receives feedback even if the system crashes
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
-          content: "❌ Wystąpił błąd serwera podczas przetwarzania formularza.",
+          content: "❌ **Critical Error:** Failed to transmit form data to HQ servers. Contact Administration.",
           ephemeral: true
         });
       } catch (e) {
-        console.error("[MODAL] ❌ Nie udało się wysłać wiadomości o błędzie (Discord API).");
+        console.error("[MODAL] Failed to send emergency error response.");
       }
     }
   }
