@@ -12,108 +12,88 @@ const {
   ChannelType
 } = require("discord.js");
 
-const DEFAULT_COLOR = "#0a0a0a";
+const DEFAULT_COLOR = "#FFD700"; // VYRN Gold as default
 
-// ====================== POMOCNICZE FUNKCJE ======================
+// ====================== HELPERS ======================
 
-/**
- * Bezpieczne tworzenie pola tekstowego
- */
-function createInput({ id, label, style, value = "", placeholder = "", maxLength = 0 }) {
+function createInput({ id, label, style, value = "", placeholder = "", maxLength = 0, required = false }) {
   const input = new TextInputBuilder()
     .setCustomId(id)
     .setLabel(label)
     .setStyle(style)
-    .setRequired(false);
+    .setRequired(required);
 
   if (placeholder) input.setPlaceholder(placeholder);
   if (maxLength > 0) input.setMaxLength(maxLength);
 
-  // Najważniejsza poprawka – bezpieczne przycinanie wartości (zapobiega błędom 50035)
-  if (value !== undefined && value !== null) {
-    const stringValue = String(value);
-    input.setValue(stringValue.slice(0, maxLength > 0 ? maxLength : 4000));
+  if (value) {
+    input.setValue(String(value).slice(0, maxLength > 0 ? maxLength : 4000));
   }
 
   return input;
 }
 
 /**
- * Buduje modal tworzenia/edycji embeda (maks. 5 pól)
+ * Builds a more comprehensive modal for VYRN Prestige Embeds
  */
-function buildEmbedModal(channelId, existingEmbed = null) {
+function buildEmbedModal(channelId, messageId = "new", existingEmbed = null) {
   const modal = new ModalBuilder()
-    .setCustomId(`embedModal_${channelId}`)
-    .setTitle(existingEmbed ? "✏️ Edytuj Embed" : "📝 Tworzenie Embeda");
+    .setCustomId(`embedModal_${channelId}_${messageId}`)
+    .setTitle(existingEmbed ? "✏️ Edit Prestige Embed" : "📝 Create New Embed");
 
-  // Kolor
   let colorValue = DEFAULT_COLOR;
-  if (existingEmbed?.hexColor != null) {
+  if (existingEmbed?.hexColor) {
     colorValue = `#${existingEmbed.hexColor.toString(16).padStart(6, "0")}`;
-  }
-
-  // Autor (nazwa | ikona | url)
-  let authorValue = "";
-  if (existingEmbed?.author) {
-    const parts = [];
-    if (existingEmbed.author.name) parts.push(existingEmbed.author.name);
-    if (existingEmbed.author.iconURL) parts.push(existingEmbed.author.iconURL);
-    if (existingEmbed.author.url) parts.push(existingEmbed.author.url);
-    authorValue = parts.join(" | ");
   }
 
   modal.addComponents(
     new ActionRowBuilder().addComponents(
       createInput({
         id: "title",
-        label: "Tytuł embeda",
+        label: "Title",
         style: TextInputStyle.Short,
         value: existingEmbed?.title || "",
-        placeholder: "Wpisz tytuł...",
+        placeholder: "Enter embed title...",
         maxLength: 256
       })
     ),
-
     new ActionRowBuilder().addComponents(
       createInput({
         id: "description",
-        label: "Opis embeda",
+        label: "Description",
         style: TextInputStyle.Paragraph,
         value: existingEmbed?.description || "",
-        placeholder: "Wpisz opis (lub '.' aby zostawić pusty)",
+        placeholder: "Enter content (use '.' for empty)",
         maxLength: 4000
       })
     ),
-
     new ActionRowBuilder().addComponents(
       createInput({
         id: "color",
-        label: "Kolor HEX (#rrggbb)",
+        label: "HEX Color Code",
         style: TextInputStyle.Short,
         value: colorValue,
-        placeholder: "#0a0a0a",
+        placeholder: "#FFD700",
         maxLength: 7
       })
     ),
-
-    new ActionRowBuilder().addComponents(
-      createInput({
-        id: "author",
-        label: "Autor (nazwa | ikona | url)",
-        style: TextInputStyle.Short,
-        value: authorValue,
-        placeholder: "Nazwa | https://ikona.png | https://link.pl",
-        maxLength: 1024
-      })
-    ),
-
     new ActionRowBuilder().addComponents(
       createInput({
         id: "image",
-        label: "URL Obrazu / GIF",
+        label: "Main Image URL / GIF",
         style: TextInputStyle.Short,
         value: existingEmbed?.image?.url || "",
-        placeholder: "https://... (GIF lepiej po ponownym wrzuceniu)",
+        placeholder: "https://vyrn.link/image.png",
+        maxLength: 2048
+      })
+    ),
+    new ActionRowBuilder().addComponents(
+      createInput({
+        id: "footer",
+        label: "Footer Text",
+        style: TextInputStyle.Short,
+        value: existingEmbed?.footer?.text || "",
+        placeholder: "VYRN Clan • Official System",
         maxLength: 2048
       })
     )
@@ -122,7 +102,7 @@ function buildEmbedModal(channelId, existingEmbed = null) {
   return modal;
 }
 
-// ====================== WALIDACJA ======================
+// ====================== VALIDATION ======================
 
 function isValidHex(color) {
   return /^#?[0-9A-Fa-f]{6}$/.test(color.replace("#", ""));
@@ -131,159 +111,116 @@ function isValidHex(color) {
 function isValidUrl(url) {
   if (!url) return false;
   try {
-    new URL(url);
-    return url.startsWith("http");
+    const parsed = new URL(url);
+    return parsed.protocol.startsWith("http");
   } catch {
     return false;
   }
 }
 
-function parseAuthor(raw) {
-  if (!raw?.trim()) return null;
-  const parts = raw.split("|").map(s => s.trim()).filter(Boolean);
-  if (parts.length === 0) return null;
-
-  const [name, iconURL, url] = parts;
-  return {
-    name,
-    iconURL: isValidUrl(iconURL) ? iconURL : undefined,
-    url: isValidUrl(url) ? url : undefined
-  };
-}
-
-// ====================== GŁÓWNY EKSPORT ======================
+// ====================== MAIN EXPORT ======================
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("embed")
-    .setDescription("Zaawansowany builder embedów (z wsparciem dla GIFów)")
+    .setDescription("Advanced VYRN Embed Builder with Edit/GIF support")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(option =>
       option
         .setName("channel")
-        .setDescription("Kanał docelowy")
+        .setDescription("Target channel for the embed")
         .addChannelTypes(ChannelType.GuildText)
         .setRequired(false)
     ),
 
   async execute(interaction) {
-    if (!interaction.guild) {
-      return interaction.reply({
-        content: "❌ Tej komendy można użyć tylko na serwerze.",
-        ephemeral: true
-      });
-    }
-
     const targetChannel = interaction.options.getChannel("channel") || interaction.channel;
     await interaction.showModal(buildEmbedModal(targetChannel.id));
   },
 
-  // ====================== OBSŁUGA MODALA ======================
+  // ====================== MODAL HANDLER ======================
   async handleModal(interaction) {
     if (!interaction.isModalSubmit() || !interaction.customId.startsWith("embedModal_")) return;
 
-    const channelId = interaction.customId.split("_")[1];
-    const channel = interaction.guild.channels.cache.get(channelId) ||
+    const [, channelId, messageId] = interaction.customId.split("_");
+    const channel = interaction.guild.channels.cache.get(channelId) || 
                     await interaction.guild.channels.fetch(channelId).catch(() => null);
 
-    if (!channel) {
-      return interaction.reply({ content: "❌ Nie znaleziono kanału.", ephemeral: true });
-    }
+    if (!channel) return interaction.reply({ content: "❌ Target channel not found.", ephemeral: true });
 
     await interaction.deferReply({ ephemeral: true });
 
     try {
-      const title       = interaction.fields.getTextInputValue("title").trim();
-      let description   = interaction.fields.getTextInputValue("description").trim();
-      let colorInput    = interaction.fields.getTextInputValue("color").trim();
-      const authorRaw   = interaction.fields.getTextInputValue("author").trim();
-      const imageUrl    = interaction.fields.getTextInputValue("image").trim();
+      const title = interaction.fields.getTextInputValue("title").trim();
+      let description = interaction.fields.getTextInputValue("description").trim();
+      let colorInput = interaction.fields.getTextInputValue("color").trim();
+      const imageUrl = interaction.fields.getTextInputValue("image").trim();
+      const footerText = interaction.fields.getTextInputValue("footer").trim();
 
       if (description === ".") description = "";
 
-      const color = isValidHex(colorInput)
-        ? (colorInput.startsWith("#") ? colorInput : `#${colorInput}`)
+      const color = isValidHex(colorInput) 
+        ? (colorInput.startsWith("#") ? colorInput : `#${colorInput}`) 
         : DEFAULT_COLOR;
 
-      const embed = new EmbedBuilder().setColor(color);
+      const embed = new EmbedBuilder().setColor(color).setTimestamp();
 
       if (title) embed.setTitle(title);
       if (description) embed.setDescription(description);
+      if (isValidUrl(imageUrl)) embed.setImage(imageUrl);
+      if (footerText) embed.setFooter({ text: footerText });
 
-      const author = parseAuthor(authorRaw);
-      if (author) embed.setAuthor(author);
-
-      if (imageUrl && isValidUrl(imageUrl)) {
-        embed.setImage(imageUrl);
+      let sentMessage;
+      if (messageId === "new") {
+        // Create new message
+        sentMessage = await channel.send({ embeds: [embed] });
+      } else {
+        // Edit existing message
+        const targetMsg = await channel.messages.fetch(messageId).catch(() => null);
+        if (!targetMsg) throw new Error("Message not found.");
+        sentMessage = await targetMsg.edit({ embeds: [embed] });
       }
-
-      const sentMessage = await channel.send({ embeds: [embed] });
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`embed_edit_${sentMessage.id}_${channelId}`)
-          .setLabel("✏️ Edytuj")
+          .setLabel("✏️ Edit Embed")
           .setStyle(ButtonStyle.Primary),
         new ButtonBuilder()
           .setCustomId(`embed_delete_${sentMessage.id}_${channelId}`)
-          .setLabel("🗑 Usuń")
+          .setLabel("🗑 Delete")
           .setStyle(ButtonStyle.Danger)
       );
 
       await interaction.editReply({
-        content: `✅ Embed został pomyślnie wysłany na kanał **#${channel.name}**`,
+        content: `✅ Embed has been ${messageId === "new" ? "sent to" : "updated in"} **#${channel.name}**`,
         components: [row]
       });
 
     } catch (err) {
-      console.error("[EMBED Modal Error]:", err);
-      await interaction.editReply({
-        content: "❌ Wystąpił błąd podczas tworzenia embeda."
-      });
+      console.error("🔥 [EMBED ERROR]:", err);
+      await interaction.editReply({ content: `❌ **Error:** ${err.message || "Failed to process embed."}` });
     }
   },
 
-  // ====================== OBSŁUGA PRZYCISKÓW ======================
+  // ====================== BUTTON HANDLER ======================
   async handleButton(interaction) {
-    const cid = interaction.customId;
+    const [, action, messageId, channelId] = interaction.customId.split("_");
 
-    // Edycja embeda
-    if (cid.startsWith("embed_edit_")) {
-      const [, , messageId, channelId] = cid.split("_");
+    const channel = interaction.guild.channels.cache.get(channelId) || 
+                    await interaction.guild.channels.fetch(channelId).catch(() => null);
 
-      const channel = interaction.guild.channels.cache.get(channelId) ||
-                      await interaction.guild.channels.fetch(channelId).catch(() => null);
+    if (!channel) return interaction.reply({ content: "❌ Target channel is no longer accessible.", ephemeral: true });
 
-      if (!channel) {
-        return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
-      }
+    const message = await channel.messages.fetch(messageId).catch(() => null);
 
-      const message = await channel.messages.fetch(messageId).catch(() => null);
-      if (!message?.embeds?.[0]) {
-        return interaction.reply({ content: "❌ Nie znaleziono embeda do edycji.", ephemeral: true });
-      }
-
-      await interaction.showModal(buildEmbedModal(channelId, message.embeds[0]));
-      return;
+    if (action === "edit") {
+      if (!message?.embeds?.[0]) return interaction.reply({ content: "❌ Embed data not found.", ephemeral: true });
+      await interaction.showModal(buildEmbedModal(channelId, messageId, message.embeds[0]));
     }
 
-    // Usuwanie embeda
-    if (cid.startsWith("embed_delete_")) {
-      const [, , messageId, channelId] = cid.split("_");
-
-      const channel = interaction.guild.channels.cache.get(channelId) ||
-                      await interaction.guild.channels.fetch(channelId).catch(() => null);
-
-      if (!channel) {
-        return interaction.reply({ content: "❌ Kanał nie istnieje.", ephemeral: true });
-      }
-
-      const message = await channel.messages.fetch(messageId).catch(() => null);
-      if (message) {
-        await message.delete().catch(() => {});
-        await interaction.reply({ content: "🗑 Embed został usunięty.", ephemeral: true });
-      } else {
-        await interaction.reply({ content: "❌ Nie udało się usunąć embeda.", ephemeral: true });
-      }
+    if (action === "delete") {
+      if (message) await message.delete().catch(() => {});
+      await interaction.reply({ content: "🗑️ Embed deleted successfully.", ephemeral: true });
     }
   }
 };
