@@ -30,22 +30,19 @@ module.exports = {
       if (newState.channelId === CONFIG.CREATOR_CHANNEL_ID) {
         console.log(`[PRIVATE VC] 👑 Triggering creation for ${member.user.tag}`);
         
-        // Stop session if moving from another channel to creator
+        // Zatrzymujemy sesję XP, jeśli ktoś przechodzi z normalnego kanału do kreatora
         if (oldState.channelId) {
           voiceRewards.stopSession(member.id);
         }
         
         await privateVC.handlePrivateChannelCreation(member);
-        return; // Stop here - don't reward for being in the "Creator" channel
+        return; // Zatrzymujemy kod - brak nagród za siedzenie w kanale "Create"
       }
 
-      // === 2. VOICE REWARDS LOGIC (Anti-AFK Integrated) ===
+      // === 2. VOICE REWARDS LOGIC & LOGGING ===
       
-      // JOINED A CHANNEL
+      // DOŁĄCZENIE DO KANAŁU (JOIN)
       if (!oldState.channelId && newState.channelId) {
-        // Only start rewards if not muted/deafened (Optional - promotes active talking)
-        const isAfk = newState.selfDeaf || newState.selfMute;
-        
         voiceRewards.startSession(member);
         
         await sendVoiceLog(member, CONFIG.THEME.SUCCESS, "📥 Joined Voice Channel", {
@@ -53,7 +50,7 @@ module.exports = {
         });
       }
 
-      // LEFT A CHANNEL
+      // WYJŚCIE Z KANAŁU (LEAVE)
       else if (oldState.channelId && !newState.channelId) {
         voiceRewards.stopSession(member.id);
         
@@ -62,8 +59,9 @@ module.exports = {
         });
       }
 
-      // SWITCHED CHANNELS
+      // ZMIANA KANAŁU (SWITCH)
       else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
+        // Restartujemy sesję, aby zresetować timer przy zmianie kanału
         voiceRewards.stopSession(member.id);
         voiceRewards.startSession(member);
         
@@ -71,14 +69,6 @@ module.exports = {
           { name: "From", value: `${oldChannel}`, inline: true },
           { name: "To", value: `${newChannel}`, inline: true }
         ]);
-      }
-
-      // === 3. MUTE/DEAF STATE LOGGING (Optional) ===
-      if (oldState.selfMute !== newState.selfMute || oldState.selfDeaf !== newState.selfDeaf) {
-        // You can add logic here to pause XP if they mute themselves
-        if (newState.selfMute || newState.selfDeaf) {
-            // voiceRewards.pauseSession(member.id); // If your system supports pausing
-        }
       }
 
     } catch (err) {
@@ -89,6 +79,9 @@ module.exports = {
 
 // ====================== HELPER: VOICE LOGGING ======================
 async function sendVoiceLog(member, color, actionTitle, fields) {
+  // Bezpiecznik: jeśli system logów nie jest w pełni załadowany, unikamy crasha
+  if (typeof sendLog !== "function") return; 
+
   const embed = new EmbedBuilder()
     .setColor(color)
     .setAuthor({ 
@@ -107,5 +100,5 @@ async function sendVoiceLog(member, color, actionTitle, fields) {
     embed.addFields([fields]);
   }
 
-  await sendLog(member.guild, LOGS.VOICE, embed);
+  await sendLog(member.guild, LOGS.VOICE, embed).catch(() => {});
 }
