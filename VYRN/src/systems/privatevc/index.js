@@ -17,7 +17,7 @@ const CONFIG = {
   CREATE_CHANNEL_ID: "1496280414237491220",
   PRIVATE_CATEGORY_ID: "1496281285780574268",
   CREATE_COOLDOWN: 5000,
-  MOVE_DELAY: 1000,
+  MOVE_DELAY: 1500, // Zwiększyłem lekko dla stabilności Discord API
   WATCH_INTERVAL: 15000,
   THEME: {
     GOLD: "#FFD700",
@@ -33,7 +33,7 @@ const channelBans = new Map();
 
 function init(client) {
   global.client = client;
-  console.log("👑 [VYRN SYSTEM] 🔒 Private VC System → Loaded Successfully");
+  console.log("👑 [VYRN HQ] 🔒 Private VC System → OK");
 }
 
 // ====================== CREATE CHANNEL ======================
@@ -76,15 +76,14 @@ async function handlePrivateChannelCreation(member) {
     userChannels.set(member.id, channel.id);
     channelOwners.set(channel.id, member.id);
 
-    // KLUCZOWA POPRAWKA: Czekamy chwilę, aż kanał "osiądzie" w systemie przed wysłaniem panelu
+    // Czekamy chwilę przed akcjami, żeby uniknąć API limitów
     setTimeout(async () => {
         await sendControlPanel(channel, member);
         
-        // Przenoszenie użytkownika
         const freshMember = await member.guild.members.fetch(member.id).catch(() => null);
         if (freshMember && freshMember.voice?.channelId === CONFIG.CREATE_CHANNEL_ID) {
           await freshMember.voice.setChannel(channel).catch(err => {
-              console.error("[VC MOVE ERROR]", err.message);
+              console.error("🔥 [VC MOVE ERROR]", err.message);
           });
         }
     }, CONFIG.MOVE_DELAY);
@@ -99,9 +98,8 @@ async function handlePrivateChannelCreation(member) {
 
 // ====================== CONTROL PANEL ======================
 async function sendControlPanel(channel, owner) {
-  // Ponowne sprawdzenie czy kanał istnieje w cache bota
   const targetChannel = channel.guild.channels.cache.get(channel.id);
-  if (!targetChannel) return console.error("[VC] Could not find channel in cache to send panel.");
+  if (!targetChannel) return;
 
   const embed = new EmbedBuilder()
     .setColor(CONFIG.THEME.GOLD)
@@ -139,28 +137,25 @@ async function sendControlPanel(channel, owner) {
     new ButtonBuilder().setCustomId(`vc_delete_${channel.id}`).setLabel("Delete").setEmoji("🗑️").setStyle(ButtonStyle.Danger)
   );
 
-  // Wysyłamy wiadomość i przypinamy ją, żeby zawsze była na górze (opcjonalnie)
   await targetChannel.send({ embeds: [embed], components: [row1, row2, row3] })
-    .then(msg => msg.pin().catch(() => {}))
     .catch(err => console.error("[PANEL SEND ERROR]", err.message));
 }
 
-// ... reszta funkcji (handlePrivatePanel, handleRename, etc.) bez zmian, ale z angielskimi tekstami ...
-// Pamiętaj, aby w handlePrivatePanel również zmienić teksty na angielski, jak robiliśmy w poprzednich plikach!
-
+// ====================== BUTTON HANDLER ======================
 async function handlePrivatePanel(interaction) {
   const parts = interaction.customId.split("_");
   const action = parts[1];
   const channelId = parts[2];
 
   const channel = interaction.guild.channels.cache.get(channelId);
-  if (!channel) return interaction.reply({ content: "❌ This channel no longer exists.", ephemeral: true });
+  if (!channel) return interaction.reply({ content: "❌ This channel no longer exists.", flags: 64 });
 
   const ownerId = channelOwners.get(channelId);
 
+  // Claim logic (Available for everyone)
   if (action === "claim") {
-    if (interaction.user.id === ownerId) return interaction.reply({ content: "❌ You already own this channel!", ephemeral: true });
-    if (channel.members.has(ownerId)) return interaction.reply({ content: "❌ The owner is still present. You cannot claim it.", ephemeral: true });
+    if (interaction.user.id === ownerId) return interaction.reply({ content: "❌ You already own this channel!", flags: 64 });
+    if (channel.members.has(ownerId)) return interaction.reply({ content: "❌ The owner is still present. You cannot claim it.", flags: 64 });
     
     if (ownerId) userChannels.delete(ownerId);
     channelOwners.set(channelId, interaction.user.id);
@@ -171,10 +166,11 @@ async function handlePrivatePanel(interaction) {
       ViewChannel: true, Connect: true, Speak: true, Stream: true, MoveMembers: true, ManageChannels: true
     });
 
-    return interaction.reply({ content: "👑 **Success!** You have claimed ownership of this channel.", ephemeral: false });
+    return interaction.reply({ content: "👑 **Success!** You have claimed ownership of this channel.", flags: 64 });
   }
 
-  if (interaction.user.id !== ownerId) return interaction.reply({ content: "❌ Only the channel owner can use these controls!", ephemeral: true });
+  // Owner-only check
+  if (interaction.user.id !== ownerId) return interaction.reply({ content: "❌ Only the channel owner can use these controls!", flags: 64 });
 
   try {
     switch (action) {
@@ -183,38 +179,124 @@ async function handlePrivatePanel(interaction) {
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("new_name").setLabel("New Name:").setStyle(TextInputStyle.Short).setMaxLength(25).setRequired(true))
         );
         return await interaction.showModal(renameModal);
+        
       case "limit":
         const limitModal = new ModalBuilder().setCustomId(`vc_limit_${channelId}`).setTitle("User Limit").addComponents(
           new ActionRowBuilder().addComponents(new TextInputBuilder().setCustomId("new_limit").setLabel("Limit (0 = unlimited):").setStyle(TextInputStyle.Short).setMaxLength(2).setRequired(true))
         );
         return await interaction.showModal(limitModal);
+        
       case "lock":
         await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: false });
-        return await interaction.reply({ content: "🔒 Channel locked.", ephemeral: true });
+        return await interaction.reply({ content: "🔒 Channel locked.", flags: 64 });
+        
       case "unlock":
         await channel.permissionOverwrites.edit(interaction.guild.id, { Connect: null });
-        return await interaction.reply({ content: "🔓 Channel unlocked.", ephemeral: true });
+        return await interaction.reply({ content: "🔓 Channel unlocked.", flags: 64 });
+        
       case "hide":
         await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: false });
-        return await interaction.reply({ content: "👁️ Channel hidden.", ephemeral: true });
+        return await interaction.reply({ content: "👁️ Channel hidden.", flags: 64 });
+        
       case "unhide":
         await channel.permissionOverwrites.edit(interaction.guild.id, { ViewChannel: null });
-        return await interaction.reply({ content: "👁️‍🗨️ Channel visible.", ephemeral: true });
+        return await interaction.reply({ content: "👁️‍🗨️ Channel visible.", flags: 64 });
+        
       case "delete":
-        await interaction.reply({ content: "🗑️ Closing channel...", ephemeral: true });
+        await interaction.reply({ content: "🗑️ Closing channel...", flags: 64 });
         await channel.delete().catch(() => {});
         cleanup(channelId);
         return;
-      // ... dodaj resztę (permit/kick/ban) analogicznie po angielsku ...
+
+      // Select Menus for Mod Actions
+      case "permit":
+      case "kick":
+      case "ban":
+      case "unban":
+        const menu = new UserSelectMenuBuilder()
+          .setCustomId(`vc_select_${action}_${channelId}`)
+          .setPlaceholder(`Select user to ${action}...`)
+          .setMaxValues(1);
+        const row = new ActionRowBuilder().addComponents(menu);
+        return await interaction.reply({ content: `Select a user to **${action}**:`, components: [row], flags: 64 });
     }
-  } catch (e) { console.error(e); }
+  } catch (e) { console.error("🔥 [VC PANEL ERROR]", e); }
 }
 
-// Pamiętaj o eksporcie i reszcie funkcji pomocniczych!
+// ====================== MODAL HANDLERS ======================
+async function handleRename(interaction) {
+  const channelId = interaction.customId.split("_")[2];
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) return interaction.reply({ content: "❌ Channel not found.", flags: 64 });
+  if (channelOwners.get(channelId) !== interaction.user.id) return interaction.reply({ content: "❌ Unauthorized.", flags: 64 });
+
+  const newName = interaction.fields.getTextInputValue("new_name");
+  await channel.setName(newName).catch(() => {});
+  return interaction.reply({ content: `✅ Channel renamed to: **${newName}**`, flags: 64 });
+}
+
+async function handleLimit(interaction) {
+  const channelId = interaction.customId.split("_")[2];
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) return interaction.reply({ content: "❌ Channel not found.", flags: 64 });
+  if (channelOwners.get(channelId) !== interaction.user.id) return interaction.reply({ content: "❌ Unauthorized.", flags: 64 });
+
+  let limit = parseInt(interaction.fields.getTextInputValue("new_limit"));
+  if (isNaN(limit) || limit < 0 || limit > 99) limit = 0;
+  await channel.setUserLimit(limit).catch(() => {});
+  return interaction.reply({ content: `✅ User limit set to: **${limit === 0 ? "Unlimited" : limit}**`, flags: 64 });
+}
+
+// ====================== SELECT MENU HANDLER ======================
+async function handlePrivateSelect(interaction) {
+  const parts = interaction.customId.split("_");
+  const action = parts[2];
+  const channelId = parts[3];
+  const targetId = interaction.values[0];
+
+  const channel = interaction.guild.channels.cache.get(channelId);
+  if (!channel) return interaction.reply({ content: "❌ Channel not found.", flags: 64 });
+  if (channelOwners.get(channelId) !== interaction.user.id) return interaction.reply({ content: "❌ Unauthorized.", flags: 64 });
+
+  const targetMember = interaction.guild.members.cache.get(targetId);
+  if (!targetMember) return interaction.reply({ content: "❌ User not found on server.", flags: 64 });
+
+  try {
+    switch (action) {
+      case "permit":
+        await channel.permissionOverwrites.edit(targetId, { ViewChannel: true, Connect: true });
+        return interaction.reply({ content: `✅ Granted access to ${targetMember}.`, flags: 64 });
+      
+      case "kick":
+        if (targetMember.voice.channelId === channelId) await targetMember.voice.disconnect().catch(() => {});
+        return interaction.reply({ content: `🥾 Kicked ${targetMember} from the channel.`, flags: 64 });
+        
+      case "ban":
+        if (targetMember.voice.channelId === channelId) await targetMember.voice.disconnect().catch(() => {});
+        await channel.permissionOverwrites.edit(targetId, { Connect: false, ViewChannel: false });
+        let bans = channelBans.get(channelId) || new Set();
+        bans.add(targetId);
+        channelBans.set(channelId, bans);
+        return interaction.reply({ content: `🔨 Banned ${targetMember} from the channel.`, flags: 64 });
+        
+      case "unban":
+        await channel.permissionOverwrites.delete(targetId).catch(() => {});
+        let existingBans = channelBans.get(channelId);
+        if (existingBans) existingBans.delete(targetId);
+        return interaction.reply({ content: `♻️ Reset access for ${targetMember}.`, flags: 64 });
+    }
+  } catch (err) {
+    console.error(err);
+    return interaction.reply({ content: "❌ Error executing action.", flags: 64 });
+  }
+}
+
+// ====================== WATCHER ======================
 function startWatcher(channelId) {
   const interval = setInterval(async () => {
     const channel = global.client?.channels?.cache.get(channelId);
     if (!channel) return clearInterval(interval);
+    
     if (channel.members.size === 0) {
       await channel.delete().catch(() => {});
       cleanup(channelId);
@@ -230,12 +312,12 @@ function cleanup(channelId) {
   channelBans.delete(channelId);
 }
 
+// ====================== EXPORTS ======================
 module.exports = {
   init,
   handlePrivateChannelCreation,
   handlePrivatePanel,
-  // Nie zapomnij wyeksportować reszty, jeśli są używane w handlerach:
-  handlePrivateSelect: require('./index.js').handlePrivateSelect, 
-  handleRename: require('./index.js').handleRename,
-  handleLimit: require('./index.js').handleLimit
+  handlePrivateSelect, 
+  handleRename,
+  handleLimit
 };
