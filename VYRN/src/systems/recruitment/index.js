@@ -11,16 +11,17 @@ const CONFIG = {
 };
 
 /**
- * VYRN HQ • RECRUITMENT SYSTEM
+ * VYRN HQ • RECRUITMENT SYSTEM (SIMPLE EDITION)
+ * System po prostu wysyła nową, osobną wiadomość na kanał.
  */
 async function init(client) {
-  console.log("📢 [VYRN HQ] Initializing Recruitment System...");
+  console.log("📢 [VYRN HQ] Sending recruitment message...");
 
   try {
     const channel = await client.channels.fetch(CONFIG.CHANNEL_ID).catch(() => null);
     if (!channel) return;
 
-    // Budowanie Embedu (Bez strzałek blockquote)
+    // Budowanie zwykłego, klasycznego Embedu
     const embed = new EmbedBuilder()
       .setColor(CONFIG.THEME.GOLD)
       .setTitle("🔍 LOOKING FOR PLAYERS")
@@ -48,16 +49,10 @@ async function init(client) {
       )
       .setImage(CONFIG.IMAGE_URL);
 
-    const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
-    const botMessage = messages?.find(m => m.author.id === client.user.id);
-
-    if (botMessage) {
-      await botMessage.edit({ embeds: [embed] });
-      console.log("✅ [RECRUITMENT] Ogłoszenie zaktualizowane (Test bez blockquote).");
-    } else {
-      await channel.send({ embeds: [embed] });
-      console.log("✅ [RECRUITMENT] Ogłoszenie pomyślnie wysłane.");
-    }
+    // WYSYŁANIE JAKO OSOBNA, ZWYKŁA WIADOMOŚĆ (BEZ EDYCJI)
+    await channel.send({ embeds: [embed] });
+    
+    console.log("✅ [RECRUITMENT] Wysłano nową, osobną wiadomość.");
 
   } catch (error) {
     console.error("🔥 [RECRUITMENT SYSTEM ERROR]:", error);
