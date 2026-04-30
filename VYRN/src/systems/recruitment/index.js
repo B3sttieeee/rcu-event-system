@@ -25,13 +25,9 @@ async function init(client) {
       return;
     }
 
-    // Budowanie prestiżowego Embedu
+    // Budowanie minimalistycznego Embedu (Idealnego do przesyłania dalej)
     const embed = new EmbedBuilder()
       .setColor(CONFIG.THEME.GOLD)
-      .setAuthor({ 
-        name: "👑 VYRN HQ • CLAN RECRUITMENT", 
-        iconURL: client.user.displayAvatarURL() 
-      })
       .setTitle("🔍 LOOKING FOR PLAYERS")
       .setDescription(
         `> **Join one of the most prestigious clans!** We are currently looking for active and dedicated players.\n\n` +
@@ -55,9 +51,10 @@ async function init(client) {
         `> **DM one of the HQ Managers for an invite:**\n` +
         `> <@1097138975786946620> ┃ <@1241774952160432159> ┃ <@1183585370219233341>`
       )
-      .setImage(CONFIG.IMAGE_URL)
-      .setFooter({ text: "Official VYRN Clan • Constant Growth" })
-      .setTimestamp();
+      .setImage(CONFIG.IMAGE_URL);
+      
+      // CELOWO USUNIĘTO: setFooter, setTimestamp oraz setAuthor
+      // Dzięki temu Discord potraktuje to jako "lekką" wiadomość, którą łatwiej przesyłać!
 
     // Sprawdzanie, czy bot już wysłał ogłoszenie (żeby nie spamować przy każdym restarcie)
     const messages = await channel.messages.fetch({ limit: 10 }).catch(() => null);
@@ -66,11 +63,11 @@ async function init(client) {
     if (botMessage) {
       // Jeśli wiadomość już tam jest, tylko ją aktualizuje
       await botMessage.edit({ embeds: [embed] });
-      console.log("✅ [RECRUITMENT] Ogłoszenie zaktualizowane.");
+      console.log("✅ [RECRUITMENT] Ogłoszenie zaktualizowane (Czysta wersja).");
     } else {
       // Jeśli kanał jest pusty lub bot nie ma tam wiadomości, wysyła nową
       await channel.send({ embeds: [embed] });
-      console.log("✅ [RECRUITMENT] Ogłoszenie pomyślnie wysłane.");
+      console.log("✅ [RECRUITMENT] Ogłoszenie pomyślnie wysłane (Czysta wersja).");
     }
 
   } catch (error) {
