@@ -14,7 +14,10 @@ const economy = require("../systems/economy");
 const boostSystem = require("../systems/boost");
 const { generateProfileCard } = require("../systems/cardgenerator"); 
 
-// Funkcja formatująca czas
+/**
+ * Formatuje minuty na czytelny tekst
+ * @param {number} totalMinutes 
+ */
 function formatVoiceTime(totalMinutes) {
   if (!totalMinutes || totalMinutes < 1) return "**0**m";
   const hours = Math.floor(totalMinutes / 60);
@@ -22,20 +25,23 @@ function formatVoiceTime(totalMinutes) {
   return hours > 0 ? `**${hours}**h **${mins}**m` : `**${mins}**m`;
 }
 
-// Główna funkcja budująca całą wiadomość (Grafika + Embed + Przyciski)
+/**
+ * Buduje paczkę danych do wysłania (Grafika + Statystyki)
+ */
 async function buildProfilePayload(interaction, targetUser) {
   const targetId = targetUser.id;
 
-  // 1. Zbieranie danych
+  // 1. Pobieranie najświeższych danych z systemów
   const levelData = activity.getLevelData(targetId) || { level: 0, xp: 0, nextXP: 100 };
   const coins = economy.getCoins(targetId) || 0;
   const rank = activity.getRank(levelData.level) || { name: "Unranked", multiplier: 1 };
-  
   const voiceMin = activity.getVoiceMinutes(targetId) || 0;
+  
+  // Obliczanie mnożników
   const currentBoost = boostSystem?.getCurrentBoost ? boostSystem.getCurrentBoost(targetId) : 1;
   const totalMultiplier = (currentBoost * (rank.multiplier || 1)).toFixed(1);
 
-  // 2. Dane dla generatora obrazka
+  // 2. Przygotowanie danych dla generatora Canvas
   const stats = {
     level: levelData.level,
     xp: levelData.xp,
@@ -44,16 +50,20 @@ async function buildProfilePayload(interaction, targetUser) {
     rankName: rank.name
   };
 
-  // 3. Generowanie grafiki
+  // 3. Generowanie grafiki (z unikalną nazwą by uniknąć cache Discorda)
   const imageBuffer = await generateProfileCard(targetUser, stats);
-  const attachment = new AttachmentBuilder(imageBuffer, { name: "profile.png" });
+  const fileName = `profile_${targetId}_${Date.now()}.png`;
+  const attachment = new AttachmentBuilder(imageBuffer, { name: fileName });
 
-  // 4. Budowanie Embedu (Dodatkowe statystyki pod obrazkiem)
+  // 4. Konstrukcja Embedu
   const embed = new EmbedBuilder()
-    .setColor("#FFD700")
-    .setAuthor({ name: "VYRN CLAN • DOSSIER", iconURL: interaction.guild?.iconURL() })
+    .setColor("#FFD700") // VYRN Gold
+    .setAuthor({ 
+      name: "VYRN CLAN • DOSSIER", 
+      iconURL: interaction.guild?.iconURL({ dynamic: true }) 
+    })
     .setDescription(`Official identity card and extended statistics for <@${targetId}>.`)
-    .setImage("attachment://profile.png") // Zintegrowana grafika
+    .setImage(`attachment://${fileName}`)
     .addFields(
       { 
         name: "🎤 Voice Activity", 
@@ -66,10 +76,13 @@ async function buildProfilePayload(interaction, targetUser) {
         inline: true 
       }
     )
-    .setFooter({ text: "VYRN Clan Systems", iconURL: interaction.client.user.displayAvatarURL() })
+    .setFooter({ 
+      text: "VYRN Clan Systems • Prestige Edition", 
+      iconURL: interaction.client.user.displayAvatarURL() 
+    })
     .setTimestamp();
 
-  // 5. Przyciski
+  // 5. Przycisk odświeżania
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId("profile_refresh")
@@ -92,45 +105,54 @@ module.exports = {
     ),
 
   async execute(interaction) {
-    // Generowanie grafiki zawsze trochę trwa, więc deferReply jest konieczne
+    // Generowanie obrazka trwa, informujemy Discorda by czekał
     await interaction.deferReply();
 
     try {
       const targetUser = interaction.options.getUser("target") || interaction.user;
       
-      // Wysyłamy początkową wiadomość
-      const payload = await buildProfilePayload(interaction, targetUser);
+      // Wysłanie pierwszej wersji profilu
+      let payload = await buildProfilePayload(interaction, targetUser);
       const message = await interaction.editReply(payload);
 
-      // --- KOLEKTOR PRZYCISKÓW (Odświeżanie na żywo) ---
+      // --- KOLEKTOR INTERAKCJI (1 minuta) ---
       const collector = message.createMessageComponentCollector({
         componentType: ComponentType.Button,
-        time: 60000, // Przycisk działa przez 1 minutę
-        filter: i => i.user.id === interaction.user.id
+        time: 60000,
+        filter: i => i.user.id === interaction.user.id // Tylko autor komendy może odświeżać
       });
 
       collector.on("collect", async (i) => {
         if (i.customId === "profile_refresh") {
-          // Informujemy Discorda, że ładujemy nowe dane
-          await i.deferUpdate(); 
-          // Budujemy nową kartę z najświeższymi danymi
-          const newPayload = await buildProfilePayload(interaction, targetUser);
-          await interaction.editReply(newPayload);
+          try {
+            await i.deferUpdate(); // Pokazujemy stan "ładowania" na przycisku
+            
+            // Generujemy nowy payload z nową grafiką
+            const newPayload = await buildProfilePayload(interaction, targetUser);
+            await interaction.editReply(newPayload);
+          } catch (err) {
+            console.error("Failed to refresh profile:", err);
+          }
         }
       });
 
       collector.on("end", async () => {
-        // Po minucie wyłączamy przycisk, żeby nie klikać go w nieskończoność
-        const disabledRow = ActionRowBuilder.from(payload.components[0]);
-        disabledRow.components[0].setDisabled(true);
-        await interaction.editReply({ components: [disabledRow] }).catch(() => {});
+        // Po wygaśnięciu czasu, wyłączamy przycisk (staje się szary)
+        try {
+          const disabledRow = ActionRowBuilder.from(message.components[0]);
+          disabledRow.components.forEach(c => c.setDisabled(true));
+          await interaction.editReply({ components: [disabledRow] });
+        } catch (e) {
+          // Ignoruj błąd jeśli wiadomość została usunięta
+        }
       });
 
     } catch (err) {
       console.error("🔥 [PROFILE COMMAND ERROR]:", err);
-      return await interaction.editReply({ 
-        content: "❌ **System Failure:** Could not generate the visual profile card." 
-      });
+      const errorContent = "❌ **System Failure:** Could not generate the visual profile card. Please try again later.";
+      
+      if (interaction.deferred) await interaction.editReply({ content: errorContent });
+      else await interaction.reply({ content: errorContent, ephemeral: true });
     }
   }
 };
