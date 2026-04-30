@@ -1,181 +1,135 @@
-// src/systems/cardgenerator/index.js
 const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
 const path = require("path");
 
-// Ładowanie czcionki (upewnij się, że plik Roboto-Bold.ttf cały czas tam jest)
-GlobalFonts.registerFromPath(path.join(__dirname, 'Roboto-Bold.ttf'), 'Roboto');
+// Rejestracja Twojej nowej czcionki
+GlobalFonts.registerFromPath(path.join(__dirname, 'Cinzel-Bold.ttf'), 'Cinzel');
 
 async function generateProfileCard(member, stats) {
-  // Powiększony rozmiar dla lepszych proporcji
-  const width = 800;
-  const height = 280;
-  const canvas = createCanvas(width, height);
-  const ctx = canvas.getContext("2d");
+    const width = 800;
+    const height = 280;
+    const canvas = createCanvas(width, height);
+    const ctx = canvas.getContext("2d");
 
-  // ==========================================
-  // 1. ZAOKRĄGLONE ROGI CAŁEJ KARTY
-  // ==========================================
-  ctx.beginPath();
-  ctx.roundRect(0, 0, width, height, 25); // Zaokrąglenie o promieniu 25px
-  ctx.clip(); // Wszystko co narysujemy poniżej, nie wyjdzie poza te rogi!
+    // 1. ZAOKRĄGLONE ROGI KARTY
+    ctx.beginPath();
+    ctx.roundRect(0, 0, width, height, 30);
+    ctx.clip();
 
-  // ==========================================
-  // 2. TŁO (Mroczny Gradient + Złota Poświata)
-  // ==========================================
-  const bgGradient = ctx.createLinearGradient(0, 0, width, height);
-  bgGradient.addColorStop(0, "#101116"); // Bardzo głęboki granat/czerń
-  bgGradient.addColorStop(1, "#1A1C23"); // Odrobine jaśniejszy na dole
-  ctx.fillStyle = bgGradient;
-  ctx.fillRect(0, 0, width, height);
+    // 2. ŁADOWANIE TŁA Z IMGUR
+    try {
+        const background = await loadImage("https://imgur.com/RAC3GWt.png");
+        ctx.drawImage(background, 0, 0, width, height);
+    } catch (err) {
+        // Fallback jeśli Imgur zablokuje połączenie
+        ctx.fillStyle = "#101116";
+        ctx.fillRect(0, 0, width, height);
+    }
 
-  // Centralna, bardzo subtelna złota poświata
-  const glow = ctx.createRadialGradient(width / 2, height / 2, 50, width / 2, height / 2, 400);
-  glow.addColorStop(0, "rgba(255, 215, 0, 0.08)");
-  glow.addColorStop(1, "rgba(255, 215, 0, 0)");
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, width, height);
+    // Dodatkowa warstwa "Dusk" - przyciemnienie lewej strony dla lepszego kontrastu awatara i tekstu
+    const dusk = ctx.createLinearGradient(0, 0, width, 0);
+    dusk.addColorStop(0, "rgba(0, 0, 0, 0.85)");
+    dusk.addColorStop(0.5, "rgba(0, 0, 0, 0.4)");
+    dusk.addColorStop(1, "rgba(0, 0, 0, 0.1)");
+    ctx.fillStyle = dusk;
+    ctx.fillRect(0, 0, width, height);
 
-  // Subtelny Znak Wodny (Watermark) w tle
-  ctx.save();
-  ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
-  ctx.font = "bold 140px Roboto";
-  ctx.textAlign = "right";
-  ctx.fillText("VYRN", width + 20, height - 20);
-  ctx.restore();
+    // 3. AWATAR Z EFEKTEM OBRĄCZKI PRESTIŻU
+    const avatarSize = 160;
+    const avatarX = 45;
+    const avatarY = height / 2 - avatarSize / 2;
 
-  // ==========================================
-  // 3. AWATAR GRACZA Z EFEKTEM 3D
-  // ==========================================
-  const avatarSize = 160;
-  const avatarX = 50;
-  const avatarY = 60; // Wyśrodkowany w pionie
-  const avatarCenter = avatarX + avatarSize / 2;
-  const avatarMiddle = avatarY + avatarSize / 2;
+    // Zewnętrzny złoty blask awatara
+    ctx.save();
+    ctx.shadowColor = "rgba(255, 215, 0, 0.4)";
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2 + 5, 0, Math.PI * 2);
+    ctx.strokeStyle = "#FFD700";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
 
-  // Rysowanie cienia pod awatarem
-  ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-  ctx.shadowBlur = 20;
-  ctx.shadowOffsetY = 10;
-  ctx.beginPath();
-  ctx.arc(avatarCenter, avatarMiddle, avatarSize / 2, 0, Math.PI * 2, true);
-  ctx.fillStyle = "#000000";
-  ctx.fill();
-  ctx.restore();
+    // Rysowanie awatara
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+    ctx.clip();
+    const avatarImg = await loadImage(member.displayAvatarURL({ extension: "png", size: 256 }));
+    ctx.drawImage(avatarImg, avatarX, avatarY, avatarSize, avatarSize);
+    ctx.restore();
 
-  // Wycinanie i rysowanie awatara
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(avatarCenter, avatarMiddle, avatarSize / 2, 0, Math.PI * 2, true);
-  ctx.closePath();
-  ctx.clip();
+    // Główna złota ramka
+    ctx.beginPath();
+    ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2);
+    ctx.strokeStyle = "#FFD700";
+    ctx.lineWidth = 5;
+    ctx.stroke();
 
-  const avatarUrl = member.displayAvatarURL({ extension: "png", size: 256 });
-  try {
-    const avatar = await loadImage(avatarUrl);
-    ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
-  } catch (e) {
-    ctx.fillStyle = "#2A2A35";
-    ctx.fillRect(avatarX, avatarY, avatarSize, avatarSize);
-  }
-  ctx.restore();
+    // 4. TEKSTY - UŻYCIE CZCIONKI CINZEL
+    const textX = 240;
 
-  // Złota obramówka awatara (Premium Ring)
-  ctx.beginPath();
-  ctx.arc(avatarCenter, avatarMiddle, avatarSize / 2, 0, Math.PI * 2, true);
-  ctx.strokeStyle = "#FFD700"; 
-  ctx.lineWidth = 6;
-  ctx.stroke();
+    // Nazwa użytkownika z lekkim "Golden Glow"
+    ctx.save();
+    ctx.shadowColor = "rgba(255, 215, 0, 0.5)";
+    ctx.shadowBlur = 10;
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 44px Cinzel";
+    ctx.fillText(member.username.toUpperCase(), textX, 95);
+    ctx.restore();
 
-  // Druga, subtelniejsza obramówka wewnątrz (dodaje głębi)
-  ctx.beginPath();
-  ctx.arc(avatarCenter, avatarMiddle, (avatarSize / 2) - 4, 0, Math.PI * 2, true);
-  ctx.strokeStyle = "rgba(0, 0, 0, 0.5)"; 
-  ctx.lineWidth = 2;
-  ctx.stroke();
+    // Linia dekoracyjna pod nazwą
+    ctx.fillStyle = "rgba(255, 215, 0, 0.6)";
+    ctx.fillRect(textX, 105, 300, 2);
 
-  // ==========================================
-  // 4. TEKSTY (Z Cieniami)
-  // ==========================================
-  const textX = 250; // Odsunięcie tekstu od awatara
+    // Ranga i Statystyki
+    ctx.fillStyle = "#FFD700";
+    ctx.font = "22px Cinzel";
+    ctx.fillText(`RANK: ${stats.rankName.toUpperCase()}`, textX, 140);
+    
+    ctx.fillStyle = "#E0E0E0";
+    ctx.font = "18px Cinzel";
+    ctx.fillText(`LEVEL: ${stats.level}   •   VAULT: ${stats.coins.toLocaleString()} COINS`, textX, 175);
 
-  // Globalny cień dla tekstów
-  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
-  ctx.shadowBlur = 8;
-  ctx.shadowOffsetY = 4;
+    // 5. ZAAWANSOWANY PASEK XP (GLASS-MORPHISM)
+    const barX = textX;
+    const barY = 205;
+    const barWidth = 510;
+    const barHeight = 32;
+    const radius = 16;
 
-  // Nazwa użytkownika
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 42px Roboto"; // Nieco większy font
-  ctx.textAlign = "left";
-  ctx.fillText(member.username, textX, 100);
+    // Tło paska - efekt szklany
+    ctx.fillStyle = "rgba(255, 255, 255, 0.1)";
+    ctx.beginPath();
+    ctx.roundRect(barX, barY, barWidth, barHeight, radius);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255, 215, 0, 0.3)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-  // Ranga i Level
-  ctx.fillStyle = "#FFD700";
-  ctx.font = "26px Roboto";
-  ctx.fillText(`Rank: ${stats.rankName}   •   Level: ${stats.level}`, textX, 145);
-
-  // Ekonomia (Monety)
-  ctx.fillStyle = "#B0B3C0"; // Szaro-niebieski odcień złota, bardzo nowoczesny
-  ctx.font = "22px Roboto";
-  ctx.fillText(`Wealth: ${stats.coins.toLocaleString()} Coins`, textX, 180);
-
-  // Resetujemy cień, żeby nie popsuł paska XP
-  ctx.shadowColor = "transparent";
-  ctx.shadowBlur = 0;
-  ctx.shadowOffsetY = 0;
-
-  // ==========================================
-  // 5. PASEK POSTĘPU XP (Ultra-Sleek)
-  // ==========================================
-  const barX = textX;
-  const barY = 210;
-  const barWidth = 490; // Dopasowane do nowej szerokości
-  const barHeight = 28; // Nieco grubszy
-  const radius = 14; // Idealnie okrągłe końce
-  
-  const nextXPSafe = stats.nextXP && stats.nextXP > 0 ? stats.nextXP : 100;
-  const progress = Math.max(0, Math.min(1, stats.xp / nextXPSafe));
-
-  // Tło paska (Głębokie wcięcie)
-  ctx.fillStyle = "#15161C"; 
-  ctx.beginPath();
-  ctx.roundRect(barX, barY, barWidth, barHeight, radius);
-  ctx.fill();
-  
-  // Wewnętrzny obrys tła paska (Inner Stroke)
-  ctx.strokeStyle = "#2A2D3A";
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // Wypełnienie paska XP (Złoty Gradient z połyskiem)
-  if (progress > 0) {
+    // Wypełnienie paska (Złoty Gradient)
+    const nextXPSafe = stats.nextXP || 100;
+    const progress = Math.max(0.05, Math.min(1, stats.xp / nextXPSafe));
+    
     const xpGradient = ctx.createLinearGradient(barX, 0, barX + barWidth, 0);
-    xpGradient.addColorStop(0, "#FFB800"); // Ciepłe złoto
-    xpGradient.addColorStop(1, "#FF8C00"); // Pomarańcz
+    xpGradient.addColorStop(0, "#B8860B"); // Dark Goldenrod
+    xpGradient.addColorStop(0.5, "#FFD700"); // Gold
+    xpGradient.addColorStop(1, "#DAA520"); // Goldenrod
 
     ctx.fillStyle = xpGradient;
     ctx.beginPath();
-    // Zabezpieczenie przed błędem rysowania zbyt krótkiego paska z zaokrąglonymi rogami
-    const currentBarWidth = Math.max(radius * 2, barWidth * progress); 
-    ctx.roundRect(barX, barY, currentBarWidth, barHeight, radius);
+    ctx.roundRect(barX, barY, barWidth * progress, barHeight, radius);
     ctx.fill();
-  }
 
-  // Tekst na pasku (Na środku)
-  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-  ctx.shadowBlur = 4;
-  ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 15px Roboto";
-  ctx.textAlign = "center";
-  
-  // Dodajemy mały margines pionowy (+19) by wyśrodkować tekst w grubszym pasku
-  ctx.fillText(`${stats.xp.toLocaleString()} / ${nextXPSafe.toLocaleString()} XP`, barX + barWidth / 2, barY + 19);
+    // Tekst XP - wycentrowany na pasku
+    ctx.fillStyle = "#FFFFFF";
+    ctx.font = "bold 15px Cinzel";
+    ctx.textAlign = "center";
+    ctx.shadowColor = "black";
+    ctx.shadowBlur = 5;
+    ctx.fillText(`${stats.xp.toLocaleString()} / ${nextXPSafe.toLocaleString()} XP`, barX + barWidth / 2, barY + 21);
 
-  // ==========================================
-  // 6. EKSPORT GRAFIKI
-  // ==========================================
-  return await canvas.encode("png");
+    // 6. EKSPORT
+    return await canvas.encode("png");
 }
 
 module.exports = { generateProfileCard };
