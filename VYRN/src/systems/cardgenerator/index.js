@@ -33,9 +33,8 @@ async function generateProfileCard(member, stats) {
 
     // --- 2. BEZPIECZNE ŁADOWANIE ZDJĘĆ ---
     const rankName = stats.rankName.toUpperCase();
-    const rankUrl = RANK_ICONS[rankName] || RANK_ICONS["BRONZE"]; // Jeśli nie znajdzie rangi, da brąz
+    const rankUrl = RANK_ICONS[rankName] || RANK_ICONS["BRONZE"];
 
-    // Ładujemy wszystkie obrazy naraz dla lepszej wydajności
     const [background, avatarImg, rankImg, coinImg] = await Promise.all([
         loadImage("https://i.imgur.com/RAC3GWt.png").catch(() => null),
         loadImage(member.displayAvatarURL({ extension: "png", size: 256 })).catch(() => null),
@@ -61,20 +60,18 @@ async function generateProfileCard(member, stats) {
     const centerX = avatarX + avatarSize / 2;
     const centerY = avatarY + avatarSize / 2;
 
-    // Jednolita, złota ramka wokół awatara
     ctx.save();
     ctx.beginPath();
     ctx.arc(centerX, centerY, avatarSize / 2 + 5, 0, Math.PI * 2);
     ctx.strokeStyle = "#FFD700";
     ctx.lineWidth = 5;
-    ctx.shadowColor = "rgba(0, 0, 0, 0.8)"; 
-    ctx.shadowBlur = 10;
-    ctx.shadowOffsetX = 2;
-    ctx.shadowOffsetY = 2;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.9)"; 
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetX = 3;
+    ctx.shadowOffsetY = 3;
     ctx.stroke();
     ctx.restore();
 
-    // Rysowanie grafiki awatara
     if (avatarImg) {
         ctx.save();
         ctx.beginPath();
@@ -84,90 +81,88 @@ async function generateProfileCard(member, stats) {
         ctx.restore();
     }
 
-    // --- 5. TEKST Z CIENIEM (CZYTELNOŚĆ) ---
+    // ==========================================
+    // 5. TEKST PREMIUM (OBRYS + CIEŃ)
+    // ==========================================
     const textX = 240;
 
-    const applyTextShadow = () => {
+    // Uniwersalna funkcja generująca "niezniszczalny" tekst
+    const drawTextPremium = (text, x, y, color = "#FFFFFF") => {
+        ctx.save();
+        // Cień przesunięty w prawo i dół
         ctx.shadowColor = "rgba(0, 0, 0, 1)";
-        ctx.shadowBlur = 8;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
-    };
-
-    const clearShadow = () => {
+        ctx.shadowBlur = 6;
+        ctx.shadowOffsetX = 3;
+        ctx.shadowOffsetY = 3;
+        
+        // Gruby czarny obrys litery
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = "#000000";
+        ctx.strokeText(text, x, y);
+        
+        // Czysty kolor w środku (wyłączamy cień, żeby nie brudził wnętrza)
         ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-        ctx.shadowOffsetX = 0;
-        ctx.shadowOffsetY = 0;
+        ctx.fillStyle = color;
+        ctx.fillText(text, x, y);
+        ctx.restore();
     };
 
     // --- NAZWA UŻYTKOWNIKA ---
     ctx.font = "bold 46px Cinzel";
-    ctx.fillStyle = "#FFFFFF";
-    applyTextShadow();
-    ctx.fillText(member.username.toUpperCase(), textX, 100);
-    clearShadow(); 
+    drawTextPremium(member.username.toUpperCase(), textX, 100, "#FFFFFF");
 
     // --- DEKORACYJNA ZŁOTA LINIA ---
     const lineGrad = ctx.createLinearGradient(textX, 0, textX + 500, 0);
     lineGrad.addColorStop(0, "#FFD700");
     lineGrad.addColorStop(1, "transparent");
     ctx.fillStyle = lineGrad;
+    // Cień pod linią
+    ctx.shadowColor = "rgba(0,0,0,0.8)";
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 2;
     ctx.fillRect(textX, 115, 500, 2);
+    ctx.shadowColor = "transparent"; // reset cienia po narysowaniu linii
 
     // --- RANGA (Z IKONKĄ IMGUR) ---
-    // Najpierw rysujemy ikonkę rangi
     if (rankImg) {
-        // Dodaję subtelny cień pod ikonkę, żeby nie zlewała się z tłem
-        ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-        ctx.shadowBlur = 5;
+        ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+        ctx.shadowBlur = 6;
         ctx.drawImage(rankImg, textX, 131, 28, 28);
-        clearShadow();
+        ctx.shadowColor = "transparent";
     }
     
     ctx.font = "bold 24px Cinzel";
-    applyTextShadow();
-    ctx.fillStyle = "#FFD700";
-    ctx.fillText("RANK: ", textX + 35, 155);
+    drawTextPremium("RANK: ", textX + 35, 155, "#FFD700");
     const rankLabelWidth = ctx.measureText("RANK: ").width;
-    
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(rankName, textX + 35 + rankLabelWidth, 155);
-    clearShadow();
+    drawTextPremium(rankName, textX + 35 + rankLabelWidth, 155, "#FFFFFF");
 
-    // --- STATYSTYKI (LVL i VAULT Z IKONKĄ KASY) ---
+    // --- STATYSTYKI (LVL i VAULT) ---
     ctx.font = "bold 20px Cinzel";
     const statsY = 195;
 
-    applyTextShadow();
     // LVL
-    ctx.fillStyle = "#E0E0E0"; 
-    ctx.fillText("LVL:", textX, statsY);
-    ctx.fillStyle = "#FFFFFF"; 
-    ctx.fillText(` ${stats.level}`, textX + 45, statsY);
+    drawTextPremium("LVL:", textX, statsY, "#C0C0C0"); // Jasnoszary
+    const lvlLabelWidth = ctx.measureText("LVL: ").width;
+    drawTextPremium(` ${stats.level}`, textX + lvlLabelWidth, statsY, "#FFFFFF");
 
     // VAULT
     const vaultX = textX + 150;
-    ctx.fillStyle = "#E0E0E0";
-    ctx.fillText("VAULT:", vaultX, statsY);
+    drawTextPremium("VAULT:", vaultX, statsY, "#C0C0C0");
     const vaultLabelWidth = ctx.measureText("VAULT: ").width;
     
     const vaultValue = ` ${stats.coins.toLocaleString()}`;
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(vaultValue, vaultX + vaultLabelWidth, statsY);
-    clearShadow();
+    drawTextPremium(vaultValue, vaultX + vaultLabelWidth, statsY, "#FFFFFF");
     
-    // Rysowanie ikony kasy
+    // Ikona kasy
     if (coinImg) {
         const vaultValueWidth = ctx.measureText(vaultValue).width;
-        ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
-        ctx.shadowBlur = 5;
-        // Ustawiamy odpowiednie przesunięcie dla ikony monet
+        ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
+        ctx.shadowBlur = 6;
         ctx.drawImage(coinImg, vaultX + vaultLabelWidth + vaultValueWidth + 8, statsY - 18, 24, 24);
-        clearShadow();
+        ctx.shadowColor = "transparent";
     }
 
-    // --- 6. CZYSTY PASEK POSTĘPU ---
+    // --- 6. PASEK POSTĘPU ---
     const nextXPSafe = stats.nextXP || 100;
     const progress = Math.min(stats.xp / nextXPSafe, 1);
     const barX = textX;
@@ -176,16 +171,14 @@ async function generateProfileCard(member, stats) {
     const barHeight = 28;
     const barRadius = barHeight / 2;
 
-    // Ciemne tło paska
     ctx.beginPath();
     ctx.roundRect(barX, barY, barWidth, barHeight, barRadius);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)"; 
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; 
     ctx.fill();
     ctx.strokeStyle = "rgba(255, 215, 0, 0.3)"; 
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Złote wypełnienie paska
     const fillWidth = Math.max(barWidth * progress, barRadius * 2); 
     ctx.save();
     ctx.beginPath();
@@ -200,16 +193,15 @@ async function generateProfileCard(member, stats) {
     ctx.fillRect(barX, barY, fillWidth, barHeight);
     ctx.restore();
 
-    // Tekst na pasku postępu
+    // Tekst na pasku postępu (też korzysta z nowej funkcji premium!)
     const progressText = `${stats.xp.toLocaleString()} / ${nextXPSafe.toLocaleString()} XP`;
     ctx.font = "bold 15px Cinzel";
     ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
+    ctx.textBaseline = "middle"; // Ustawienie pośrodku dla paska
     
-    applyTextShadow();
-    ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(progressText, barX + barWidth / 2, barY + barHeight / 2 + 1);
-    clearShadow();
+    drawTextPremium(progressText, barX + barWidth / 2, barY + barHeight / 2 + 1, "#FFFFFF");
+    
+    ctx.textBaseline = "alphabetic"; // Reset
 
     return await canvas.encode("png");
 }
