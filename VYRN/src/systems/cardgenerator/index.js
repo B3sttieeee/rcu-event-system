@@ -2,126 +2,178 @@
 const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
 const path = require("path");
 
-// 1. ŁADOWANIE CZCIONKI Z PLIKU OBOK
-// Upewnij się, że plik nazywa się dokładnie "Roboto-Bold.ttf"
+// Ładowanie czcionki (upewnij się, że plik Roboto-Bold.ttf cały czas tam jest)
 GlobalFonts.registerFromPath(path.join(__dirname, 'Roboto-Bold.ttf'), 'Roboto');
 
-/**
- * Generuje wizualną kartę profilu gracza
- * @param {Object} member - Obiekt użytkownika Discorda
- * @param {Object} stats - Dane zebrane z systemów
- * @returns {Promise<Buffer>} Zwraca bufor obrazu
- */
 async function generateProfileCard(member, stats) {
-  const canvas = createCanvas(800, 250);
+  // Powiększony rozmiar dla lepszych proporcji
+  const width = 800;
+  const height = 280;
+  const canvas = createCanvas(width, height);
   const ctx = canvas.getContext("2d");
 
   // ==========================================
-  // 1. TŁO KARTY (Mroczny Gradient + Złota Poświata)
+  // 1. ZAOKRĄGLONE ROGI CAŁEJ KARTY
   // ==========================================
-  const bgGradient = ctx.createLinearGradient(0, 0, 800, 250);
-  bgGradient.addColorStop(0, "#14151C"); // Ciemny granatowy/czarny
-  bgGradient.addColorStop(1, "#1E2029"); // Nieco jaśniejszy odcień
-  ctx.fillStyle = bgGradient;
-  ctx.fillRect(0, 0, 800, 250);
+  ctx.beginPath();
+  ctx.roundRect(0, 0, width, height, 25); // Zaokrąglenie o promieniu 25px
+  ctx.clip(); // Wszystko co narysujemy poniżej, nie wyjdzie poza te rogi!
 
-  // Złota poświata za awatarem
-  const glow = ctx.createRadialGradient(125, 125, 50, 125, 125, 200);
-  glow.addColorStop(0, "rgba(255, 215, 0, 0.15)");
+  // ==========================================
+  // 2. TŁO (Mroczny Gradient + Złota Poświata)
+  // ==========================================
+  const bgGradient = ctx.createLinearGradient(0, 0, width, height);
+  bgGradient.addColorStop(0, "#101116"); // Bardzo głęboki granat/czerń
+  bgGradient.addColorStop(1, "#1A1C23"); // Odrobine jaśniejszy na dole
+  ctx.fillStyle = bgGradient;
+  ctx.fillRect(0, 0, width, height);
+
+  // Centralna, bardzo subtelna złota poświata
+  const glow = ctx.createRadialGradient(width / 2, height / 2, 50, width / 2, height / 2, 400);
+  glow.addColorStop(0, "rgba(255, 215, 0, 0.08)");
   glow.addColorStop(1, "rgba(255, 215, 0, 0)");
   ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, 800, 250);
+  ctx.fillRect(0, 0, width, height);
+
+  // Subtelny Znak Wodny (Watermark) w tle
+  ctx.save();
+  ctx.fillStyle = "rgba(255, 255, 255, 0.03)";
+  ctx.font = "bold 140px Roboto";
+  ctx.textAlign = "right";
+  ctx.fillText("VYRN", width + 20, height - 20);
+  ctx.restore();
 
   // ==========================================
-  // 2. AWATAR GRACZA
+  // 3. AWATAR GRACZA Z EFEKTEM 3D
   // ==========================================
-  const avatarSize = 150;
+  const avatarSize = 160;
   const avatarX = 50;
-  const avatarY = 50;
+  const avatarY = 60; // Wyśrodkowany w pionie
+  const avatarCenter = avatarX + avatarSize / 2;
+  const avatarMiddle = avatarY + avatarSize / 2;
 
+  // Rysowanie cienia pod awatarem
+  ctx.save();
+  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+  ctx.shadowBlur = 20;
+  ctx.shadowOffsetY = 10;
+  ctx.beginPath();
+  ctx.arc(avatarCenter, avatarMiddle, avatarSize / 2, 0, Math.PI * 2, true);
+  ctx.fillStyle = "#000000";
+  ctx.fill();
+  ctx.restore();
+
+  // Wycinanie i rysowanie awatara
   ctx.save();
   ctx.beginPath();
-  ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
+  ctx.arc(avatarCenter, avatarMiddle, avatarSize / 2, 0, Math.PI * 2, true);
   ctx.closePath();
   ctx.clip();
 
-  // Pobieranie awatara z Discorda
   const avatarUrl = member.displayAvatarURL({ extension: "png", size: 256 });
   try {
     const avatar = await loadImage(avatarUrl);
     ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
   } catch (e) {
-    // Awaryjne szare tło, jeśli Discord ma problemy
-    ctx.fillStyle = "#333333";
+    ctx.fillStyle = "#2A2A35";
     ctx.fillRect(avatarX, avatarY, avatarSize, avatarSize);
   }
   ctx.restore();
 
-  // Złota obramówka
+  // Złota obramówka awatara (Premium Ring)
   ctx.beginPath();
-  ctx.arc(avatarX + avatarSize / 2, avatarY + avatarSize / 2, avatarSize / 2, 0, Math.PI * 2, true);
+  ctx.arc(avatarCenter, avatarMiddle, avatarSize / 2, 0, Math.PI * 2, true);
   ctx.strokeStyle = "#FFD700"; 
   ctx.lineWidth = 6;
   ctx.stroke();
 
+  // Druga, subtelniejsza obramówka wewnątrz (dodaje głębi)
+  ctx.beginPath();
+  ctx.arc(avatarCenter, avatarMiddle, (avatarSize / 2) - 4, 0, Math.PI * 2, true);
+  ctx.strokeStyle = "rgba(0, 0, 0, 0.5)"; 
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
   // ==========================================
-  // 3. TEKSTY (Używamy nowej czcionki "Roboto")
+  // 4. TEKSTY (Z Cieniami)
   // ==========================================
-  
+  const textX = 250; // Odsunięcie tekstu od awatara
+
+  // Globalny cień dla tekstów
+  ctx.shadowColor = "rgba(0, 0, 0, 0.7)";
+  ctx.shadowBlur = 8;
+  ctx.shadowOffsetY = 4;
+
   // Nazwa użytkownika
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 36px Roboto"; 
-  ctx.fillText(member.username, 240, 90);
+  ctx.font = "bold 42px Roboto"; // Nieco większy font
+  ctx.textAlign = "left";
+  ctx.fillText(member.username, textX, 100);
 
   // Ranga i Level
   ctx.fillStyle = "#FFD700";
-  ctx.font = "24px Roboto";
-  ctx.fillText(`Rank: ${stats.rankName}  |  Level: ${stats.level}`, 240, 130);
+  ctx.font = "26px Roboto";
+  ctx.fillText(`Rank: ${stats.rankName}   •   Level: ${stats.level}`, textX, 145);
 
   // Ekonomia (Monety)
-  ctx.fillStyle = "#A0A0A0";
-  ctx.font = "20px Roboto";
-  ctx.fillText(`Wealth: ${stats.coins.toLocaleString()} Coins`, 240, 165);
+  ctx.fillStyle = "#B0B3C0"; // Szaro-niebieski odcień złota, bardzo nowoczesny
+  ctx.font = "22px Roboto";
+  ctx.fillText(`Wealth: ${stats.coins.toLocaleString()} Coins`, textX, 180);
+
+  // Resetujemy cień, żeby nie popsuł paska XP
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
 
   // ==========================================
-  // 4. PASEK POSTĘPU XP
+  // 5. PASEK POSTĘPU XP (Ultra-Sleek)
   // ==========================================
-  const barX = 240;
-  const barY = 190;
-  const barWidth = 500;
-  const barHeight = 25;
-  const radius = 12;
+  const barX = textX;
+  const barY = 210;
+  const barWidth = 490; // Dopasowane do nowej szerokości
+  const barHeight = 28; // Nieco grubszy
+  const radius = 14; // Idealnie okrągłe końce
   
-  // Bezpieczne dzielenie (zapobiega błędom matematycznym)
   const nextXPSafe = stats.nextXP && stats.nextXP > 0 ? stats.nextXP : 100;
   const progress = Math.max(0, Math.min(1, stats.xp / nextXPSafe));
 
-  // Tło paska
-  ctx.fillStyle = "#2A2A35";
+  // Tło paska (Głębokie wcięcie)
+  ctx.fillStyle = "#15161C"; 
   ctx.beginPath();
   ctx.roundRect(barX, barY, barWidth, barHeight, radius);
   ctx.fill();
+  
+  // Wewnętrzny obrys tła paska (Inner Stroke)
+  ctx.strokeStyle = "#2A2D3A";
+  ctx.lineWidth = 2;
+  ctx.stroke();
 
-  // Wypełnienie paska (Złoty gradient)
+  // Wypełnienie paska XP (Złoty Gradient z połyskiem)
   if (progress > 0) {
     const xpGradient = ctx.createLinearGradient(barX, 0, barX + barWidth, 0);
-    xpGradient.addColorStop(0, "#FFD700");
-    xpGradient.addColorStop(1, "#FF8C00"); // Przejście do pomarańczowego
-    
+    xpGradient.addColorStop(0, "#FFB800"); // Ciepłe złoto
+    xpGradient.addColorStop(1, "#FF8C00"); // Pomarańcz
+
     ctx.fillStyle = xpGradient;
     ctx.beginPath();
-    ctx.roundRect(barX, barY, barWidth * progress, barHeight, radius);
+    // Zabezpieczenie przed błędem rysowania zbyt krótkiego paska z zaokrąglonymi rogami
+    const currentBarWidth = Math.max(radius * 2, barWidth * progress); 
+    ctx.roundRect(barX, barY, currentBarWidth, barHeight, radius);
     ctx.fill();
   }
 
   // Tekst na pasku (Na środku)
+  ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+  ctx.shadowBlur = 4;
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 14px Roboto";
+  ctx.font = "bold 15px Roboto";
   ctx.textAlign = "center";
-  ctx.fillText(`${stats.xp.toLocaleString()} / ${nextXPSafe.toLocaleString()} XP`, barX + barWidth / 2, barY + 17);
+  
+  // Dodajemy mały margines pionowy (+19) by wyśrodkować tekst w grubszym pasku
+  ctx.fillText(`${stats.xp.toLocaleString()} / ${nextXPSafe.toLocaleString()} XP`, barX + barWidth / 2, barY + 19);
 
   // ==========================================
-  // 5. EKSPORT GOTOWEJ GRAFIKI
+  // 6. EKSPORT GRAFIKI
   // ==========================================
   return await canvas.encode("png");
 }
