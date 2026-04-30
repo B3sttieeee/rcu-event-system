@@ -4,7 +4,7 @@ const { EmbedBuilder } = require("discord.js");
 // ====================== CONFIG ======================
 const CONFIG = {
   CHANNEL_ID: "1499016088770445442",
-  IMAGE_URL: "https://cdn.discordapp.com/attachments/1499016088770445442/1499204343478620222/ezgif.com-animated-gif-maker_6.gif?ex=69f3f259&is=69f2a0d9&hm=d403114c2f3a7dfe882db063eb4e31a84402a88bd259485b7686ddde8fe9cf31&",
+  IMAGE_URL: "https://i.imgur.com/sJzNIT3.png",
   THEME: {
     GOLD: "#FFD700"
   }
