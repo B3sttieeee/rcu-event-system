@@ -3,7 +3,7 @@ const { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } = require("discor
 const activity = require("../systems/activity");
 const economy = require("../systems/economy");
 const boostSystem = require("../systems/boost");
-const { generateProfileCard } = require("../systems/cardGenerator"); // Importujemy nasz nowy system
+const { generateProfileCard } = require("../systems/cardgenerator"); // Importujemy nasz nowy system
 
 module.exports = {
   data: new SlashCommandBuilder()
