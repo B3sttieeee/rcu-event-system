@@ -5,7 +5,7 @@ const { EmbedBuilder } = require("discord.js");
 const CONFIG = {
   CHANNEL_ID: "1499016088770445442",
   // Twój link z media.discordapp.net:
-  IMAGE_URL: "https://media.discordapp.net/attachments/1490033478501273830/1498423816072986785/ezgif.com-crop.gif?ex=69f3be6d&is=69f26ced&hm=027a456c2c5964c2681ec0718fd03dd5cdcdd6825ad012019fbdb1fa19d0bdca&=&width=360&height=88",
+  IMAGE_URL: "https://media4.giphy.com/media/v1.Y2lkPTc5MGI3NjExNG4zMTd3bmFlYjVic2w2eW5ldWJ0dmNhZ2F3cm9xdXp2eTZtZ2tqZSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/WqkifhwtFEGX15BDoZ/giphy.gif",
   THEME: {
     GOLD: "#FFD700"
   }
