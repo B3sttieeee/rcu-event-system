@@ -2,18 +2,23 @@
 const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
 const path = require("path");
 
-// ========================================================
-// ⚠️ TUTAJ ŁADUJEMY CZCIONKĘ (ABY TEKST BYŁ WIDOCZNY)
-// Musisz pobrać plik np. Roboto-Bold.ttf i wrzucić do tego samego folderu
-// Odkomentuj poniższą linijkę, gdy to zrobisz:
-// GlobalFonts.registerFromPath(path.join(__dirname, 'Roboto-Bold.ttf'), 'Roboto');
-// ========================================================
+// 1. ŁADOWANIE CZCIONKI Z PLIKU OBOK
+// Upewnij się, że plik nazywa się dokładnie "Roboto-Bold.ttf"
+GlobalFonts.registerFromPath(path.join(__dirname, 'Roboto-Bold.ttf'), 'Roboto');
 
+/**
+ * Generuje wizualną kartę profilu gracza
+ * @param {Object} member - Obiekt użytkownika Discorda
+ * @param {Object} stats - Dane zebrane z systemów
+ * @returns {Promise<Buffer>} Zwraca bufor obrazu
+ */
 async function generateProfileCard(member, stats) {
   const canvas = createCanvas(800, 250);
   const ctx = canvas.getContext("2d");
 
-  // 1. Rysowanie Tła (Niezawodny Gradient zamiast Imgura)
+  // ==========================================
+  // 1. TŁO KARTY (Mroczny Gradient + Złota Poświata)
+  // ==========================================
   const bgGradient = ctx.createLinearGradient(0, 0, 800, 250);
   bgGradient.addColorStop(0, "#14151C"); // Ciemny granatowy/czarny
   bgGradient.addColorStop(1, "#1E2029"); // Nieco jaśniejszy odcień
@@ -27,7 +32,9 @@ async function generateProfileCard(member, stats) {
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, 800, 250);
 
-  // 2. Rysowanie Awatara
+  // ==========================================
+  // 2. AWATAR GRACZA
+  // ==========================================
   const avatarSize = 150;
   const avatarX = 50;
   const avatarY = 50;
@@ -38,11 +45,13 @@ async function generateProfileCard(member, stats) {
   ctx.closePath();
   ctx.clip();
 
+  // Pobieranie awatara z Discorda
   const avatarUrl = member.displayAvatarURL({ extension: "png", size: 256 });
   try {
     const avatar = await loadImage(avatarUrl);
     ctx.drawImage(avatar, avatarX, avatarY, avatarSize, avatarSize);
   } catch (e) {
+    // Awaryjne szare tło, jeśli Discord ma problemy
     ctx.fillStyle = "#333333";
     ctx.fillRect(avatarX, avatarY, avatarSize, avatarSize);
   }
@@ -55,42 +64,49 @@ async function generateProfileCard(member, stats) {
   ctx.lineWidth = 6;
   ctx.stroke();
 
-  // UWAGA: Kiedy wgrasz plik z czcionką, zmień "sans-serif" poniżej na "Roboto"
-
-  // 3. Tekst
+  // ==========================================
+  // 3. TEKSTY (Używamy nowej czcionki "Roboto")
+  // ==========================================
+  
+  // Nazwa użytkownika
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 36px sans-serif"; 
+  ctx.font = "bold 36px Roboto"; 
   ctx.fillText(member.username, 240, 90);
 
+  // Ranga i Level
   ctx.fillStyle = "#FFD700";
-  ctx.font = "24px sans-serif";
+  ctx.font = "24px Roboto";
   ctx.fillText(`Rank: ${stats.rankName}  |  Level: ${stats.level}`, 240, 130);
 
+  // Ekonomia (Monety)
   ctx.fillStyle = "#A0A0A0";
-  ctx.font = "20px sans-serif";
+  ctx.font = "20px Roboto";
   ctx.fillText(`Wealth: ${stats.coins.toLocaleString()} Coins`, 240, 165);
 
-  // 4. Pasek Postępu
+  // ==========================================
+  // 4. PASEK POSTĘPU XP
+  // ==========================================
   const barX = 240;
   const barY = 190;
   const barWidth = 500;
   const barHeight = 25;
   const radius = 12;
   
+  // Bezpieczne dzielenie (zapobiega błędom matematycznym)
   const nextXPSafe = stats.nextXP && stats.nextXP > 0 ? stats.nextXP : 100;
   const progress = Math.max(0, Math.min(1, stats.xp / nextXPSafe));
 
   // Tło paska
-  ctx.fillStyle = "#2A2A35"; // Ciemniejsze, ładniejsze tło paska
+  ctx.fillStyle = "#2A2A35";
   ctx.beginPath();
   ctx.roundRect(barX, barY, barWidth, barHeight, radius);
   ctx.fill();
 
+  // Wypełnienie paska (Złoty gradient)
   if (progress > 0) {
-    // Gradient paska XP
     const xpGradient = ctx.createLinearGradient(barX, 0, barX + barWidth, 0);
     xpGradient.addColorStop(0, "#FFD700");
-    xpGradient.addColorStop(1, "#FF8C00"); // Od żółtego do pomarańczowego
+    xpGradient.addColorStop(1, "#FF8C00"); // Przejście do pomarańczowego
     
     ctx.fillStyle = xpGradient;
     ctx.beginPath();
@@ -98,12 +114,15 @@ async function generateProfileCard(member, stats) {
     ctx.fill();
   }
 
-  // Tekst na pasku
+  // Tekst na pasku (Na środku)
   ctx.fillStyle = "#FFFFFF";
-  ctx.font = "bold 14px sans-serif";
+  ctx.font = "bold 14px Roboto";
   ctx.textAlign = "center";
   ctx.fillText(`${stats.xp.toLocaleString()} / ${nextXPSafe.toLocaleString()} XP`, barX + barWidth / 2, barY + 17);
 
+  // ==========================================
+  // 5. EKSPORT GOTOWEJ GRAFIKI
+  // ==========================================
   return await canvas.encode("png");
 }
 
