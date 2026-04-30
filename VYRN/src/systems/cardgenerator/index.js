@@ -8,7 +8,7 @@ GlobalFonts.registerFromPath(path.join(__dirname, 'Cinzel-Bold.ttf'), 'Cinzel');
 // FUNKCJE POMOCNICZE (HELPERS)
 // ==========================================
 
-// Rysuje wektorowy diament (zamiast brakującego emoji)
+// Rysuje wektorowy diament (zamiast brakującego znaku w czcionce)
 function drawDiamond(ctx, x, y, size) {
     ctx.save();
     ctx.translate(x, y);
@@ -39,10 +39,10 @@ function drawCoin(ctx, x, y, radius) {
     ctx.shadowBlur = 6;
     ctx.fill();
     
-    // Wewnętrzny otwór/wzór (tworzy efekt pierścienia)
+    // Wewnętrzny otwór
     ctx.beginPath();
-    ctx.arc(0, 0, radius * 0.5, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    ctx.arc(0, 0, radius * 0.4, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(0, 0, 0, 0.8)";
     ctx.fill();
     
     ctx.restore();
@@ -52,43 +52,37 @@ function drawCoin(ctx, x, y, radius) {
 function drawPremiumProgressBar(ctx, x, y, width, height, progress, text) {
     const radius = height / 2;
     
-    // 1. Tło paska (Track)
+    // 1. Tło paska (Ciemne)
     ctx.beginPath();
     ctx.roundRect(x, y, width, height, radius);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.65)";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
     ctx.fill();
     
-    // Wewnętrzny cień tła paska
-    ctx.strokeStyle = "rgba(0, 0, 0, 0.8)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    
-    // Zewnętrzna obwódka (subtelna)
+    // Zewnętrzna obwódka
     ctx.beginPath();
     ctx.roundRect(x - 1, y - 1, width + 2, height + 2, radius + 1);
-    ctx.strokeStyle = "rgba(255, 215, 0, 0.15)";
+    ctx.strokeStyle = "rgba(255, 215, 0, 0.2)";
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // 2. Wypełnienie (Fill)
-    const fillWidth = Math.max(width * progress, radius * 2); // Zapewnia, że pasek nie będzie "płaski" na starcie
+    // 2. Wypełnienie (Złoty Gradient)
+    const fillWidth = Math.max(width * progress, radius * 2); 
     
     ctx.save();
     ctx.beginPath();
     ctx.roundRect(x, y, fillWidth, height, radius);
-    ctx.clip(); // Przycięcie do zaokrągleń
+    ctx.clip(); 
     
-    // Główny gradient wypełnienia
     const fillGrad = ctx.createLinearGradient(x, 0, x + width, 0);
-    fillGrad.addColorStop(0, "#8B6508"); // Ciemne złoto
-    fillGrad.addColorStop(0.5, "#FFD700"); // Standardowe złoto
-    fillGrad.addColorStop(1, "#FFF8DC"); // Bardzo jasne złoto na końcu paska
+    fillGrad.addColorStop(0, "#8B6508"); 
+    fillGrad.addColorStop(0.5, "#FFD700"); 
+    fillGrad.addColorStop(1, "#FFF8DC"); 
     ctx.fillStyle = fillGrad;
     ctx.fillRect(x, y, fillWidth, height);
     
-    // Efekt szkła 3D na górze wypełnienia
+    // Efekt odblasku na górze wypełnienia
     const highlightGrad = ctx.createLinearGradient(0, y, 0, y + height / 2);
-    highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.4)");
+    highlightGrad.addColorStop(0, "rgba(255, 255, 255, 0.3)");
     highlightGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
     ctx.fillStyle = highlightGrad;
     ctx.fillRect(x, y, fillWidth, height / 2);
@@ -99,17 +93,16 @@ function drawPremiumProgressBar(ctx, x, y, width, height, progress, text) {
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     
-    // Mocny cień dla czytelności
-    ctx.fillStyle = "#000000";
-    ctx.fillText(text, x + width / 2 + 1, y + height / 2 + 1);
-    ctx.fillText(text, x + width / 2 - 1, y + height / 2 - 1);
+    // Mocny czarny obrys (Stroke) dla maksymalnej czytelności
+    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#000000";
+    ctx.strokeText(text, x + width / 2, y + height / 2 + 1);
     
-    // Właściwy tekst
+    // Biały środek tekstu
     ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(text, x + width / 2, y + height / 2);
+    ctx.fillText(text, x + width / 2, y + height / 2 + 1);
     
-    // Reset baseline dla reszty funkcji
-    ctx.textBaseline = "alphabetic";
+    ctx.textBaseline = "alphabetic"; // Reset
 }
 
 // ==========================================
@@ -122,12 +115,12 @@ async function generateProfileCard(member, stats) {
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext("2d");
 
-    // 1. ZAAOKRĄGLONE ROGI (CLIPPING)
+    // --- 1. ZAAOKRĄGLONE ROGI KARTY ---
     ctx.beginPath();
     ctx.roundRect(0, 0, width, height, 30);
     ctx.clip();
 
-    // 2. TŁO I WINIETA
+    // --- 2. ŁADOWANIE TŁA Z IMGUR ---
     try {
         const background = await loadImage("https://imgur.com/RAC3GWt.png");
         const ratio = Math.max(width / background.width, height / background.height);
@@ -135,49 +128,56 @@ async function generateProfileCard(member, stats) {
         const bgH = background.height * ratio;
         ctx.drawImage(background, (width - bgW) / 2, (height - bgH) / 2, bgW, bgH);
     } catch (err) {
-        ctx.fillStyle = "#0a0a0a";
+        ctx.fillStyle = "#111111";
         ctx.fillRect(0, 0, width, height);
     }
 
-    // Dodanie "winiety" (przyciemnione krawędzie, jaśniejszy środek)
-    const vignette = ctx.createRadialGradient(width/2, height/2, width/4, width/2, height/2, width);
-    vignette.addColorStop(0, "rgba(0, 0, 0, 0.1)");
-    vignette.addColorStop(1, "rgba(0, 0, 0, 0.85)");
-    ctx.fillStyle = vignette;
+    // --- 3. PÓŁPRZEZROCZYSTE PANELE (POPRAWA CZYTELNOŚCI) ---
+    // Ogólne delikatne przyciemnienie całego obrazka
+    ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
     ctx.fillRect(0, 0, width, height);
 
-    // Boczny cień pod tekstami (dla absolutnej czytelności)
-    const sideShadow = ctx.createLinearGradient(0, 0, width * 0.7, 0);
-    sideShadow.addColorStop(0, "rgba(0, 0, 0, 0.7)");
-    sideShadow.addColorStop(1, "transparent");
-    ctx.fillStyle = sideShadow;
-    ctx.fillRect(0, 0, width, height);
+    // Główny panel pod tekstami (ROZWIĄZUJE PROBLEM NIE CZYTELNOŚCI)
+    // Tworzymy szklany, ciemny prostokąt, który odcina tekst od tła
+    ctx.save();
+    ctx.fillStyle = "rgba(0, 0, 0, 0.65)"; // Ciemne, półprzezroczyste tło
+    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+    ctx.shadowBlur = 15;
+    ctx.beginPath();
+    ctx.roundRect(210, 45, 550, 205, 15); // X, Y, Szerokość, Wysokość, Zaokrąglenie
+    ctx.fill();
+    
+    // Subtelna złota obwódka tego panelu
+    ctx.strokeStyle = "rgba(255, 215, 0, 0.1)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
 
-    // 3. AWATAR
+    // --- 4. AWATAR ---
     const avatarSize = 160;
-    const avatarX = 45;
+    const avatarX = 35;
     const avatarY = height / 2 - avatarSize / 2;
     const centerX = avatarX + avatarSize / 2;
     const centerY = avatarY + avatarSize / 2;
 
-    // Gradientowa ramka awatara (wygląda o wiele lepiej niż jednolity kolor)
+    // Gradientowa złota ramka
     const ringGrad = ctx.createLinearGradient(avatarX, avatarY, avatarX + avatarSize, avatarY + avatarSize);
     ringGrad.addColorStop(0, "#FFDF00");
     ringGrad.addColorStop(0.5, "#DAA520");
     ringGrad.addColorStop(1, "#8B6508");
 
-    // Efekt poświaty ramki
+    // Cień ramki
     ctx.save();
-    ctx.shadowColor = "rgba(255, 215, 0, 0.5)";
-    ctx.shadowBlur = 15;
+    ctx.shadowColor = "rgba(0, 0, 0, 0.8)";
+    ctx.shadowBlur = 20;
     ctx.beginPath();
-    ctx.arc(centerX, centerY, avatarSize / 2 + 4, 0, Math.PI * 2);
+    ctx.arc(centerX, centerY, avatarSize / 2 + 5, 0, Math.PI * 2);
     ctx.strokeStyle = ringGrad;
-    ctx.lineWidth = 5;
+    ctx.lineWidth = 6;
     ctx.stroke();
     ctx.restore();
 
-    // Wycinanie i rysowanie zdjęcia
+    // Wycinanie i rysowanie awatara
     ctx.save();
     ctx.beginPath();
     ctx.arc(centerX, centerY, avatarSize / 2, 0, Math.PI * 2);
@@ -186,62 +186,45 @@ async function generateProfileCard(member, stats) {
     ctx.drawImage(avatarImg, avatarX, avatarY, avatarSize, avatarSize);
     ctx.restore();
 
-    // Wewnętrzny cienki pasek dla głębi awatara
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, avatarSize / 2, 0, Math.PI * 2);
-    ctx.strokeStyle = "rgba(0,0,0,0.5)";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    // 4. TYPOGRAFIA (TEKSTY)
+    // --- 5. TYPOGRAFIA (TEKSTY) ---
     const textX = 240;
 
-    // --- Nazwa Użytkownika ---
-    ctx.save();
+    // Nazwa Użytkownika
     ctx.font = "bold 46px Cinzel";
     ctx.fillStyle = "#FFFFFF";
-    ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-    ctx.shadowBlur = 8;
-    ctx.shadowOffsetY = 3;
-    ctx.fillText(member.username.toUpperCase(), textX, 90);
-    ctx.restore();
+    ctx.fillText(member.username.toUpperCase(), textX, 100);
 
-    // --- Dekoracyjna Linia z Akcentem ---
-    const lineGrad = ctx.createLinearGradient(textX, 0, textX + 450, 0);
+    // Dekoracyjna Złota Linia
+    const lineGrad = ctx.createLinearGradient(textX, 0, textX + 490, 0);
     lineGrad.addColorStop(0, "rgba(255, 215, 0, 1)");
-    lineGrad.addColorStop(0.8, "rgba(255, 215, 0, 0.1)");
     lineGrad.addColorStop(1, "transparent");
     ctx.fillStyle = lineGrad;
-    ctx.fillRect(textX, 105, 450, 2);
+    ctx.fillRect(textX, 115, 490, 2);
     
-    // Mały kwadracik na początku linii
-    ctx.fillStyle = "#FFD700";
-    ctx.fillRect(textX, 104, 4, 4);
-
     // --- Ranga ---
     ctx.font = "bold 24px Cinzel";
-    drawDiamond(ctx, textX + 10, 137, 8); // Zastępuje kwadracik "[]"
+    drawDiamond(ctx, textX + 10, 147, 8); // Zastępuje kwadracik "[]"
     
     ctx.fillStyle = "#FFD700";
-    ctx.fillText("RANK: ", textX + 30, 145);
+    ctx.fillText("RANK: ", textX + 30, 155);
     const rankLabelWidth = ctx.measureText("RANK: ").width;
     
     ctx.fillStyle = "#FFFFFF";
-    ctx.fillText(stats.rankName.toUpperCase(), textX + 30 + rankLabelWidth, 145);
+    ctx.fillText(stats.rankName.toUpperCase(), textX + 30 + rankLabelWidth, 155);
 
     // --- Statystyki (LVL i VAULT) ---
     ctx.font = "bold 20px Cinzel";
-    const statsY = 180;
+    const statsY = 190;
 
     // LVL
-    ctx.fillStyle = "#A0A0A0"; // Szary dla etykiety
+    ctx.fillStyle = "#B0B0B0"; 
     ctx.fillText("LVL:", textX, statsY);
-    ctx.fillStyle = "#FFFFFF"; // Biały dla wartości
+    ctx.fillStyle = "#FFFFFF"; 
     ctx.fillText(` ${stats.level}`, textX + 45, statsY);
 
     // VAULT
-    const vaultX = textX + 130;
-    ctx.fillStyle = "#A0A0A0";
+    const vaultX = textX + 150;
+    ctx.fillStyle = "#B0B0B0";
     ctx.fillText("VAULT:", vaultX, statsY);
     const vaultLabelWidth = ctx.measureText("VAULT: ").width;
     
@@ -251,15 +234,17 @@ async function generateProfileCard(member, stats) {
     
     // Rysowanie ikony monety (zastępuje "[]")
     const vaultValueWidth = ctx.measureText(vaultValue).width;
-    drawCoin(ctx, vaultX + vaultLabelWidth + vaultValueWidth + 12, statsY - 6, 7);
+    drawCoin(ctx, vaultX + vaultLabelWidth + vaultValueWidth + 12, statsY - 6, 8);
 
-    // 5. PASEK POSTĘPU (Z UŻYCIEM NOWEJ FUNKCJI POMOCNICZEJ)
+    // --- 6. PASEK POSTĘPU ---
     const nextXPSafe = stats.nextXP || 100;
     const currentProgress = Math.min(stats.xp / nextXPSafe, 1);
     const progressText = `${stats.xp.toLocaleString()} / ${nextXPSafe.toLocaleString()} XP`;
 
-    drawPremiumProgressBar(ctx, textX, 215, 500, 32, currentProgress, progressText);
+    // Użycie funkcji pomocniczej dla paska
+    drawPremiumProgressBar(ctx, textX, 215, 490, 25, currentProgress, progressText);
 
+    // --- 7. FINALIZACJA ---
     return await canvas.encode("png");
 }
 
