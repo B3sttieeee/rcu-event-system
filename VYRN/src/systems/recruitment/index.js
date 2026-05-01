@@ -31,11 +31,11 @@ async function init(client) {
         
         `📊 **CLAN VYRN STATS**\n` +
         `> 🔄 **Total Rebirth:** 2.14de\n` +
-        `> 👥 **Players:** 13/25\n` +
+        `> 👥 **Players:** 11/25\n` +
         `> 🏆 **Prestige:** 9/14\n\n` +
         
         `🎯 **REQUIREMENTS**\n` +
-        `> 📈 **Power:** 75N+\n` +
+        `> 📈 **Power:** 55N+\n` +
         `> 🤝 **Team:** Good Team\n` +
         `> 🎟️ **GamePasses:** Pet Equip / For Eggs\n\n` +
         
