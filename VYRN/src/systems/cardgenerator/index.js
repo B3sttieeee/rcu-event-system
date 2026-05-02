@@ -1,209 +1,189 @@
 const { createCanvas, loadImage, GlobalFonts } = require("@napi-rs/canvas");
 const path = require("path");
 
-// Rejestracja czcionki
-GlobalFonts.registerFromPath(path.join(__dirname, 'Cinzel-Bold.ttf'), 'Cinzel');
+// Rejestracja czcionek
+try {
+    GlobalFonts.registerFromPath(path.join(__dirname, '..', 'assets', 'Cinzel-Bold.ttf'), 'Cinzel');
+} catch (e) { console.warn("⚠️ Brak czcionki Cinzel."); }
 
-// ==========================================
-// KONFIGURACJA IKON Z IMGUR
-// ==========================================
-const RANK_ICONS = {
-    "BRONZE": "https://i.imgur.com/4SGN8tf.png",
-    "SILVER": "https://i.imgur.com/sbVx2oT.png",
-    "GOLD": "https://i.imgur.com/rZFNUMd.png",
-    "PLATINUM": "https://i.imgur.com/tHDiY6h.png",
-    "DIAMOND": "https://i.imgur.com/akK0M5T.png"
-};
-
-const COIN_ICON = "https://i.imgur.com/LAf2i7P.png";
-
-// ==========================================
-// GŁÓWNA FUNKCJA
-// ==========================================
-async function generateProfileCard(member, stats) {
-    const width = 800;
-    const height = 280;
-    const canvas = createCanvas(width, height);
-    const ctx = canvas.getContext("2d");
-
-    // --- 1. ZAAOKRĄGLENIE KARTY ---
-    ctx.beginPath();
-    ctx.roundRect(0, 0, width, height, 30);
-    ctx.clip();
-
-    // --- 2. BEZPIECZNE ŁADOWANIE ZDJĘĆ ---
-    const rankName = stats.rankName.toUpperCase();
-    const rankUrl = RANK_ICONS[rankName] || RANK_ICONS["BRONZE"];
-
-    const [background, avatarImg, rankImg, coinImg] = await Promise.all([
-        loadImage("https://i.imgur.com/RAC3GWt.png").catch(() => null),
-        loadImage(member.displayAvatarURL({ extension: "png", size: 256 })).catch(() => null),
-        loadImage(rankUrl).catch(() => null),
-        loadImage(COIN_ICON).catch(() => null)
-    ]);
-
-    // --- 3. TŁO ---
-    if (background) {
-        const ratio = Math.max(width / background.width, height / background.height);
-        const bgW = background.width * ratio;
-        const bgH = background.height * ratio;
-        ctx.drawImage(background, (width - bgW) / 2, (height - bgH) / 2, bgW, bgH);
-    } else {
-        ctx.fillStyle = "#111111";
-        ctx.fillRect(0, 0, width, height);
+class CardGenerator {
+    constructor() {
+        this.width = 900;
+        this.height = 300;
+        this.colors = {
+            gold: "#FFD700",
+            silver: "#C0C0C0",
+            white: "#FFFFFF",
+            black: "#000000",
+            bgOverlay: "rgba(0, 0, 0, 0.5)"
+        };
     }
 
-    // --- 4. AWATAR ---
-    const avatarSize = 160;
-    const avatarX = 40;
-    const avatarY = height / 2 - avatarSize / 2;
-    const centerX = avatarX + avatarSize / 2;
-    const centerY = avatarY + avatarSize / 2;
+    /**
+     * Główna metoda generująca kartę (Uniwersalna)
+     */
+    async createCard(data) {
+        const canvas = createCanvas(this.width, this.height);
+        const ctx = canvas.getContext("2d");
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(centerX, centerY, avatarSize / 2 + 5, 0, Math.PI * 2);
-    ctx.strokeStyle = "#FFD700";
-    ctx.lineWidth = 5;
-    ctx.shadowColor = "rgba(0, 0, 0, 0.9)"; 
-    ctx.shadowBlur = 12;
-    ctx.shadowOffsetX = 3;
-    ctx.shadowOffsetY = 3;
-    ctx.stroke();
-    ctx.restore();
+        // 1. Załadowanie zasobów
+        const assets = await this._loadAssets(data);
 
-    if (avatarImg) {
+        // 2. Tło (z zaokrąglonymi rogami)
+        this._drawBackground(ctx, assets.background);
+
+        // 3. Awatar (z ramką i poświatą)
+        if (assets.avatar) {
+            this._drawAvatar(ctx, assets.avatar);
+        }
+
+        // 4. Renderowanie Treści (Dynamiczne)
+        this._renderContent(ctx, data, assets);
+
+        // 5. Pasek Postępu (Opcjonalny)
+        if (data.progress !== undefined) {
+            this._drawProgressBar(ctx, data.progress, data.progressText);
+        }
+
+        return await canvas.encode("png");
+    }
+
+    // ====================== METODY PRYWATNE (LOGIKA RYSOWANIA) ======================
+
+    async _loadAssets(data) {
+        return {
+            background: await loadImage(data.bgUrl || "https://i.imgur.com/RAC3GWt.png").catch(() => null),
+            avatar: await loadImage(data.avatarUrl).catch(() => null),
+            icon: data.iconUrl ? await loadImage(data.iconUrl).catch(() => null) : null,
+            rank: data.rankUrl ? await loadImage(data.rankUrl).catch(() => null) : null
+        };
+    }
+
+    _drawBackground(ctx, img) {
         ctx.save();
         ctx.beginPath();
-        ctx.arc(centerX, centerY, avatarSize / 2, 0, Math.PI * 2);
+        ctx.roundRect(0, 0, this.width, this.height, 40);
         ctx.clip();
-        ctx.drawImage(avatarImg, avatarX, avatarY, avatarSize, avatarSize);
+
+        if (img) {
+            ctx.drawImage(img, 0, 0, this.width, this.height);
+        } else {
+            ctx.fillStyle = "#0f0f0f";
+            ctx.fillRect(0, 0, this.width, this.height);
+        }
+
+        // Nakładka przyciemniająca
+        ctx.fillStyle = this.colors.bgOverlay;
+        ctx.fillRect(0, 0, this.width, this.height);
         ctx.restore();
     }
 
-    // ==========================================
-    // 5. TEKST PREMIUM (OBRYS + CIEŃ)
-    // ==========================================
-    const textX = 240;
+    _drawAvatar(ctx, img) {
+        const size = 190;
+        const x = 50, y = (this.height - size) / 2;
+        const centerX = x + size / 2, centerY = y + size / 2;
 
-    // Uniwersalna funkcja generująca "niezniszczalny" tekst
-    const drawTextPremium = (text, x, y, color = "#FFFFFF") => {
         ctx.save();
-        // Cień przesunięty w prawo i dół
-        ctx.shadowColor = "rgba(0, 0, 0, 1)";
-        ctx.shadowBlur = 6;
-        ctx.shadowOffsetX = 3;
-        ctx.shadowOffsetY = 3;
+        // Poświata (Outer Glow)
+        ctx.shadowColor = this.colors.gold;
+        ctx.shadowBlur = 25;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, size / 2 + 5, 0, Math.PI * 2);
+        ctx.strokeStyle = this.colors.gold;
+        ctx.lineWidth = 8;
+        ctx.stroke();
+
+        // Wycięcie awatara
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, size / 2, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(img, x, y, size, size);
+        ctx.restore();
+    }
+
+    _renderContent(ctx, data, assets) {
+        const startX = 280;
         
-        // Gruby czarny obrys litery
-        ctx.lineWidth = 4;
-        ctx.strokeStyle = "#000000";
+        // Tytuł (np. Nick użytkownika)
+        this._drawText(ctx, data.title.toUpperCase(), startX, 90, "bold 50px Cinzel", this.colors.white);
+
+        // Linia ozdobna (Złoty gradient)
+        const grad = ctx.createLinearGradient(startX, 0, this.width - 50, 0);
+        grad.addColorStop(0, this.colors.gold);
+        grad.addColorStop(1, "transparent");
+        ctx.fillStyle = grad;
+        ctx.fillRect(startX, 105, 550, 3);
+
+        // Sekcja "Info" (np. Ranga)
+        if (data.subtitle) {
+            if (assets.rank) ctx.drawImage(assets.rank, startX, 125, 35, 35);
+            this._drawText(ctx, data.subtitle, startX + (assets.rank ? 45 : 0), 153, "28px Cinzel", this.colors.gold);
+        }
+
+        // Statystyki (LVL, VAULT, BOOST)
+        if (data.stats && Array.isArray(data.stats)) {
+            let currentX = startX;
+            data.stats.forEach(stat => {
+                this._drawText(ctx, `${stat.label}:`, currentX, 195, "22px Cinzel", this.colors.silver);
+                const labelW = ctx.measureText(`${stat.label}: `).width;
+                this._drawText(ctx, stat.value, currentX + labelW, 195, "bold 22px Cinzel", this.colors.white);
+                currentX += labelW + ctx.measureText(stat.value).width + 50;
+            });
+        }
+    }
+
+    _drawProgressBar(ctx, progress, text) {
+        const x = 280, y = 230, w = 550, h = 35;
+        const radius = 15;
+        const fillWidth = Math.min(w * progress, w);
+
+        // Tło paska
+        ctx.save();
+        ctx.beginPath();
+        ctx.roundRect(x, y, w, h, radius);
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,215,0,0.3)";
+        ctx.stroke();
+
+        // Wypełnienie (Złoty gradient 3D)
+        if (fillWidth > 20) {
+            ctx.beginPath();
+            ctx.roundRect(x, y, fillWidth, h, radius);
+            const grad = ctx.createLinearGradient(x, 0, x + w, 0);
+            grad.addColorStop(0, "#8B6508");
+            grad.addColorStop(0.5, "#FFD700");
+            grad.addColorStop(1, "#FFFACD");
+            ctx.fillStyle = grad;
+            ctx.fill();
+        }
+
+        // Napis na pasku
+        if (text) {
+            ctx.textAlign = "center";
+            this._drawText(ctx, text, x + w / 2, y + 24, "bold 16px Cinzel", this.colors.white, true);
+        }
+        ctx.restore();
+    }
+
+    _drawText(ctx, text, x, y, font, color, center = false) {
+        ctx.save();
+        ctx.font = font;
+        if (center) ctx.textAlign = "center";
+        
+        // Obrys
+        ctx.strokeStyle = this.colors.black;
+        ctx.lineWidth = 5;
+        ctx.lineJoin = "round";
         ctx.strokeText(text, x, y);
-        
-        // Czysty kolor w środku (wyłączamy cień, żeby nie brudził wnętrza)
-        ctx.shadowColor = "transparent";
+
+        // Wypełnienie
         ctx.fillStyle = color;
+        ctx.shadowColor = "rgba(0,0,0,0.9)";
+        ctx.shadowBlur = 4;
         ctx.fillText(text, x, y);
         ctx.restore();
-    };
-
-    // --- NAZWA UŻYTKOWNIKA ---
-    ctx.font = "bold 46px Cinzel";
-    drawTextPremium(member.username.toUpperCase(), textX, 100, "#FFFFFF");
-
-    // --- DEKORACYJNA ZŁOTA LINIA ---
-    const lineGrad = ctx.createLinearGradient(textX, 0, textX + 500, 0);
-    lineGrad.addColorStop(0, "#FFD700");
-    lineGrad.addColorStop(1, "transparent");
-    ctx.fillStyle = lineGrad;
-    // Cień pod linią
-    ctx.shadowColor = "rgba(0,0,0,0.8)";
-    ctx.shadowBlur = 4;
-    ctx.shadowOffsetY = 2;
-    ctx.fillRect(textX, 115, 500, 2);
-    ctx.shadowColor = "transparent"; // reset cienia po narysowaniu linii
-
-    // --- RANGA (Z IKONKĄ IMGUR) ---
-    if (rankImg) {
-        ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-        ctx.shadowBlur = 6;
-        ctx.drawImage(rankImg, textX, 131, 28, 28);
-        ctx.shadowColor = "transparent";
     }
-    
-    ctx.font = "bold 24px Cinzel";
-    drawTextPremium("RANK: ", textX + 35, 155, "#FFD700");
-    const rankLabelWidth = ctx.measureText("RANK: ").width;
-    drawTextPremium(rankName, textX + 35 + rankLabelWidth, 155, "#FFFFFF");
-
-    // --- STATYSTYKI (LVL i VAULT) ---
-    ctx.font = "bold 20px Cinzel";
-    const statsY = 195;
-
-    // LVL
-    drawTextPremium("LVL:", textX, statsY, "#C0C0C0"); // Jasnoszary
-    const lvlLabelWidth = ctx.measureText("LVL: ").width;
-    drawTextPremium(` ${stats.level}`, textX + lvlLabelWidth, statsY, "#FFFFFF");
-
-    // VAULT
-    const vaultX = textX + 150;
-    drawTextPremium("VAULT:", vaultX, statsY, "#C0C0C0");
-    const vaultLabelWidth = ctx.measureText("VAULT: ").width;
-    
-    const vaultValue = ` ${stats.coins.toLocaleString()}`;
-    drawTextPremium(vaultValue, vaultX + vaultLabelWidth, statsY, "#FFFFFF");
-    
-    // Ikona kasy
-    if (coinImg) {
-        const vaultValueWidth = ctx.measureText(vaultValue).width;
-        ctx.shadowColor = "rgba(0, 0, 0, 0.9)";
-        ctx.shadowBlur = 6;
-        ctx.drawImage(coinImg, vaultX + vaultLabelWidth + vaultValueWidth + 8, statsY - 18, 24, 24);
-        ctx.shadowColor = "transparent";
-    }
-
-    // --- 6. PASEK POSTĘPU ---
-    const nextXPSafe = stats.nextXP || 100;
-    const progress = Math.min(stats.xp / nextXPSafe, 1);
-    const barX = textX;
-    const barY = 220;
-    const barWidth = 500;
-    const barHeight = 28;
-    const barRadius = barHeight / 2;
-
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, barWidth, barHeight, barRadius);
-    ctx.fillStyle = "rgba(0, 0, 0, 0.7)"; 
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255, 215, 0, 0.3)"; 
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    const fillWidth = Math.max(barWidth * progress, barRadius * 2); 
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(barX, barY, fillWidth, barHeight, barRadius);
-    ctx.clip(); 
-    
-    const fillGrad = ctx.createLinearGradient(barX, 0, barX + barWidth, 0);
-    fillGrad.addColorStop(0, "#D4AF37"); 
-    fillGrad.addColorStop(0.5, "#FFDF00"); 
-    fillGrad.addColorStop(1, "#F8E076"); 
-    ctx.fillStyle = fillGrad;
-    ctx.fillRect(barX, barY, fillWidth, barHeight);
-    ctx.restore();
-
-    // Tekst na pasku postępu (też korzysta z nowej funkcji premium!)
-    const progressText = `${stats.xp.toLocaleString()} / ${nextXPSafe.toLocaleString()} XP`;
-    ctx.font = "bold 15px Cinzel";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle"; // Ustawienie pośrodku dla paska
-    
-    drawTextPremium(progressText, barX + barWidth / 2, barY + barHeight / 2 + 1, "#FFFFFF");
-    
-    ctx.textBaseline = "alphabetic"; // Reset
-
-    return await canvas.encode("png");
 }
 
-module.exports = { generateProfileCard };
+module.exports = new CardGenerator();
