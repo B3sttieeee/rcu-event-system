@@ -1,5 +1,5 @@
 // src/handlers/buttonHandler.js
-const { MessageFlags } = require("discord.js"); // Wymagane do flag
+const { MessageFlags } = require("discord.js");
 const privateVC = require("../systems/privatevc");
 const ticketSystem = require("../systems/tickets");
 const giveawaySystem = require("../systems/giveaway");
@@ -41,16 +41,19 @@ module.exports = async function buttonHandler(interaction) {
       case "get_event_dm":
         return await eventSystem.handleEventInteraction(interaction);
 
+      // --- TICKET SYSTEM ---
       case "close_ticket":
       case "claim_ticket":
       case "rename_ticket":
       case "delete_ticket":
+      case "lock_ticket":   // Kluczowe dla systemu GOLD
+      case "unlock_ticket": // Kluczowe dla systemu GOLD
         return await ticketSystem.handle(interaction, interaction.client);
 
       case "verify_start":
         return await interaction.reply({ 
           content: "⚙️ Please use the **`/verify`** command to begin the Roblox linking process.", 
-          flags: [MessageFlags.Ephemeral] // NOWY SPOSÓB (Brak warningów)
+          flags: [MessageFlags.Ephemeral]
         });
 
       default:
@@ -59,7 +62,7 @@ module.exports = async function buttonHandler(interaction) {
           console.warn(`[BUTTON] ⚠️ Unhandled button ID: ${customId}`);
           await interaction.reply({
             content: "❌ **System Error:** This interaction is no longer active or supported.",
-            flags: [MessageFlags.Ephemeral] // NOWY SPOSÓB
+            flags: [MessageFlags.Ephemeral]
           });
         }
     }
@@ -71,7 +74,7 @@ module.exports = async function buttonHandler(interaction) {
       try {
         await interaction.reply({
           content: "❌ **Critical Error:** An issue occurred while processing this request. Please contact HQ Administration.",
-          flags: [MessageFlags.Ephemeral] // NOWY SPOSÓB
+          flags: [MessageFlags.Ephemeral]
         });
       } catch (e) {
         console.error("[BUTTON] Failed to send error fallback response.");
