@@ -51,8 +51,10 @@ module.exports = async function interactionRouter(interaction) {
     }
 
     // ==================== 4. SELECT MENUS ====================
-    if (interaction.isStringSelectMenu() || interaction.isEntitySelectMenu()) {
-      // Process both string and user/role/channel select menus
+    // POPRAWKA: Usunięto isEntitySelectMenu(), które nie istnieje w Twojej wersji d.js
+    // Sprawdzamy ogólnie isStringSelectMenu lub uniwersalne isSelectMenu
+    if (interaction.isStringSelectMenu() || (typeof interaction.isSelectMenu === 'function' && interaction.isSelectMenu())) {
+      // Process select menus
       return await selectHandler(interaction);
     }
 
