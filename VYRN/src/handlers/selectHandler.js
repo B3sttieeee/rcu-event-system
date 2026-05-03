@@ -12,36 +12,42 @@ const boostSystem = require("../systems/boost");
  * ========================================================
  */
 module.exports = async function selectHandler(interaction) {
-  // Używamy bezpiecznego sprawdzania customId
+  // Pobieramy ID oraz użytkownika w bezpieczny sposób
   const customId = interaction.customId;
   const user = interaction.user;
 
   if (!customId) return;
 
+  // Logowanie interakcji w konsoli HQ
   console.log(`[INTERACTION] ⬇️ ${user.tag} used menu: ${customId}`);
 
   try {
     // 1. DYNAMIC PREFIXES (Pattern matching)
+    // Obsługa systemów, gdzie ID zaczyna się od konkretnego prefiksu
     if (customId.startsWith("vc_")) {
-      // Handles private voice channel selections (permit, kick, ban)
+      // Obsługa menu w prywatnych kanałach głosowych (permit, kick, ban)
       return await privateVC.handlePrivateSelect(interaction);
     }
 
     // 2. STATIC IDs (Fast Switch)
+    // Obsługa konkretnych, stałych identyfikatorów menu
     switch (customId) {
       case "clan_ticket_select":
-        // Przekazujemy do systemu ticketów
+        // Przekazanie interakcji bezpośrednio do systemu ticketów GOLD
         return await ticketSystem.handle(interaction, interaction.client);
 
       case "role_menu":
       case "dm_menu":
+        // Obsługa menu ról i powiadomień w systemie eventów
         return await eventSystem.handleEventInteraction(interaction);
 
       case "shop_select_boost":
+        // Obsługa zakupu boosterów w sklepie
         return await handleShopBoost(interaction);
 
       default:
         // ==================== UNHANDLED SELECT ====================
+        // Jeśli ID nie pasuje do żadnego z powyższych
         console.warn(`[SELECT] ⚠️ Unhandled select menu: ${customId}`);
         
         if (!interaction.replied && !interaction.deferred) {
@@ -55,7 +61,7 @@ module.exports = async function selectHandler(interaction) {
   } catch (error) {
     console.error("🔥 [SELECT HANDLER ERROR]:", error);
 
-    // EMERGENCY FALLBACK
+    // EMERGENCY FALLBACK - Zabezpieczenie przed crashem bota
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
@@ -77,6 +83,7 @@ module.exports = async function selectHandler(interaction) {
 
 // Handles the purchase of boosters from the /shop
 async function handleShopBoost(interaction) {
+  // Pobieramy pierwszą wybraną wartość z menu
   const boostId = interaction.values?.[0];
 
   if (!boostId) {
@@ -86,7 +93,7 @@ async function handleShopBoost(interaction) {
     });
   }
 
-  // Find boost in the configuration
+  // Szukanie boostera w konfiguracji systemu boostów
   const boost = (boostSystem.SHOP_BOOSTS || []).find(b => b.id === boostId);
 
   if (!boost) {
@@ -96,7 +103,7 @@ async function handleShopBoost(interaction) {
     });
   }
 
-  // Attempt to execute the purchase
+  // Próba wykonania transakcji zakupu
   const result = await boostSystem.buyBoost(interaction.user.id, boostId);
 
   if (!result.success) {
@@ -114,11 +121,12 @@ async function handleShopBoost(interaction) {
     });
   }
 
-  // SUCCESS EMBED (Prestige Gold)
+  // GENEROWANIE EMBEDA SUKCESU (Prestige Gold)
+  // Przeliczenie czasu zakończenia na timestamp Discorda
   const expiryTimestamp = Math.floor(result.endTime / 1000);
   
   const successEmbed = new EmbedBuilder()
-    .setColor("#FFD700") // VYRN Gold
+    .setColor("#FFD700") // Charakterystyczny złoty kolor VYRN
     .setAuthor({ 
       name: "VYRN HQ • PURCHASE SUCCESSFUL", 
       iconURL: interaction.guild ? interaction.guild.iconURL() : null 
