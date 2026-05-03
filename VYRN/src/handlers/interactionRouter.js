@@ -51,15 +51,16 @@ module.exports = async function interactionRouter(interaction) {
     }
 
     // ==================== 4. SELECT MENUS ====================
-    // POPRAWKA: Usunięto isEntitySelectMenu(), które nie istnieje w Twojej wersji d.js
-    // Sprawdzamy ogólnie isStringSelectMenu lub uniwersalne isSelectMenu
-    if (interaction.isStringSelectMenu() || (typeof interaction.isSelectMenu === 'function' && interaction.isSelectMenu())) {
-      // Process select menus
+    // POPRAWKA: Usunięto isEntitySelectMenu() oraz isSelectMenu(), aby uniknąć crashy i warningów.
+    // Używamy isStringSelectMenu() – to jest standard dla menu z opcjami (jak Twoje tickety).
+    if (interaction.isStringSelectMenu()) {
+      // Process string-based select menus (like clan_ticket_select)
       return await selectHandler(interaction);
     }
 
     // ==================== 5. MODAL SUBMISSIONS ====================
     if (interaction.isModalSubmit()) {
+      // Handled by the dedicated modal handler (initializes ticket creation)
       return await modalHandler(interaction);
     }
 
