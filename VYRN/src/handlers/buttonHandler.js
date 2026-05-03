@@ -11,7 +11,7 @@ const embedCommand = require("../commands/embed");
  * Central management for all button interactions
  */
 module.exports = async function buttonHandler(interaction) {
-  const { customId, user } = interaction;
+  const { customId, user, client } = interaction;
   
   // Zabezpieczenie przed interakcjami bez ID
   if (!customId) return;
@@ -45,6 +45,17 @@ module.exports = async function buttonHandler(interaction) {
     // ==================== 2. STATIC ID SWITCH ====================
     // Stałe identyfikatory przycisków zdefiniowane bezpośrednio w systemach HQ
     switch (customId) {
+      // --- SYSTEM PROFILU (PROFILE SYSTEM) ---
+      case "profile_refresh":
+        // Pobieramy komendę profilu z kolekcji poleceń bota
+        const profileCmd = client.commands.get("profile");
+        if (profileCmd && typeof profileCmd.handleButton === "function") {
+          return await profileCmd.handleButton(interaction);
+        } else {
+          console.warn(`[PROFILE] ⚠️ Profile command or handleButton method not found.`);
+          return;
+        }
+
       // --- WYDARZENIA (EVENT SYSTEM) ---
       case "refresh_events":
       case "get_event_roles":
@@ -82,6 +93,12 @@ module.exports = async function buttonHandler(interaction) {
     }
 
   } catch (error) {
+    // Specyficzna obsługa błędu Discorda 10062 (Unknown Interaction)
+    // Zapobiega crashowaniu bota, gdy użytkownik kliknie przycisk zbyt wiele razy lub sesja wygaśnie.
+    if (error.code === 10062) {
+      return console.warn(`⚠️ [BUTTON] Interaction ${customId} expired before response could be sent (10062).`);
+    }
+
     console.error("🔥 [BUTTON HANDLER ERROR]:", error);
 
     // ==================== EMERGENCY FALLBACK ====================
