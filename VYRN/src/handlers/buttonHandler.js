@@ -7,17 +7,19 @@ const eventSystem = require("../systems/event");
 const embedCommand = require("../commands/embed");
 
 /**
- * VYRN • Button Router (Prestige Edition)
+ * VYRN HQ • BUTTON ROUTER (PRESTIGE EDITION)
  * Central management for all button interactions
  */
 module.exports = async function buttonHandler(interaction) {
   const { customId, user } = interaction;
   if (!customId) return;
 
+  // HQ Professional Logging
   console.log(`[INTERACTION] 🔘 ${user.tag} clicked: ${customId}`);
 
   try {
     // ==================== 1. PREFIX BASED INTERACTIONS ====================
+    // Systemy oparte na dynamicznych ID (zaczynające się od...)
     if (customId.startsWith("vc_")) {
       return await privateVC.handlePrivatePanel(interaction);
     }
@@ -35,21 +37,25 @@ module.exports = async function buttonHandler(interaction) {
     }
 
     // ==================== 2. STATIC ID SWITCH ====================
+    // Stałe ID przycisków zdefiniowane w Twoich systemach
     switch (customId) {
+      // --- WYDARZENIA (EVENT SYSTEM) ---
       case "refresh_events":
       case "get_event_roles":
       case "get_event_dm":
         return await eventSystem.handleEventInteraction(interaction);
 
-      // --- TICKET SYSTEM ---
+      // --- SYSTEM TICKETÓW (VYRN GOLD) ---
+      // Tutaj muszą być wszystkie ID z Twojego pliku tickets/index.js
       case "close_ticket":
       case "claim_ticket":
       case "rename_ticket":
       case "delete_ticket":
-      case "lock_ticket":   // Kluczowe dla systemu GOLD
-      case "unlock_ticket": // Kluczowe dla systemu GOLD
+      case "lock_ticket":   // Kluczowe dla blokowania pisania
+      case "unlock_ticket": // Kluczowe dla odblokowania pisania
         return await ticketSystem.handle(interaction, interaction.client);
 
+      // --- WERYFIKACJA ---
       case "verify_start":
         return await interaction.reply({ 
           content: "⚙️ Please use the **`/verify`** command to begin the Roblox linking process.", 
@@ -58,10 +64,12 @@ module.exports = async function buttonHandler(interaction) {
 
       default:
         // ==================== UNHANDLED INTERACTION ====================
+        // Jeśli bot tu dotarł, oznacza to, że przycisk ma ID, którego nie ma powyżej
+        console.warn(`[BUTTON] ⚠️ Unhandled button ID: ${customId}`);
+        
         if (!interaction.replied && !interaction.deferred) {
-          console.warn(`[BUTTON] ⚠️ Unhandled button ID: ${customId}`);
           await interaction.reply({
-            content: "❌ **System Error:** This interaction is no longer active or supported.",
+            content: `❌ **System Alert:** Button ID \`${customId}\` is not registered in the HQ database.`,
             flags: [MessageFlags.Ephemeral]
           });
         }
@@ -70,6 +78,7 @@ module.exports = async function buttonHandler(interaction) {
   } catch (error) {
     console.error("🔥 [BUTTON HANDLER ERROR]:", error);
 
+    // ==================== EMERGENCY FALLBACK ====================
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
