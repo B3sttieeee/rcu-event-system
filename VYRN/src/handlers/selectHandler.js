@@ -1,5 +1,5 @@
 // src/handlers/selectHandler.js
-const { EmbedBuilder, MessageFlags } = require("discord.js"); // POPRAWKA: Dodano MessageFlags
+const { EmbedBuilder, MessageFlags } = require("discord.js");
 const privateVC = require("../systems/privatevc");
 const ticketSystem = require("../systems/tickets");
 const eventSystem = require("../systems/event");
@@ -12,7 +12,10 @@ const boostSystem = require("../systems/boost");
  * ========================================================
  */
 module.exports = async function selectHandler(interaction) {
-  const { customId, user, values } = interaction;
+  // Używamy bezpiecznego sprawdzania customId
+  const customId = interaction.customId;
+  const user = interaction.user;
+
   if (!customId) return;
 
   console.log(`[INTERACTION] ⬇️ ${user.tag} used menu: ${customId}`);
@@ -27,6 +30,7 @@ module.exports = async function selectHandler(interaction) {
     // 2. STATIC IDs (Fast Switch)
     switch (customId) {
       case "clan_ticket_select":
+        // Przekazujemy do systemu ticketów
         return await ticketSystem.handle(interaction, interaction.client);
 
       case "role_menu":
@@ -39,10 +43,11 @@ module.exports = async function selectHandler(interaction) {
       default:
         // ==================== UNHANDLED SELECT ====================
         console.warn(`[SELECT] ⚠️ Unhandled select menu: ${customId}`);
+        
         if (!interaction.replied && !interaction.deferred) {
           return await interaction.reply({
             content: "❌ **System Alert:** This menu interaction is not registered in the HQ database.",
-            flags: [MessageFlags.Ephemeral] // POPRAWKA
+            flags: [MessageFlags.Ephemeral]
           });
         }
     }
@@ -55,7 +60,7 @@ module.exports = async function selectHandler(interaction) {
       try {
         await interaction.reply({
           content: "❌ **Critical Error:** Failed to process menu selection. Contact HQ Staff.",
-          flags: [MessageFlags.Ephemeral] // POPRAWKA
+          flags: [MessageFlags.Ephemeral]
         });
       } catch (e) {
         console.error("[SELECT] Critical failure in Discord API response.");
@@ -77,7 +82,7 @@ async function handleShopBoost(interaction) {
   if (!boostId) {
     return interaction.reply({
       content: "❌ No item selected. Operation cancelled.",
-      flags: [MessageFlags.Ephemeral] // POPRAWKA
+      flags: [MessageFlags.Ephemeral]
     });
   }
 
@@ -87,12 +92,11 @@ async function handleShopBoost(interaction) {
   if (!boost) {
     return interaction.reply({
       content: "❌ **Error:** Selected booster no longer exists in the store rotation.",
-      flags: [MessageFlags.Ephemeral] // POPRAWKA
+      flags: [MessageFlags.Ephemeral]
     });
   }
 
   // Attempt to execute the purchase
-  // Using the logic from your newly expanded boost system
   const result = await boostSystem.buyBoost(interaction.user.id, boostId);
 
   if (!result.success) {
@@ -106,7 +110,7 @@ async function handleShopBoost(interaction) {
 
     return interaction.reply({
       content: `❌ **Purchase Failed:** ${errorMessage}`,
-      flags: [MessageFlags.Ephemeral] // POPRAWKA
+      flags: [MessageFlags.Ephemeral]
     });
   }
 
@@ -115,7 +119,10 @@ async function handleShopBoost(interaction) {
   
   const successEmbed = new EmbedBuilder()
     .setColor("#FFD700") // VYRN Gold
-    .setAuthor({ name: "VYRN HQ • PURCHASE SUCCESSFUL", iconURL: interaction.guild.iconURL() })
+    .setAuthor({ 
+      name: "VYRN HQ • PURCHASE SUCCESSFUL", 
+      iconURL: interaction.guild ? interaction.guild.iconURL() : null 
+    })
     .setTitle(`⚡ ${boost.name} Activated`)
     .setDescription(
       `Your XP multiplier has been successfully deployed to your account.\n\n` +
@@ -129,6 +136,6 @@ async function handleShopBoost(interaction) {
 
   return interaction.reply({
     embeds: [successEmbed],
-    flags: [MessageFlags.Ephemeral] // POPRAWKA
+    flags: [MessageFlags.Ephemeral]
   });
 }
