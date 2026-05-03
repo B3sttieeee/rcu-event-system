@@ -12,24 +12,30 @@ const embedCommand = require("../commands/embed");
  */
 module.exports = async function buttonHandler(interaction) {
   const { customId, user } = interaction;
+  
+  // Zabezpieczenie przed interakcjami bez ID
   if (!customId) return;
 
-  // HQ Professional Logging
+  // HQ Professional Logging - Śledzenie aktywności personelu i użytkowników
   console.log(`[INTERACTION] 🔘 ${user.tag} clicked: ${customId}`);
 
   try {
     // ==================== 1. PREFIX BASED INTERACTIONS ====================
-    // Systemy oparte na dynamicznych ID (zaczynające się od...)
+    // Systemy wykorzystujące dynamiczne identyfikatory zaczynające się od prefiksu
+
+    // Zarządzanie prywatnymi kanałami głosowymi
     if (customId.startsWith("vc_")) {
       return await privateVC.handlePrivatePanel(interaction);
     }
 
+    // Zarządzanie systemem Giveaway (Konkursy)
     if (customId.startsWith("gw_")) {
       if (typeof giveawaySystem.handleGiveaway === "function") {
         return await giveawaySystem.handleGiveaway(interaction);
       }
     }
 
+    // Zarządzanie zaawansowanym generatorem Embedów
     if (customId.startsWith("embed_edit_") || customId.startsWith("embed_delete_")) {
       if (typeof embedCommand.handleButton === "function") {
         return await embedCommand.handleButton(interaction);
@@ -37,7 +43,7 @@ module.exports = async function buttonHandler(interaction) {
     }
 
     // ==================== 2. STATIC ID SWITCH ====================
-    // Stałe ID przycisków zdefiniowane w Twoich systemach
+    // Stałe identyfikatory przycisków zdefiniowane bezpośrednio w systemach HQ
     switch (customId) {
       // --- WYDARZENIA (EVENT SYSTEM) ---
       case "refresh_events":
@@ -46,16 +52,16 @@ module.exports = async function buttonHandler(interaction) {
         return await eventSystem.handleEventInteraction(interaction);
 
       // --- SYSTEM TICKETÓW (VYRN GOLD) ---
-      // Tutaj muszą być wszystkie ID z Twojego pliku tickets/index.js
+      // Pełna lista akcji personelu zdefiniowana w src/systems/tickets/index.js
       case "close_ticket":
       case "claim_ticket":
       case "rename_ticket":
       case "delete_ticket":
-      case "lock_ticket":   // Kluczowe dla blokowania pisania
-      case "unlock_ticket": // Kluczowe dla odblokowania pisania
+      case "lock_ticket":   // Blokowanie możliwości pisania przez użytkownika
+      case "unlock_ticket": // Przywracanie możliwości pisania
         return await ticketSystem.handle(interaction, interaction.client);
 
-      // --- WERYFIKACJA ---
+      // --- SYSTEM WERYFIKACJI ---
       case "verify_start":
         return await interaction.reply({ 
           content: "⚙️ Please use the **`/verify`** command to begin the Roblox linking process.", 
@@ -64,7 +70,7 @@ module.exports = async function buttonHandler(interaction) {
 
       default:
         // ==================== UNHANDLED INTERACTION ====================
-        // Jeśli bot tu dotarł, oznacza to, że przycisk ma ID, którego nie ma powyżej
+        // Reaguje w przypadku wykrycia ID, które nie zostało przypisane do powyższych modułów
         console.warn(`[BUTTON] ⚠️ Unhandled button ID: ${customId}`);
         
         if (!interaction.replied && !interaction.deferred) {
@@ -79,6 +85,7 @@ module.exports = async function buttonHandler(interaction) {
     console.error("🔥 [BUTTON HANDLER ERROR]:", error);
 
     // ==================== EMERGENCY FALLBACK ====================
+    // Zapewnia informację zwrotną dla użytkownika nawet w przypadku krytycznej awarii logiki
     if (!interaction.replied && !interaction.deferred) {
       try {
         await interaction.reply({
