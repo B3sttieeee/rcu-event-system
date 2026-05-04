@@ -53,24 +53,31 @@ module.exports = {
         messageCooldowns.set(message.author.id, now);
       }
 
-      // ====================== AUTO REACTIONS ======================
-      const exactWords = lower.split(/\s+/); // Rozbija tekst na słowa, żeby nie wyłapywać "xd" w środku innego słowa
-      
-      // Easter Egg: Korona dla klanu
-      if (exactWords.includes("vyrn")) {
-        message.react("👑").catch(() => {});
-      }
-      
-      if (lower.includes("gg") || lower.includes("good game")) {
-        message.react("👏").catch(() => {});
-      }
-      
-      if (exactWords.some(w => ["congrats", "gratz", "w", "brawo"].includes(w))) {
-        message.react("🎉").catch(() => {});
-      }
-      
-      if (exactWords.some(w => ["lmao", "lol", "xd", "haha"].includes(w))) {
-        message.react("😂").catch(() => {});
+      // ====================== AUTO RESPONSES (Instead of Reactions) ======================
+      const exactWords = lower.split(/\s+/);
+      const responseChance = 0.4; // 40% szans na odpowiedź, żeby bot nie był zbyt namolny
+
+      if (Math.random() < responseChance) {
+        // Easter Egg: Klan VYRN
+        if (exactWords.includes("vyrn")) {
+          return message.channel.send("👑 **VYRN on top!** Chwała klanowi!").catch(() => {});
+        }
+        
+        // Gratulacje i GG
+        if (lower.includes("gg") || lower.includes("good game")) {
+          return message.channel.send("Dobra gierka, gratulacje! 👏").catch(() => {});
+        }
+        
+        if (exactWords.some(w => ["congrats", "gratz", "w", "brawo"].includes(w))) {
+          return message.channel.send("Wielkie brawa! 🎉").catch(() => {});
+        }
+        
+        // Śmiech
+        if (exactWords.some(w => ["lmao", "lol", "xd", "haha"].includes(w))) {
+          const laughs = ["Haha, niezłe! 😂", "Dobre xd", "Padłem! 💀"];
+          const randomLaugh = laughs[Math.floor(Math.random() * laughs.length)];
+          return message.channel.send(randomLaugh).catch(() => {});
+        }
       }
 
       // ====================== QUICK COMMANDS (Legacy) ======================
