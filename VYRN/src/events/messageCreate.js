@@ -4,8 +4,8 @@ const activity = require("../systems/activity");
 const economy = require("../systems/economy");
 
 // ====================== CONFIG & CACHE ======================
-const COOLDOWN_TIME = 5000; // 5 sekund cooldownu (zapobiega spamowaniu XP/Monet)
-const messageCooldowns = new Map(); // Przechowuje czas ostatniej wiadomości gracza
+const COOLDOWN_TIME = 5000;
+const messageCooldowns = new Map();
 
 const THEME = {
   GOLD: "#FFD700"
@@ -33,62 +33,63 @@ module.exports = {
       const now = Date.now();
       const lastMsgTime = messageCooldowns.get(message.author.id) || 0;
 
-      // Jeśli minęło wystarczająco dużo czasu od ostatniej wiadomości (Cooldown)
       if (now - lastMsgTime > COOLDOWN_TIME) {
-        // Losowa ilość XP i Monet (wygląda to naturalniej niż stałe "5")
-        const xpAdded = Math.floor(Math.random() * 10) + 5;  // Od 5 do 14 XP
-        let coinsAdded = Math.floor(Math.random() * 5) + 3;  // Od 3 do 7 Monet
+        const xpAdded = Math.floor(Math.random() * 10) + 5;
+        let coinsAdded = Math.floor(Math.random() * 5) + 3;
 
-        // Bonusy za jakość wiadomości
         if (content.length > 50) coinsAdded += 2;
         if (content.length > 150) coinsAdded += 4;
-        if (message.attachments.size > 0) coinsAdded += 3; // Bonus za wysłanie zdjęcia/filmu
-        if (message.mentions.users.size > 0) coinsAdded += 1; // Bonus za oznaczenie kogoś
+        if (message.attachments.size > 0) coinsAdded += 3;
+        if (message.mentions.users.size > 0) coinsAdded += 1;
 
-        // Przydzielanie nagród
         activity.addActivityXP(member, xpAdded);
         economy.addCoins(member.id, coinsAdded);
-
-        // Zapisz czas wiadomości, aby zresetować cooldown
         messageCooldowns.set(message.author.id, now);
       }
 
-      // ====================== AUTO RESPONSES (Instead of Reactions) ======================
+      // ====================== SMART CHAT INTERACTION ======================
       const exactWords = lower.split(/\s+/);
-      const responseChance = 0.4; // 40% szans na odpowiedź, żeby bot nie był zbyt namolny
+      
+      // Szansa na reakcję (20% - lepiej rzadziej a konkretniej)
+      const shouldRespond = Math.random() < 0.20;
 
-      if (Math.random() < responseChance) {
-        // Easter Egg: Klan VYRN
+      if (shouldRespond) {
+        // 1. Klanowy Pride (Zawsze mile widziane)
         if (exactWords.includes("vyrn")) {
-          return message.channel.send("👑 **VYRN on top!** Chwała klanowi!").catch(() => {});
+          const vyrnQuotes = [
+            "🛡️ Chwała klanowi **VYRN**!",
+            "🔥 **VYRN** rośnie w siłę!",
+            "👑 Najlepsi z najlepszych. #VYRN"
+          ];
+          return message.channel.send(vyrnQuotes[Math.floor(Math.random() * vyrnQuotes.length)]);
         }
-        
-        // Gratulacje i GG
-        if (lower.includes("gg") || lower.includes("good game")) {
-          return message.channel.send("Dobra gierka, gratulacje! 👏").catch(() => {});
+
+        // 2. Gratulacje (W formie "podrzucenia" hype'u)
+        if (exactWords.some(w => ["gg", "brawo", "congrats", "w"].includes(w))) {
+          return message.channel.send(`> 🏆 **${member.displayName}** ma rację, dobra robota!`);
         }
-        
-        if (exactWords.some(w => ["congrats", "gratz", "w", "brawo"].includes(w))) {
-          return message.channel.send("Wielkie brawa! 🎉").catch(() => {});
-        }
-        
-        // Śmiech
-        if (exactWords.some(w => ["lmao", "lol", "xd", "haha"].includes(w))) {
-          const laughs = ["Haha, niezłe! 😂", "Dobre xd", "Padłem! 💀"];
-          const randomLaugh = laughs[Math.floor(Math.random() * laughs.length)];
-          return message.channel.send(randomLaugh).catch(() => {});
+
+        // 3. Reakcja na śmiech (Tylko jeśli to krótka wiadomość, żeby nie przerywać dyskusji)
+        if (content.length < 10 && exactWords.some(w => ["xd", "lol", "haha", "lmao"].includes(w))) {
+          const laughResponses = ["XDD", "Dobre!", "Też mnie to rozwaliło", "😂"];
+          return message.channel.send(laughResponses[Math.floor(Math.random() * laughResponses.length)]);
         }
       }
 
+      // 4. Bonus: Specjalne przywitanie (Raz na jakiś czas)
+      if (exactWords.some(w => ["siema", "hej", "cześć", "czesc", "hello"].includes(w)) && Math.random() < 0.1) {
+        return message.channel.send(`Siema **${member.displayName}**, jak tam dzionek w klanie?`);
+      }
+
       // ====================== QUICK COMMANDS (Legacy) ======================
-      // Szybkie przekierowanie, jeśli ktoś próbuje używać starych prefiksów (np. !stats)
       const quickCmds = ["!stats", "!profile", "!level", "!rank", "staty"];
       
       if (quickCmds.includes(lower)) {
         const embed = new EmbedBuilder()
           .setColor(THEME.GOLD)
-          .setDescription(`📊 **${member.user.username}**, please use the **\`/profile\`** slash command to view your full VYRN Clan statistics!`)
-          .setFooter({ text: "VYRN Clan System" });
+          .setAuthor({ name: member.user.username, iconURL: member.user.displayAvatarURL() })
+          .setDescription(`💡 Hej! Systemy klanowe zostały przeniesione na **slash commands**.\n\nWpisz **\`/profile\`**, aby zobaczyć swoje statystyki!`)
+          .setFooter({ text: "VYRN Clan Intelligence" });
 
         return message.reply({ 
           embeds: [embed], 
